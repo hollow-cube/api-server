@@ -1,0 +1,1 @@
+alter table server_states drop column status_since;

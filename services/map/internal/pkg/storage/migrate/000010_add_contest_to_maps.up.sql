@@ -1,0 +1,1 @@
+alter table maps add column if not exists contest uuid default null;

@@ -1,0 +1,137 @@
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
+	mapService "github.com/hollow-cube/hc-services/services/map/api/v3/intnl"
+	playerService2 "github.com/hollow-cube/hc-services/services/player/api/v2/intnl"
+	intnlV3 "github.com/hollow-cube/hc-services/services/session/api/v3/intnl"
+	"github.com/hollow-cube/hc-services/services/session/config"
+	"github.com/hollow-cube/hc-services/services/session/internal/pkg/handler"
+	"github.com/hollow-cube/hc-services/services/session/internal/pkg/player"
+	"github.com/hollow-cube/hc-services/services/session/internal/pkg/server"
+	"github.com/hollow-cube/hc-services/services/session/internal/pkg/world"
+	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+func main() {
+	fx.New(
+		// Config
+		fx.Provide(config.NewMergedConfig, newCommonConfigResources),
+		fx.Invoke(func(conf *config.Config) {
+			result, _ := json.MarshalIndent(conf, "", "  ")
+			println(string(result))
+		}),
+
+		// Logging
+		fx.Provide(
+			newZapLogger,
+			newZapSugared,
+		),
+		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
+			return &fxevent.ZapLogger{Logger: log}
+		}),
+
+		// Dependencies
+		fx.Invoke(setupPosthogClient),
+		fx.Provide(newKubernetesClient),
+		fx.Provide(newKafkaProducer, newSyncKafkaWriter, newKafkaReaderFactory),
+		fx.Provide(newRedisClient),
+		fx.Provide(newPlayerSvc2, newMapServiceClient),
+		fx.Provide(newDbQuerySet),
+		fx.Provide(newAuthzSpiceDB),
+		fx.Provide(newGithubClient),
+
+		fx.Provide(handler.NewChatHandler),
+		fx.Invoke(func(h *handler.ChatHandler, lc fx.Lifecycle) {
+			lc.Append(fx.Hook{OnStart: h.Start, OnStop: h.Stop})
+		}),
+
+		fx.Provide(player.NewTracker),
+		fx.Invoke(func(t *player.Tracker, lc fx.Lifecycle) {
+			lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
+		}),
+		fx.Provide(server.NewTracker),
+		fx.Invoke(func(t *server.Tracker, lc fx.Lifecycle) {
+			if t.K8sNamespace != "disabled" {
+				lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
+			}
+		}),
+		fx.Provide(world.NewTracker),
+
+		fx.Provide(handler.NewInviteManager), // Possibly legacy
+
+		// HTTP server
+		fx.Provide(tracefx.NewHttpExporter),
+		tracefx.Module,
+		fx.Provide(
+			intnlV3.NewServer,
+			httpfx.AsRouteProvider(makeV2RouteHandler),
+		),
+		httpfx.Module,
+	).Run()
+}
+
+func newPlayerSvc2(conf *config.Config) (playerService2.ClientWithResponsesInterface, error) {
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(httpClient))
+}
+
+func newMapServiceClient(conf *config.Config) (mapService.ClientWithResponsesInterface, error) {
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	return mapService.NewClientWithResponses(conf.MapServiceUrl+"/v3/internal", mapService.WithHTTPClient(httpClient))
+}
+
+func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
+	if conf.Kubernetes.Namespace == "disabled" {
+		return nil, nil
+	}
+
+	k8sConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	//todo replace the klog logger with a zap version
+	return kubernetes.NewForConfig(k8sConfig)
+}
+
+func newKafkaProducer(log *zap.SugaredLogger, conf *config.Config) (*kafka.Writer, error) {
+	return &kafka.Writer{
+		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
+		ErrorLogger:            kafka.LoggerFunc(log.Errorf),
+		AllowAutoTopicCreation: true,
+
+		BatchSize: 1, // Send all messages immediately
+		Async:     true,
+		Completion: func(messages []kafka.Message, err error) {
+			if err != nil {
+				log.Errorw("failed to write message", "error", err)
+			}
+		},
+	}, nil
+}
+
+type v2RouteHandlerImpl struct {
+	intnl intnlV3.StrictServerInterface
+}
+
+func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
+	r.Handle("/v3/internal/*", intnlV3.HandlerFromMuxWithBaseURL(intnlV3.NewStrictHandler(v.intnl,
+		[]intnlV3.StrictMiddlewareFunc{}), nil, "/v3/internal"))
+}
+
+func makeV2RouteHandler(intnl intnlV3.StrictServerInterface) httpTransport.RouteProvider {
+	return &v2RouteHandlerImpl{intnl}
+}

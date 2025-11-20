@@ -1,0 +1,983 @@
+openapi: 3.0.2
+info:
+  title: Player Service Internal API
+  version: "2"
+tags:
+  - name: punishments
+    description: Punishment related endpoints
+  - name: payments
+    description: Payment related endpoints
+  - name: totp
+paths:
+  /players:
+    post:
+      summary: Create new player data
+      operationId: createPlayerData
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerDataCreateRequest'
+      responses:
+        '201':
+          description: Player data successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerData'
+        '400':
+          description: Invalid input
+  /players/{playerId}:
+    get:
+      summary: Get player data
+      operationId: getPlayerData
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get data for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player data successfully retrieved
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/PlayerData'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+    patch:
+      summary: Update player data
+      operationId: updatePlayerData
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to update data for
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerDataUpdateRequest'
+      responses:
+        '200':
+          description: Player data successfully updated
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/{playerId}/cosmetics:
+    get:
+      summary: Fetch all unlocked cosmetics for the given player
+      operationId: getPlayerCosmetics
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get cosmetics for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched cosmetics successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '404':
+          description: Player not found
+    post:
+      summary: Buy a cosmetic for the provided price
+      operationId: buyCosmetic
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to buy a cosmetic for
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ cosmeticId ]
+              properties:
+                cosmeticId: { type: string }
+                coins: { type: integer }
+                cubits: { type: integer }
+                items: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Cosmetic bought successfully
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+        '409':
+          description: Not enough currency
+  /players/{playerId}/upgrades:
+    post:
+      summary: Buy a named upgrade for the given price
+      operationId: buyNamedUpgrade
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to buy the upgrade for
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ upgradeId ]
+              properties:
+                upgradeId: { type: string }
+                cubits: { type: integer }
+                meta: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Upgrade bought successfully
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+        '409':
+          description: Not enough currency
+  /players/{playerId}/hypercube:
+    get:
+      summary: Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
+      operationId: getPlayerHypercube
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched hypercube status successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HypercubeStatus' }
+        '404':
+          description: Player not found
+  /players/{playerId}/backpack:
+    get:
+      summary: Get the backpack for a player
+      operationId: getPlayerBackpack
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get backpack for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched backpack successfully
+          content:
+            application/json:
+              schema:
+                # todo add type here this is kinda yikes
+                type: object
+                additionalProperties: true
+        '404':
+          description: Player not found
+    post:
+      summary: Give a player items/currencies
+      operationId: givePlayerItems
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to give items to
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [change, txMeta]
+              properties:
+                txMeta:
+                  type: object
+                  additionalProperties: true
+                change:
+                  $ref: '#/components/schemas/PlayerInventory'
+      responses:
+        '200':
+          description: Items given successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ diff, newState ]
+                properties:
+                  diff:
+                    $ref: '#/components/schemas/PlayerInventory'
+                  newState:
+                    $ref: '#/components/schemas/PlayerInventory'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/{playerId}/displayname:
+    get:
+      summary: Get the display name for a player
+      operationId: getPlayerDisplayNameV2
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get display name for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched display name successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisplayNameV2'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/{playerId}/alts:
+    get:
+      summary: Get the (ip-based) alt accounts for a player
+      operationId: getPlayerAlts
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get alts for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched alts successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerAlts'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/{idOrUsername}/id:
+    get:
+      summary: Get the player ID for a player
+      operationId: getPlayerId
+      parameters:
+        - name: idOrUsername
+          in: path
+          description: The player ID or username to get the ID for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fetched player ID successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/lookup/{platform}/{platformId}:
+    get:
+      summary: Lookup player data by social
+      operationId: lookupPlayerDataBySocial
+      parameters:
+        - name: platform
+          in: path
+          description: The platform to lookup on
+          required: true
+          schema:
+            type: string
+        - name: platformId
+          in: path
+          description: The platform ID to lookup
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player data successfully retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerData'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /players/rlookup/{platform}/{playerId}:
+    get:
+      summary: Lookup social id by player id
+      operationId: lookupSocialByPlayerId
+      parameters:
+        - name: platform
+          in: path
+          description: The platform to lookup on
+          required: true
+          schema:
+            type: string
+        - name: playerId
+          in: path
+          description: The player ID to lookup
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player data successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ socialId ]
+                properties:
+                  socialId: { type: string }
+        '404':
+          description: Player data not found
+
+  /players/verify/discord:
+    post:
+      summary: Begin Discord account verification
+      operationId: beginVerifyDiscord
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ discordId, discordUsername ]
+              properties:
+                discordId:
+                  type: string
+                discordUsername:
+                  type: string
+      responses:
+        '201':
+          description: Verification started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userSecret]
+                properties:
+                  userSecret:
+                    type: string
+        '409':
+          description: Player already verified
+  /players/verify/attempt:
+    post:
+      summary: Attempt to verify a player's account
+      operationId: attemptVerification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ verificationType, userSecret, playerId ]
+              properties:
+                verificationType:
+                  type: string
+                userSecret:
+                  type: string
+                playerId:
+                  type: string
+      responses:
+        '200':
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ type, userId ]
+                properties:
+                  type: { type: string }
+                  userId: { type: string }
+        '204':
+          description: Verification expired
+        '409':
+          description: Verification failed
+        '404':
+          description: Pending verification not found
+
+  /players/{playerId}/totp:
+    get:
+      summary: Verify a TOTP code for a player
+      description: This endpoint can also be used to query whether TOTP is active on the player by calling with an empty (but present) code query parameter.
+      operationId: checkTotp
+      tags: [ totp ]
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to check TOTP for
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          description: The TOTP code to check
+          schema:
+            type: string
+      responses:
+        '200':
+          description: TOTP code verified
+        '400':
+          description: Not a 6 digit string or empty
+        '401':
+          description: TOTP code does not match
+        '404':
+          description: TOTP not configured
+    delete:
+      summary: Remove TOTP setup for a player
+      operationId: removeTotp
+      tags: [ totp ]
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to remove TOTP for
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: TOTP removed
+        '404':
+          description: TOTP not configured
+  /players/{playerId}/totp/setup:
+    post:
+      summary: Begin TOTP setup for a player. Overwrites any previous in progress attempt
+      operationId: beginTotpSetup
+      tags: [ totp ]
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to begin TOTP setup for
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          $ref: '#/components/responses/TotpSetupResponse'
+        '409':
+          description: TOTP already configured
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+    patch:
+      summary: Complete TOTP setup for a player. Must have previously called beginTotpSetup.
+      operationId: completeTotpSetup
+      tags: [ totp ]
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to complete TOTP setup for
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ code ]
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: TOTP setup completed
+        '400':
+          description: Not a 6 digit string
+        '401':
+          description: TOTP code does not match
+        '404':
+          description: TOTP setup not started
+        '409':
+          description: TOTP already configured
+
+  /tab_complete:
+    post:
+      summary: Generic player "completion" API. Used for completing player names or IDs.
+      operationId: performTabComplete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ query ]
+              properties:
+                query: { type: string }
+      responses:
+        '200':
+          description: Query completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ result ]
+                properties:
+                  result:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TabCompleteEntry'
+
+  /punishments:
+    get:
+      summary: Get punishments
+      operationId: getPunishments
+      tags: [ punishments ]
+      parameters:
+        - name: playerId
+          in: query
+          description: The player ID to get punishments for
+          required: true
+          schema:
+            type: string
+        - name: executorId
+          in: query
+          description: The executor ID to get punishments for
+          required: false
+          schema:
+            type: string
+        - name: punishmentType
+          in: query
+          description: The type of punishment to get
+          required: false
+          schema:
+            type: string
+            enum: ['ban', 'mute', 'kick']
+      responses:
+        '200':
+          description: Punishments successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Punishment'
+    post:
+      summary: Create a new punishment
+      operationId: createPunishment
+      tags: [ punishments ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playerId, executorId, punishmentType]
+              properties:
+                playerId: { type: string }
+                executorId: { type: string }
+                punishmentType: { $ref: '#/components/schemas/PunishmentType' }
+                reason:
+                  type: string
+                  description: The ladder id, punishment reason, or alias.
+                comment: { type: string }
+      responses:
+        '200':
+          description: Punishment successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Punishment'
+  /punishments/revoke:
+    post:
+      summary: Revoke the latest punishment for a player
+      operationId: revokePunishment
+      tags: [ punishments ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ playerId, type, revokedBy, revokedReason ]
+              properties:
+                playerId: { type: string }
+                type:
+                  $ref: '#/components/schemas/PunishmentType'
+                revokedBy: { type: string }
+                revokedReason: { type: string }
+      responses:
+        '200':
+          description: Punishment successfully revoked
+        '404':
+          description: Punishment not found
+  /punishments/{playerId}/active:
+    get:
+      summary: Get the active punishment for a player
+      operationId: getActivePunishment
+      tags: [ punishments ]
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get the active punishment for
+          required: true
+          schema:
+            type: string
+        - name: punishmentType
+          in: query
+          description: The type of punishment to get
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active punishment successfully retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Punishment'
+        '404':
+          description: Active punishment not found
+  /punishments/ladders:
+    get:
+      summary: Get punishment ladders
+      operationId: getPunishmentLadders
+      tags: [ punishments ]
+      parameters:
+        - name: id
+          in: query
+          description: The ID of the ladder to get, or a partial ID to search for
+          required: false
+          schema:
+            type: string
+        - name: punishmentType
+          in: query
+          description: The type of punishment to get ladders for
+          required: false
+          schema:
+            type: string
+            enum: ['ban', 'mute', 'kick']
+      responses:
+        '200':
+          description: Punishment ladders successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PunishmentLadder'
+  /punishments/ladders/entry:
+    get:
+      summary: Get a punishment ladder entry
+      operationId: getPunishmentLadderEntry
+      tags: [ punishments ]
+      parameters:
+        - name: ladderId
+          in: query
+          description: The ID of the ladder to get an entry for
+          required: true
+          schema:
+            type: string
+        - name: index
+          in: query
+          description: The index of the entry to get
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+            description: Punishment ladder entry successfully retrieved
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required: [ id, name, duration ]
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    duration:
+                      type: integer
+                      format: int64
+        '404':
+          description: Punishment ladder entry not found
+
+  /faucet:
+    post:
+      summary: Endpoint to give players currency
+      operationId: faucet
+      tags: [ payments ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ playerId, amount ]
+              properties:
+                playerId:
+                  type: string
+                type:
+                  type: string
+                amount:
+                  type: integer
+      responses:
+        '200':
+          description: Currency given successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+  /tebex/checkout:
+    post:
+      summary: Create a Tebex checkout link for the given player & package
+      operationId: tebexCheckout
+      tags: [ payments ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ username, package, creatorCode ]
+              properties:
+                username: { type: string }
+                package: { type: string }
+                creatorCode: { type: string }
+      responses:
+        '200':
+          description: Checkout link created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ url ]
+                properties:
+                  url: { type: string }
+
+components:
+  responses:
+    PlayerNotFound:
+      description: Player not found
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message:
+                type: string
+
+    TotpSetupResponse:
+      description: TOTP setup started, see body for response
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ uri, qrCode, qrCodeSize, recoveryCodes ]
+            properties:
+              uri: { type: string }
+              qrCodeSize:
+                type: integer
+              qrCode:
+                description: Base64 encoded QR code data bitset. Image width/height is qrCodeSize
+                type: string
+              recoveryCodes:
+                type: array
+                items:
+                  type: string
+  schemas:
+    ErrorResponse:
+      description: Universal response for errors. Always used no matter the expected content type
+      type: array
+      items:
+        type: object
+        properties:
+          code:
+            type: integer
+            format: int32
+            example: 400
+          message:
+            type: string
+            example: Invalid input
+    PlayerData:
+      type: object
+      required: [ id, username, displayNameV2, firstJoin, lastOnline, playtime, experience, settings, betaEnabled, coins, cubits, unlockedCosmetics, totpEnabled ]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayNameV2:
+          $ref: '#/components/schemas/DisplayNameV2'
+        firstJoin:
+          type: string
+          format: date-time
+        lastOnline:
+          type: string
+          format: date-time
+        playtime:
+          type: integer
+          format: int64
+        experience:
+          type: integer
+          format: int64
+        settings:
+          $ref: '#/components/schemas/PlayerSettings'
+
+        betaEnabled:
+          type: boolean
+
+        coins: { type: integer }
+        cubits: { type: integer }
+        hypercubeUntil:
+          type: string
+          format: date-time
+
+        totpEnabled: { type: boolean }
+
+    DisplayNameV2:
+      type: array
+      x-name: "DisplayNameV2"
+      items:
+        $ref: '#/components/schemas/DisplayNamePart'
+
+    DisplayNamePart:
+      type: object
+      # todo color is not required, but its simpler to not deal with pointers so empty is treated as not present. Need to add omitempty and this should not be marked as required.
+      # perhaps it can be something like `color: {type: string, x-empty: omit}` where x-empty:omit results in a non-nullable type.
+      required: [ type, text, color ]
+      properties:
+        type: { type: string }
+        text: { type: string }
+        color:
+          type: string
+          # TODO: Figure out how to do omitempty
+
+    PlayerSettings:
+      type: object
+      additionalProperties: true
+
+    PlayerInventory:
+      type: object
+      properties:
+        coins: { type: integer }
+        cubits: { type: integer }
+        exp: { type: integer }
+        backpack:
+          type: object
+          additionalProperties: true
+
+    PlayerAlts:
+      type: object
+      required: [ results ]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerAltsItem'
+    PlayerAltsItem:
+      type: object
+      required: [ id, username ]
+      properties:
+        id: { type: string }
+        username: { type: string }
+
+    LinkedAccount:
+      type: object
+      required: [ type, userId ]
+      properties:
+        type:
+          type: string
+          x-name: "LinkedAccountType"
+          enum: [ 'discord' ]
+        userId: { type: string }
+
+    Punishment:
+      type: object
+      properties:
+        playerId: { type: string }
+        executorId: { type: string }
+        type:
+          $ref: '#/components/schemas/PunishmentType'
+        createdAt:
+          type: string
+          format: date-time
+        # May be null for kicks which just have a comment which is the reason
+        ladderId: { type: string }
+        comment: { type: string }
+        expiresAt: { type: string, format: date-time }
+        revokedBy: { type: string }
+        revokedAt:
+          type: string
+          format: date-time
+        revokedReason: { type: string }
+      required: [playerId, executorId, type, createdAt, comment]
+
+    PunishmentLadder:
+      type: object
+      required: [ id, name, type, entries ]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type:
+          $ref: '#/components/schemas/PunishmentType'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/PunishmentLadderEntry'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/PunishmentLadderReason'
+    PunishmentLadderEntry:
+      type: object
+      required: [ duration ]
+      properties:
+        duration:
+          type: integer
+          format: int64
+    PunishmentLadderReason:
+      type: object
+      required: [ id, aliases ]
+      properties:
+        id: { type: string }
+        aliases:
+          type: array
+          items: { type: string }
+
+    PunishmentType:
+      type: string
+      enum: ['ban', 'mute', 'kick']
+
+    PlayerDataCreateRequest:
+      type: object
+      required: [ id, username, ip ]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        ip: { type: string }
+    HypercubeStatus:
+      description: If since and until are missing, the player does not have hypercube.
+      type: object
+      required: [ exp ]
+      properties:
+        exp: { type: integer }
+        since: { type: string, format: date-time }
+        until: { type: string, format: date-time }
+
+    PlayerDataUpdateRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        ipHistory:
+          type: array
+          items: { type: string }
+          description: "New IP addresses to add to the history, will be merged."
+        betaEnabled:
+          type: boolean
+        lastOnline:
+          type: string
+          format: date-time
+        playtimeInc:
+          type: integer
+          format: int64
+
+        settingsUpdates:
+          $ref: '#/components/schemas/PlayerSettings'
+
+    TabCompleteEntry:
+      type: object
+      required: [ id, username ]
+      properties:
+        id: { type: string }
+        username: { type: string }

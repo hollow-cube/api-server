@@ -1,0 +1,20 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+actor staff as "Staff"
+participant server as "Server"
+participant player as "player-service"
+database postgres as "Postgres"
+queue kafka as "Kafka"
+
+title "Ban flow"
+autonumber
+
+staff->server: ban player
+server->player: POST /punishments
+player->postgres: store Punishment
+postgres->player: OK
+player->kafka: PlayerBannedMessage
+player->server: OK
+
+@enduml

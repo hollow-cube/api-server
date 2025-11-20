@@ -1,0 +1,68 @@
+openapi: 3.0.2
+info:
+  title: Player Service Payments API
+  version: "1"
+  x-base-path: /payments
+paths:
+  /tebex/webhook:
+    post:
+      operationId: onTebexWebhook
+      summary: Handle a Tebex webhook
+      parameters:
+        - name: Content-Type
+          x-name: contentType
+          in: header
+          description: The content type of the request
+          required: true
+          schema:
+            type: string
+        - name: X-Signature
+          x-name: tebexSignature
+          in: header
+          description: The signature from Tebex
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Webhook handled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # ID is required for validation event
+                  id: { type: string }
+  /tebex/basket:
+    get:
+      operationId: getTebexBasket
+      summary: Get a tebex basket id
+      parameters:
+        - name: ref
+          in: query
+          description: The checkout reference
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The basket id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ id, username ]
+                properties:
+                  id: { type: string }
+                  # The username associated with the basket, used to automatically sign in on the website.
+                  username: { type: string }
+        '204':
+          description: Basket still being created
+        '404':
+          description: Basket not found

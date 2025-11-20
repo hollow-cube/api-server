@@ -1,0 +1,9 @@
+global:
+  nameOverride: player-service
+  fullnameOverride: player-service
+
+base:
+  image:
+    repository: mworzala/player-service
+  imagePullSecrets:
+    - name: dockerio

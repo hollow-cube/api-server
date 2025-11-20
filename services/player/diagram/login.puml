@@ -1,0 +1,36 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+'todo eventually hub will be replaced by a proxy plugin when we have one
+
+participant hub as hub
+participant "session-service" as session
+participant "player-service" as player
+database redis as redis
+
+title Login flow for mapmaker
+autonumber
+
+->hub: Player joins (notmattw)
+hub->session: POST /session
+session->player: GET /data/notmattw
+note right: somewhere here we need to \nupdate the player username
+player->session: Data (or not)
+
+alt unknown player
+  session->player: POST /data/notmattw
+  player->session: OK
+end
+
+session->redis: SET session:notmattw
+session->hub: OK
+
+== ==
+
+->hub: player leaves
+hub->session: DELETE /session
+session->redis: DEL session:notmattw
+session->hub: OK
+
+
+@enduml

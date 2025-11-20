@@ -1,0 +1,24 @@
+openapi: 3.0.2
+info:
+  title: Player Service Payments API
+  version: "1"
+paths:
+  /stats:
+    get:
+      operationId: getPublicStats
+      summary: Returns the public stats for players on hc
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ totalPlayers, totalPlaytime ]
+                properties:
+                  totalPlayers:
+                    type: integer
+                    description: Total number of players
+                  totalPlaytime:
+                    type: integer
+                    description: Total playtime in seconds

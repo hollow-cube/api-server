@@ -1,0 +1,1 @@
+ALTER TABLE map_stats DROP COLUMN IF EXISTS clear_rate;

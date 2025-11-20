@@ -1,0 +1,1 @@
+alter table player_data drop column if exists ip_history;

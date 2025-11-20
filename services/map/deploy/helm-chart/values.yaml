@@ -1,0 +1,13 @@
+global:
+  nameOverride: map-service
+  fullnameOverride: map-service
+
+base:
+  image:
+    repository: mworzala/map-service
+  imagePullSecrets:
+    - name: dockerio
+
+  service:
+    monitor:
+      enabled: true

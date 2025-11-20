@@ -1,0 +1,5 @@
+GET http://10.2.2.204:9124/v1/internal/maps/14b8a361-7cba-49ec-933c-14faad11f385/leaderboard/playtime?playerId=aceb326f-da15-45bc-bf2f-11940c21780c
+
+###
+
+GET http://localhost:9125/v1/internal/maps/c99224dd-f976-4186-9bba-369fa3c160eb

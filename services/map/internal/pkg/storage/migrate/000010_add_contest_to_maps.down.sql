@@ -1,0 +1,1 @@
+alter table maps drop column if exists contest;

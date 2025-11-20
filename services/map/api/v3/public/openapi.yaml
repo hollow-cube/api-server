@@ -1,0 +1,179 @@
+openapi: 3.0.2
+info:
+  title: Map Service Public API
+  version: "1"
+paths:
+  /:
+    post:
+      operationId: createMap
+      summary: Create a new map
+      description: long description TODO
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              type: object
+              required: [ name, orgId, spawnPoint ]
+              properties:
+                name:
+                  description: The name of the map
+                  type: string
+                orgId:
+                  description: The ID of the organization who owns the map
+                  type: string
+                legacyMapId:
+                  description: The ID of the legacy map to import, or null if not any type of 'legacy' map
+                  type: string
+                spawnPoint:
+                  $ref: '#/components/schemas/Pos'
+                extraData:
+                  description: >-
+                    Extra metadata to store with the map
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          x-type: success
+          description: Map created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Map not found
+  /{mapId}/world:
+    get:
+      operationId: getMapWorld
+      summary: Fetch a map world by ID
+      description: long description TODO
+      parameters:
+        - name: mapId
+          in: path
+          schema: { type: string }
+        - name: accept
+          in: header
+          description: >-
+            The content type (world format) to return, defaults to Anvil (latest).
+          schema:
+            type: string
+            enum:
+              - application/vnd.hollowcube.polar
+              - application/vnd.hollowcube.anvil
+      responses:
+        '200':
+          x-type: success
+          description: The raw map world data
+          content:
+            application/vnd.hollowcube.polar:
+              schema:
+                type: string
+                format: binary
+            application/vnd.hollowcube.anvil:
+              schema:
+                type: string
+                format: binary
+        '204':
+          x-type: empty
+          description: No map world present (not generated yet)
+        '404':
+          description: Map not found
+    put:
+      operationId: updateMapWorld
+      summary: Update a map world by ID
+      description: long description TODO
+      parameters:
+        - name: mapId
+          in: path
+          schema: { type: string }
+        - name: content-type
+          in: header
+          description: >-
+            The content type (world format) being uploaded, defaults to Anvil (latest).
+          schema:
+            type: string
+            enum:
+              - application/vnd.hollowcube.polar
+              - application/vnd.hollowcube.anvil
+      requestBody:
+        description: The raw map world data
+        content:
+          application/vnd.hollowcube.polar:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          x-type: empty
+          description: Map world uploaded
+        '404':
+          description: Map not found
+  /stats:
+    get:
+      operationId: getMapStats
+      summary: Fetch public map statistics
+      description: long description TODO
+      responses:
+        '200':
+          description: 'Public map statistics'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [totalMaps, totalFails]
+                properties:
+                  totalMaps:
+                    description: The total number of maps
+                    type: integer
+                  totalFails:
+                    description: The total number of failed maps
+                    type: integer
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message:
+                type: string
+  schemas:
+    Point:
+      type: object
+      required: [ x, y, z ]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+    Pos:
+      allOf:
+        - $ref: '#/components/schemas/Point'
+        - type: object
+          required: [ yaw, pitch ]
+          properties:
+            yaw: { type: number }
+            pitch: { type: number }
+
+    MapManualTriggerWebhook:
+      description: >-
+        A webhook payload when a map manual trigger is pressed in an organization map.
+      type: object
+      required: [ sender, orgId, mapId, timestamp ]
+      properties:
+        sender:
+          description: The UUID of the user who triggered the event
+          type: string
+        orgId:
+          description: The ID of the organization who owns the map
+          type: string
+        mapId:
+          description: The ID of the map
+          type: string
+        timestamp:
+          description: The timestamp of the event in iso format
+          type: string
+          format: date-time

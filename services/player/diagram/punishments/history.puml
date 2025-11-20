@@ -1,0 +1,19 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+actor staff as "Staff"
+participant server as "Server"
+participant player as "player-service"
+database postgres as "Postgres"
+
+title "History flow"
+autonumber
+
+staff->server: Get punish history
+server->player: GET /punish/history
+player->postgres: get all relevant Punishment objects
+postgres-->player: Punishment objects
+player->server: Punishment objects
+server->staff: List of punishments
+
+@enduml

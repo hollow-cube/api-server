@@ -1,0 +1,20 @@
+global:
+  nameOverride: session-service
+  fullnameOverride: session-service
+
+base:
+  image:
+    repository: mworzala/session-service
+
+  serviceAccount:
+    extraPerms: true
+
+  volumes:
+    - name: mapmaker-map-isolate-config
+      configMap:
+        name: mapmaker-map-isolate-config
+
+  volumeMounts:
+    - name: mapmaker-map-isolate-config
+      mountPath: /etc/map-isolate
+      readOnly: true

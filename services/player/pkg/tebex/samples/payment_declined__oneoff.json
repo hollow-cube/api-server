@@ -1,0 +1,77 @@
+{
+  "id": "cab16b04-86a6-4dec-8c88-1ec64e5f52f5",
+  "type": "payment.declined",
+  "date": "2023-12-02T14:48:04+00:00",
+  "subject": {
+    "transaction_id": "tbx-46333523a50764-d55701",
+    "status": {
+      "id": 1,
+      "description": "Complete"
+    },
+    "payment_sequence": "oneoff",
+    "created_at": "2023-12-02T14:06:04.000000Z",
+    "price": {
+      "amount": 12.39,
+      "currency": "USD"
+    },
+    "price_paid": {
+      "amount": 12.39,
+      "currency": "USD"
+    },
+    "payment_method": {
+      "name": "Test Payments",
+      "refundable": true
+    },
+    "fees": {
+      "tax": {
+        "amount": 2.4,
+        "currency": "USD"
+      },
+      "gateway": {
+        "amount": 0,
+        "currency": "USD"
+      }
+    },
+    "customer": {
+      "first_name": "Matt",
+      "last_name": "Worzala",
+      "email": "mattheworzala@gmail.com",
+      "ip": "94.66.222.100",
+      "username": {
+        "id": "e4ec5b95b0e88582925c7c852750ea78",
+        "username": "notmattw"
+      },
+      "marketing_consent": false,
+      "country": "GR",
+      "postal_code": null
+    },
+    "products": [
+      {
+        "id": 6018804,
+        "name": "100 Cubits",
+        "quantity": 1,
+        "base_price": {
+          "amount": 9.99,
+          "currency": "USD"
+        },
+        "paid_price": {
+          "amount": 9.99,
+          "currency": "USD"
+        },
+        "variables": [],
+        "expires_at": null,
+        "custom": null,
+        "username": {
+          "id": "e4ec5b95b0e88582925c7c852750ea78",
+          "username": "notmattw"
+        }
+      }
+    ],
+    "coupons": [],
+    "gift_cards": [],
+    "recurring_payment_reference": null,
+    "custom": {},
+    "revenue_share": [],
+    "decline_reason": null
+  }
+}

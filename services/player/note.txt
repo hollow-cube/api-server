@@ -1,0 +1,25 @@
+
+
+Required endpoints
+-- @NotNull Component getDisplayName(@NotNull String playerId);
+
+
+    @NotNull PlayerData createPlayer(@NotNull PlayerData player) throws DuplicateEntryError;
+
+    @NotNull PlayerData getPlayerByUuid(@NotNull String uuid) throws NotFoundError;
+
+    void updatePlayer(@NotNull PlayerData player) throws NotFoundError;
+
+May just be easier to scrap getplayerbyuuid and createplayer for now, and instead handle those as some kind of "onPlayerJoin" endpoint which
+- creates if missing
+- updates username
+
+
+IS THE PLAYER SERVICE ALSO THE SESSION SERVICE??????
+
+Player login flow:
+ -
+
+
+
+

@@ -1,0 +1,1 @@
+alter table player_sessions drop column if exists last_seen;

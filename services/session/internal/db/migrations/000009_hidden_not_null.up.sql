@@ -1,0 +1,1 @@
+alter table player_sessions alter column hidden set not null;

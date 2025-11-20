@@ -1,0 +1,1 @@
+ALTER TABLE obungus_pending_boxes ADD COLUMN legacy_username VARCHAR DEFAULT NULL;

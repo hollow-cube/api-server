@@ -1,0 +1,1 @@
+alter table server_states add column if not exists status_v2 varchar(10) default 'starting';

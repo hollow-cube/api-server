@@ -1,0 +1,55 @@
+env: staging
+
+http:
+  address: 0.0.0.0
+  port: 9124
+metrics:
+  password: ""
+
+otlp:
+  endpoint: ""
+
+redis:
+  address: localhost:6379
+
+kafka:
+  brokers: kafka:9092
+
+kubernetes:
+  namespace: default
+
+postgres:
+  uri: "postgres://postgres:postgres@localhost:5432/session-service?sslmode=disable"
+
+spicedb:
+  endpoint: localhost:50051
+  token: "foobar"
+  tls: false
+
+player_service_url: http://localhost:9126
+map_service_url: http://localhost:9125
+
+posthog:
+  personal_api_key: ""
+
+unleash:
+  address: "http://unleash.mgmt.svc.cluster.local:4242/api"
+  token: ""
+
+map_isolate:
+  instances:
+    micro: { memory: 150 }
+    mini: { memory: 200 }
+    medium: { memory: 300 }
+    large: { memory: 400 }
+    xlarge: { memory: 500 }
+  default_size: medium
+  world_size_mapping:
+    normal: micro
+    large: mini
+    massive: medium
+    colossal: large
+    unlimited: xlarge
+
+github:
+  private_key: ""

@@ -1,0 +1,8 @@
+.idea
+.fleet
+
+.DS_Store
+
+services/*/build/*
+services/*/deploy/helm-chart/Chart.lock
+services/*/deploy/helm-chart/charts

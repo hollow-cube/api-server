@@ -1,0 +1,210 @@
+openapi: 3.0.2
+info:
+  title: Map Service Terraform API
+  version: "1"
+  x-base-path: /internal/terraform
+paths:
+  /session/{playerId}:
+    get:
+      operationId: getPlayerSession
+      summary: Fetch a player session by the player ID
+      description: long description TODO
+      parameters:
+        - name: playerId
+          in: path
+      responses:
+        '200':
+          x-type: success
+          description: The raw player session data
+          content:
+            application/vnd.terraform.player_session:
+              schema:
+                type: string
+                format: binary
+        '404':
+          x-type: empty
+          description: No player data saved
+    put:
+      operationId: updatePlayerSession
+      summary: Update a player session by the player ID
+      parameters:
+        - name: playerId
+          in: path
+      requestBody:
+        description: The raw player session data
+        content:
+          application/vnd.terraform.player_session:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          x-type: empty
+          description: The raw player session data
+  /session/{playerId}/{worldId}:
+    get:
+      operationId: getLocalSession
+      summary: Fetch a local session by the player ID and world ID
+      description: long description TODO
+      parameters:
+        - name: playerId
+          in: path
+        - name: worldId
+          in: path
+      responses:
+        '200':
+          x-type: success
+          description: The raw local session data
+          content:
+            application/vnd.terraform.local_session:
+              schema:
+                type: string
+                format: binary
+        '404':
+          x-type: empty
+          description: No local session data saved
+    put:
+      operationId: updateLocalSession
+      summary: Update a local session by the player ID
+      parameters:
+        - name: playerId
+          in: path
+        - name: worldId
+          in: path
+      requestBody:
+        description: The raw local session data
+        content:
+          application/vnd.terraform.local_session:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          x-type: empty
+          description: The raw local session data
+
+  /schem/{playerId}:
+    get:
+      operationId: listPlayerSchematics
+      parameters:
+        - name: playerId
+          in: path
+      responses:
+        '200':
+          x-type: success
+          description: The list of schematic headers for the given player
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SchematicHeader" }
+  /schem/{playerId}/{schemName}:
+    get:
+      operationId: getSchematicData
+      parameters:
+        - name: playerId
+          in: path
+        - name: schemName
+          in: path
+      responses:
+        '200':
+          x-type: success
+          description: The raw schematic data
+          content:
+            application/vnd.terraform.schematic:
+              schema:
+                type: string
+                format: binary
+        '404':
+          x-type: empty
+          description: Schematic not found
+    post:
+      operationId: createSchematic
+      parameters:
+        - name: playerId
+          in: path
+        - name: schemName
+          in: path
+          # All are optional below here.
+        - name: dimx
+          in: query
+          description: The schematic dimensions in the x axis
+          schema: { type: integer }
+        - name: dimy
+          in: query
+          description: The schematic dimensions in the y axis
+          schema: { type: integer }
+        - name: dimz
+          in: query
+          description: The schematic dimensions in the z axis
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          description: The schematic file type
+          schema: { type: string }
+      requestBody:
+        description: The raw schematic data
+        content:
+          application/vnd.terraform.schematic:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          x-type: empty
+          description: Schematic created
+    put:
+      operationId: updateSchematicHeader
+      parameters:
+        - name: playerId
+          in: path
+        - name: schemName
+          in: path
+      requestBody:
+        description: Updated schematic header fields
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dimensions: { $ref: "#/components/schemas/TFPoint" }
+                fileType: { type: string }
+      responses:
+        '200':
+          x-type: empty
+          description: Schematic updated
+        '404':
+          description: Schematic not found
+    delete:
+      operationId: deleteSchematic
+      parameters:
+        - name: playerId
+          in: path
+        - name: schemName
+          in: path
+      responses:
+        '200':
+          x-type: empty
+          description: Schematic deleted
+        '404':
+          description: Schematic not found
+
+components:
+  schemas:
+    TFPoint:
+      type: object
+      required: [ x, y, z ]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+    SchematicHeader:
+      type: object
+      required: [ name, size ]
+      properties:
+        name: { type: string }
+        size: { type: number }
+        # Below may be missing if the schematic has not been loaded by a server
+        dimensions: { $ref: "#/components/schemas/TFPoint" }
+        # Schematic type if known.
+        fileType: { type: string }

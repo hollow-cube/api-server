@@ -1,0 +1,24 @@
+replicaCount: 1
+
+base:
+  cluster: "prod"
+
+  service:
+    monitor:
+      enabled: true
+  nodeSelector:
+    kubernetes.io/hostname: "ovh-02"
+
+  env:
+    MAPS_ENV: "prod"
+    MAPS_HTTP_ADDRESS: "0.0.0.0"
+    MAPS_HTTP_PORT: "9124"
+
+    MAPS_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
+
+    MAPS_PLAYER_SERVICE_URL: "http://player-service.mapmaker.svc.cluster.local:9124"
+
+    MAPS_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"
+    MAPS_S3_ENDPOINT: "https://bdb9cb2904188b760591dc1589a1ccf3.r2.cloudflarestorage.com"
+    MAPS_REDIS_ADDRESS: "redis-master:6379"
+    MAPS_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"

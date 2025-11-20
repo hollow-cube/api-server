@@ -1,0 +1,20 @@
+replicaCount: 1
+
+base:
+  cluster: "prod"
+
+  service:
+    monitor:
+      enabled: true
+
+  env:
+    PLAYERS_ENV: "prod"
+    PLAYERS_HTTP_ADDRESS: "0.0.0.0"
+    PLAYERS_HTTP_PORT: "9124"
+
+    PLAYERS_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
+
+    PLAYERS_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"
+    PLAYERS_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"
+
+    PLAYERS_VOTIFIER_LISTEN_ADDR: "0.0.0.0:30192"

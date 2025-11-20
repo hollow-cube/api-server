@@ -1,0 +1,1 @@
+alter table map_player_data add column if not exists contest_slot uuid default null;

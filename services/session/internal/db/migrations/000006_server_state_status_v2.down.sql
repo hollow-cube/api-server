@@ -1,0 +1,1 @@
+alter table server_states drop column if exists status_v2

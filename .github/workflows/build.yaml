@@ -1,0 +1,126 @@
+name: "Build and push"
+
+on: {} # Disabled for now
+#  push:
+#    branches: [ main ]
+
+env:
+  GO_VERSION: "1.24.4"
+  AWS_REGION: "eu-central-1"
+
+jobs:
+  #  lint:
+  #    runs-on: ubuntu-latest
+  #    steps:
+  #      - uses: actions/setup-go@v4
+  #        with:
+  #          go-version: "${{ env.GO_VERSION }}"
+  #          cache: false
+  #      - uses: actions/checkout@v4
+  #      - name: go-lint
+  #        uses: golangci/golangci-lint-action@v3
+  #        with:
+  #          version: latest
+  #          args: --timeout 5m0s
+
+  # Detect services that need to be built via the builder
+  detect-services:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect-services.outputs.services }}
+    steps:
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+        # Setup Go so we can run the builder
+      - name: detect-services
+        id: detect-services
+        env:
+          GH_API_TOKEN: ${{ secrets.GH_API_TOKEN }}
+        run: |
+          services=$(go run builder/main.go)
+          echo "Raw services output: $services"
+          echo "services=$services" >> $GITHUB_OUTPUT
+      - name: print-services
+        run: |
+          echo "Services: ${{ steps.detect-services.outputs.services }}"
+
+  build-and-publish:
+    needs: [detect-services]
+    if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Set up to push to AWS ECR
+      - name: "Configure AWS credentials"
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: "Login to AWS ECR"
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: "Build and push"
+        uses: "docker/build-push-action@v4"
+        with:
+          context: "." # Root of the repo to include 'libraries'
+          file: "./services/${{ matrix.service }}/Dockerfile"
+          push: true
+          platforms: linux/amd64
+          # reg-url.com/nimbusmc/{SVC}:{SHA}
+          tags: ${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:${{ github.sha }}
+          # NOW DISABLED: Cache from ECR (not GitHub Actions cache)
+          #          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:cache
+          #          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:cache,mode=max
+          # Cache to GHA instead to save on ECR costs
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# todo this needs to change for HollowCube deploys.
+#  deploy:
+#    needs: [build-and-publish, detect-services]
+#    runs-on: ubuntu-latest
+#    if: github.ref == 'refs/heads/main' # Only run on main branch
+#    env:
+#      SERVICES: ${{ needs.detect-services.outputs.services }}
+#    steps:
+#      - name: "Checkout deployments repo"
+#        uses: "actions/checkout@v4"
+#        with:
+#          repository: "nimbus-mc/argocd-deployments"
+#          ref: "main"
+#          token: "${{ secrets.DEPLOYMENTS_REPO_TOKEN }}"
+#
+#      - name: "Update image version"
+#        shell: "bash"
+#        # git commit -a automatically adds files that have been modified
+#        env:
+#          PUSH_TOKEN: "${{ secrets.DEPLOYMENTS_REPO_TOKEN }}"
+#        run: |
+#          echo "Services: $SERVICES"
+#
+#          services_array=($(echo $SERVICES | jq -r '.[]'))
+#
+#          git config --global user.name "github-actions[bot]"
+#          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+#
+#          for service in "${services_array[@]}"; do
+#            serviceValuesPath="services/values/$service.yaml"
+#
+#            echo "Updating image for $service to ${{ github.sha }} at $serviceValuesPath"
+#            sed -i "s|version: .*|version: ${{ github.sha }}|g" $serviceValuesPath
+#            git commit -a -m "Update $service to ${{ github.sha }}"
+#          done
+#
+#          git push https://😛:$PUSH_TOKEN@github.com/nimbus-mc/argocd-deployments.git

@@ -1,0 +1,1 @@
+alter table maps add column if not exists listed boolean not null default true;

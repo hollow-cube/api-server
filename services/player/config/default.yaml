@@ -1,0 +1,105 @@
+env: staging
+
+http:
+  address: 0.0.0.0
+  port: 9124
+metrics:
+  password: ""
+
+postgres:
+  uri: "postgres://postgres:postgres@localhost:5432/player-service?sslmode=disable"
+
+spicedb:
+  endpoint: localhost:50051
+  token: "supersecretkey"
+  tls: false
+
+kafka:
+  brokers: kafka:9092
+
+tebex:
+  private_key: ""
+  secret: "abc"
+  dispute_discord_webhook: ""
+
+votifier:
+  listen_addr: ":8192"
+  token: ""
+
+otlp:
+  endpoint: ""
+
+posthog:
+  personal_api_key: ""
+
+unleash:
+  address: "http://unleash.mgmt.svc.cluster.local:4242/api"
+  token: ""
+
+punishment_ladders:
+  - id: "chat-minor"
+    name: "Minor Chat Infraction"
+    type: "mute"
+    entries:
+      - duration: "12h"
+      - duration: "1d"
+      - duration: "3d"
+      - duration: "7d"
+      - duration: "1mo"
+      - duration: "6mo"
+      - duration: "permanent"
+    reasons:
+      - id: toxicity
+        aliases: [to]
+      - id: spam
+        aliases: [sp]
+  - id: "chat-major"
+    name: "Major Chat Infraction"
+    type: "mute"
+    entries:
+      - duration: "3d"
+      - duration: "7d"
+      - duration: "2w"
+      - duration: "1mo"
+      - duration: "6mo"
+      - duration: "permanent"
+    reasons:
+      - id: discrimination
+        aliases: [di]
+      - id: harassment
+        aliases: [hr]
+  - id: "gameplay-minor"
+    name: "Minor Gameplay Infraction"
+    type: "ban"
+    entries:
+      - duration: "1w"
+      - duration: "1mo"
+      - duration: "3mo"
+      - duration: "permanent"
+    reasons:
+      - id: macros
+        aliases: [mc]
+      - id: stat-boosting
+        aliases: [sb]
+  - id: "gameplay-major"
+    name: "Major Gameplay Infraction"
+    type: "ban"
+    entries:
+      - duration: "1mo"
+      - duration: "3mo"
+      - duration: "permanent"
+    reasons:
+      - id: bug-abuse
+        aliases: [ba]
+      - id: cheating
+        aliases: [ch]
+  - id: "severe"
+    name: "Severe Infraction"
+    type: "ban"
+    entries:
+      - duration: "permanent"
+    reasons:
+      - id: dox
+        aliases: [dx]
+      - id: ddos
+        aliases: [dd]
