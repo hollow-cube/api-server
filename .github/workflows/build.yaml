@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           ko login docker.io --username mworzala --password ${{ env.DOCKER_PASS }}
-          ko build ./services/${{ matrix.service }}/cmd/${{ matrix.service }} --base-import-paths --tags ${{ github.sha }} --platform ${{ inputs.build-platforms }}
+          ko build ./services/${{ matrix.service }}/cmd/${{ matrix.service }} --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
           echo "Version: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
 # todo this needs to change for HollowCube deploys.
