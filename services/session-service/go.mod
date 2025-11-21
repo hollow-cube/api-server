@@ -19,7 +19,7 @@ require (
 	github.com/hollow-cube/hc-services/libraries/common v0.0.0-20250112161434-99af483b600e
 	github.com/hollow-cube/hc-services/services/map-service v0.0.0-00010101000000-000000000000
 	github.com/hollow-cube/hc-services/services/player-service v0.0.0-20250830153436-dd3b86861c61
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/posthog/posthog-go v1.3.1
 	github.com/redis/rueidis v1.0.54
@@ -27,7 +27,6 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.opentelemetry.io/otel v1.38.0
-	go.opentelemetry.io/otel/trace v1.38.0
 	go.uber.org/fx v1.23.0
 	go.uber.org/zap v1.27.0
 	google.golang.org/protobuf v1.36.10
@@ -259,6 +258,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
+	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.18.0 // indirect

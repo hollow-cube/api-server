@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/hollow-cube/hc-services/libraries/common v0.0.0-20250112161434-99af483b600e
 	github.com/hollow-cube/hc-services/services/player-service v0.0.0-20250830153436-dd3b86861c61
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/mworzala/openapi-go v0.0.0-20240518124956-b8713878aceb
 	github.com/oapi-codegen/runtime v1.1.1

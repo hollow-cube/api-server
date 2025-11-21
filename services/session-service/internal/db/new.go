@@ -12,7 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	dbTracing "github.com/hollow-cube/hc-services/services/session-service/internal/db/tracing"
+	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,12 +21,15 @@ import (
 var migrationFS embed.FS
 
 func NewQuerySet(ctx context.Context, databaseUri string) (*Queries, *pgxpool.Pool, error) {
+	// Config options
 	config, err := pgxpool.ParseConfig(databaseUri)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse postgres config: %w", err)
 	}
-	config.ConnConfig.Tracer = &dbTracing.Tracer{}
 
+	config.ConnConfig.Tracer = postgresUtil.NewSqlCTracer()
+
+	// Create pgx conn pool
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to postgres: %w", err)

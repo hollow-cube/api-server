@@ -17,6 +17,7 @@ import (
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -76,12 +77,21 @@ func NewPostgresClientFromClient(pool *pgxpool.Pool) (*PostgresClient, error) {
 }
 
 func (c *PostgresClient) Start(ctx context.Context) error {
-	var err error
-	c.pool, err = pgxpool.New(ctx, c.uri)
+	// Config options
+	config, err := pgxpool.ParseConfig(c.uri)
+	if err != nil {
+		return fmt.Errorf("failed to parse postgres config: %w", err)
+	}
+
+	config.ConnConfig.Tracer = postgresUtil.NewSQLTracer()
+
+	// Create pgx conn pool
+	c.pool, err = pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
-	if err := c.pool.Ping(ctx); err != nil {
+
+	if err = c.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
 

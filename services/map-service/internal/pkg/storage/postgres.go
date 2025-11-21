@@ -19,6 +19,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -56,11 +57,20 @@ func NewPostgresClient(uri string) (*PostgresClient, error) {
 }
 
 func (c *PostgresClient) Start(ctx context.Context) error {
-	var err error
-	c.pool, err = pgxpool.New(ctx, c.uri)
+	// Config options
+	config, err := pgxpool.ParseConfig(c.uri)
+	if err != nil {
+		return fmt.Errorf("failed to parse postgres config: %w", err)
+	}
+
+	config.ConnConfig.Tracer = postgresUtil.NewSQLTracer()
+
+	// Create pgx conn pool
+	c.pool, err = pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
+	
 	if err = c.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
@@ -425,9 +435,9 @@ var (
 			&m.ProtocolVersion, &m.Contest, &m.Listed, &m.UniquePlays, &m.ClearRate, &m.Likes, &m.Difficulty2}
 	}
 	mapStatsSubquery = mustCompile(psql.Select("map_id", "play_count", "win_count", "clear_rate", difficultySelect).
-				From("public.map_stats").GroupBy("map_id"))
+		From("public.map_stats").GroupBy("map_id"))
 	mapLikesSubquery = mustCompile(psql.Select("map_id", "SUM(CASE WHEN rating = 1 THEN 1 WHEN rating = 2 THEN -1 ELSE 0 END) AS total_likes").
-				From("public.map_ratings").GroupBy("map_id"))
+		From("public.map_ratings").GroupBy("map_id"))
 )
 
 func (c *PostgresClient) SearchMapsV3(ctx context.Context, params SearchQueryV3) (m []*model.Map, err error) {
