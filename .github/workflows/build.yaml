@@ -1,12 +1,11 @@
 name: "Build and push"
 
-on: {} # Disabled for now
-#  push:
-#    branches: [ main ]
+on:
+  push:
+    branches: [ main ]
 
 env:
   GO_VERSION: "1.24.4"
-  AWS_REGION: "eu-central-1"
 
 jobs:
   #  lint:
@@ -40,7 +39,7 @@ jobs:
       - name: detect-services
         id: detect-services
         env:
-          GH_API_TOKEN: ${{ secrets.GH_API_TOKEN }}
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           services=$(go run builder/main.go)
           echo "Raw services output: $services"
@@ -50,42 +49,31 @@ jobs:
           echo "Services: ${{ steps.detect-services.outputs.services }}"
 
   build-and-publish:
-    needs: [detect-services]
+    needs: [ detect-services ]
     if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
+      - name: Import Secrets
+        uses: hollow-cube/actions/secrets@main
+        with:
+          token: ${{ inputs.vault-token }}
+          path: global/github
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-
-      # Set up to push to AWS ECR
-      - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: actions/setup-go@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: "Login to AWS ECR"
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: "Build and push"
-        uses: "docker/build-push-action@v4"
-        with:
-          context: "." # Root of the repo to include 'libraries'
-          file: "./services/${{ matrix.service }}/Dockerfile"
-          push: true
-          platforms: linux/amd64
-          # reg-url.com/nimbusmc/{SVC}:{SHA}
-          tags: ${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:${{ github.sha }}
-          # NOW DISABLED: Cache from ECR (not GitHub Actions cache)
-          #          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:cache
-          #          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/nimbusmc/${{ matrix.service }}:cache,mode=max
-          # Cache to GHA instead to save on ECR costs
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          go-version: ${{ inputs.go-version }}
+      - uses: ko-build/setup-ko@v0.6
+        env:
+          KO_DOCKER_REPO: mworzala
+      - name: Build image
+        shell: bash
+        run: |
+          ko login docker.io --username mworzala --password ${{ env.DOCKER_PASS }}
+          ko build ./services/${{ matrix.service }}/cmd/${{ matrix.service }} --base-import-paths --tags ${{ github.sha }} --platform ${{ inputs.build-platforms }}
+          echo "Version: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
 # todo this needs to change for HollowCube deploys.
 #  deploy:
