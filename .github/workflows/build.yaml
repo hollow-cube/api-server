@@ -59,7 +59,7 @@ jobs:
       - name: Import Secrets
         uses: hollow-cube/actions/secrets@main
         with:
-          token: ${{ inputs.vault-token }}
+          token: ${{ secrets.VAULT_TOKEN }}
           path: global/github
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
