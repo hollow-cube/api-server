@@ -49,7 +49,7 @@ func NewChiMiddleware(_ trace.TracerProvider) http.MiddlewareProviderFunc {
 	// Add the trace provider here to force it to load, we don't actually need it.
 	return func(r chi.Router) http.Middleware {
 		return http.MiddlewareFunc(otelchi.Middleware(
-			"my-server",
+			"chi-server",
 			otelchi.WithChiRoutes(r),
 			otelchi.WithFilter(func(r *http2.Request) bool {
 				return r.URL.Path != "/alive" && r.URL.Path != "/ready" && r.URL.Path != "/metrics"

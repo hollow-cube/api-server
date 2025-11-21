@@ -7,9 +7,7 @@ import (
 
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/authzed/authzed-go/v1"
-	"github.com/authzed/grpcutil"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	authzedUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/authzed"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -20,19 +18,15 @@ type SpiceDBClient struct {
 }
 
 func NewSpiceDBClient(address string, token string, secure bool) (*SpiceDBClient, error) {
-	var sdb *authzed.Client
-	var err error
-	if !secure {
-		sdb, err = authzed.NewClient(address,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpcutil.WithInsecureBearerToken(token),
-		)
-	} else {
+	if secure {
 		panic("secure spicedb connection not implemented")
 	}
+
+	sdb, err := authzedUtil.NewAuthzedClient(address, token, secure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SpiceDB client: %w", err)
 	}
+
 	return &SpiceDBClient{sdb}, nil
 }
 
