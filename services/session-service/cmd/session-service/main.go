@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -18,7 +17,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
 	"github.com/segmentio/kafka-go"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -85,13 +83,11 @@ func main() {
 }
 
 func newPlayerSvc2(conf *config.Config) (playerService2.ClientWithResponsesInterface, error) {
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(httpClient))
+	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(tracefx.DefaultHTTPClient))
 }
 
 func newMapServiceClient(conf *config.Config) (mapService.ClientWithResponsesInterface, error) {
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	return mapService.NewClientWithResponses(conf.MapServiceUrl+"/v3/internal", mapService.WithHTTPClient(httpClient))
+	return mapService.NewClientWithResponses(conf.MapServiceUrl+"/v3/internal", mapService.WithHTTPClient(tracefx.DefaultHTTPClient))
 }
 
 func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {

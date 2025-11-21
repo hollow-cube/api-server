@@ -6,3 +6,6 @@
 services/*/build/*
 services/*/deploy/helm-chart/Chart.lock
 services/*/deploy/helm-chart/charts
+
+# ignore compiled service binaries in the root
+services/*/*-service

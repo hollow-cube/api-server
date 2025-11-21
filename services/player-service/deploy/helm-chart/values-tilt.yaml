@@ -5,6 +5,8 @@ base:
     repository: player-service
 
   imagePullSecrets: []
+  volumes: []
+  volumeMounts: []
 
   env:
     PLAYERS_ENV: "tilt"

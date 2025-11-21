@@ -4,6 +4,10 @@ base:
   image:
     repository: map-service
 
+  imagePullSecrets: []
+  volumes: []
+  volumeMounts: []
+
   env:
     MAPS_ENV: "tilt"
     MAPS_HTTP_ADDRESS: "0.0.0.0"
