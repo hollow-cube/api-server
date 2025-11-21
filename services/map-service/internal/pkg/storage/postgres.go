@@ -70,7 +70,7 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
-	
+
 	if err = c.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
@@ -893,7 +893,7 @@ func (c *PostgresClient) UpdateSaveState(ctx context.Context, ss *model.SaveStat
 	}
 
 	// Async update the map stats, if it fails it doesnt really matter much
-	go c.updateMapStats(ss.MapId)
+	go c.updateMapStats(ctx, ss.MapId)
 
 	return c.safeExec(ctx, query,
 		ss.Id, ss.MapId, ss.PlayerId, ss.Type, ss.Created,
@@ -1167,7 +1167,7 @@ func (c *PostgresClient) readSaveState(r pgx.Row) (*model.SaveState, error) {
 // updateMapStats is responsible for updating the stats of a map.
 //
 // It is intended to be called asynchronously in a goroutine rather than blocking a request path.
-func (c *PostgresClient) updateMapStats(mapId string) {
+func (c *PostgresClient) updateMapStats(ctx context.Context, mapId string) {
 	const query = `
 		insert into map_stats
 		select $1	                 								  AS map_id,
@@ -1180,7 +1180,7 @@ func (c *PostgresClient) updateMapStats(mapId string) {
 		    win_count=excluded.win_count;
 	`
 
-	_, err := c.pool.Exec(context.Background(), query, mapId)
+	_, err := c.pool.Exec(ctx, query, mapId)
 	if err != nil {
 		c.log.Errorw("Failed to update map stats", "map_id", mapId, "error", err)
 	}
