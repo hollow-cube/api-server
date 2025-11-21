@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_save_states_map_player;
