@@ -146,6 +146,7 @@ func (h *InternalHandler) GetLegacyMapWorld(ctx context.Context, playerId string
 		}
 		return nil, fmt.Errorf("failed to download legacy map: %w", err)
 	}
+	defer data.Close()
 
 	rawWorldData, err := io.ReadAll(data)
 	if err != nil {

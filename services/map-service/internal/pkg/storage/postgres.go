@@ -435,9 +435,9 @@ var (
 			&m.ProtocolVersion, &m.Contest, &m.Listed, &m.UniquePlays, &m.ClearRate, &m.Likes, &m.Difficulty2}
 	}
 	mapStatsSubquery = mustCompile(psql.Select("map_id", "play_count", "win_count", "clear_rate", difficultySelect).
-		From("public.map_stats").GroupBy("map_id"))
+				From("public.map_stats").GroupBy("map_id"))
 	mapLikesSubquery = mustCompile(psql.Select("map_id", "SUM(CASE WHEN rating = 1 THEN 1 WHEN rating = 2 THEN -1 ELSE 0 END) AS total_likes").
-		From("public.map_ratings").GroupBy("map_id"))
+				From("public.map_ratings").GroupBy("map_id"))
 )
 
 func (c *PostgresClient) SearchMapsV3(ctx context.Context, params SearchQueryV3) (m []*model.Map, err error) {
@@ -893,7 +893,7 @@ func (c *PostgresClient) UpdateSaveState(ctx context.Context, ss *model.SaveStat
 	}
 
 	// Async update the map stats, if it fails it doesnt really matter much
-	go c.updateMapStats(ctx, ss.MapId)
+	go c.updateMapStats(context.TODO(), ss.MapId) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	return c.safeExec(ctx, query,
 		ss.Id, ss.MapId, ss.PlayerId, ss.Type, ss.Created,

@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	awsCredentials "github.com/aws/aws-sdk-go-v2/credentials"
+	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
@@ -75,10 +76,9 @@ func main() {
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 
 		fx.Provide(
-			newS3Session,
+			newS3Client,
 			newS3Downloader,
 			newS3Uploader,
-			newS3RawClient,
 			fx.Annotate(
 				object.NewS3ClientFactory("mapmaker"),
 				fx.As(new(object.Client)),
@@ -210,25 +210,29 @@ func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 	)
 }
 
-func newS3Session(conf *config.Config) (*session.Session, error) {
-	return session.NewSession(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials(conf.S3.AccessKey, conf.S3.SecretKey, ""),
-		Endpoint:         aws.String(conf.S3.Endpoint),
-		Region:           aws.String(conf.S3.Region),
-		S3ForcePathStyle: aws.Bool(true),
-	})
+func newS3Client(conf *config.Config) (*s3.Client, error) {
+	appCreds := aws.NewCredentialsCache(awsCredentials.NewStaticCredentialsProvider(conf.S3.AccessKey, conf.S3.SecretKey, ""))
+
+	cfg, err := awsConfig.LoadDefaultConfig(context.TODO(), // todo figure out context since it's created by Fx, there isnt one
+		awsConfig.WithRegion(conf.S3.Region),
+		awsConfig.WithCredentialsProvider(appCreds),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load aws config: %w", err)
+	}
+
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.BaseEndpoint = aws.String(conf.S3.Endpoint)
+	}), nil
 }
 
-func newS3Downloader(awsSession *session.Session) *s3manager.Downloader {
-	return s3manager.NewDownloader(awsSession)
+func newS3Downloader(s3Client *s3.Client) *s3manager.Downloader {
+	return s3manager.NewDownloader(s3Client)
 }
 
-func newS3Uploader(awsSession *session.Session) *s3manager.Uploader {
-	return s3manager.NewUploader(awsSession)
-}
-
-func newS3RawClient(awsSession *session.Session) *s3.S3 {
-	return s3.New(awsSession)
+func newS3Uploader(s3Client *s3.Client) *s3manager.Uploader {
+	return s3manager.NewUploader(s3Client)
 }
 
 func newRedisClient(conf *config.Config) (*redis.Client, error) {

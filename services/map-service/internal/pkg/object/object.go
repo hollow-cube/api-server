@@ -17,7 +17,7 @@ type Client interface {
 	Download(ctx context.Context, key string) ([]byte, error)
 
 	UploadStream(ctx context.Context, key string, data io.Reader) error
-	DownloadStream(ctx context.Context, key string) (io.Reader, error)
+	DownloadStream(ctx context.Context, key string) (io.ReadCloser, error)
 
 	Stat(ctx context.Context, key string) (*Info, error)
 
