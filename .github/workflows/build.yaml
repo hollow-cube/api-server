@@ -48,7 +48,7 @@ jobs:
         run: |
           echo "Services: ${{ steps.detect-services.outputs.services }}"
 
-  build-and-publish:
+  docker-build-and-publish:
     needs: [ detect-services ]
     if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
     runs-on: ubuntu-latest
@@ -75,40 +75,34 @@ jobs:
           ko build ./services/${{ matrix.service }}/cmd/${{ matrix.service }} --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
           echo "Version: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
-# todo this needs to change for HollowCube deploys.
-#  deploy:
-#    needs: [build-and-publish, detect-services]
-#    runs-on: ubuntu-latest
-#    if: github.ref == 'refs/heads/main' # Only run on main branch
-#    env:
-#      SERVICES: ${{ needs.detect-services.outputs.services }}
-#    steps:
-#      - name: "Checkout deployments repo"
-#        uses: "actions/checkout@v4"
-#        with:
-#          repository: "nimbus-mc/argocd-deployments"
-#          ref: "main"
-#          token: "${{ secrets.DEPLOYMENTS_REPO_TOKEN }}"
-#
-#      - name: "Update image version"
-#        shell: "bash"
-#        # git commit -a automatically adds files that have been modified
-#        env:
-#          PUSH_TOKEN: "${{ secrets.DEPLOYMENTS_REPO_TOKEN }}"
-#        run: |
-#          echo "Services: $SERVICES"
-#
-#          services_array=($(echo $SERVICES | jq -r '.[]'))
-#
-#          git config --global user.name "github-actions[bot]"
-#          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-#
-#          for service in "${services_array[@]}"; do
-#            serviceValuesPath="services/values/$service.yaml"
-#
-#            echo "Updating image for $service to ${{ github.sha }} at $serviceValuesPath"
-#            sed -i "s|version: .*|version: ${{ github.sha }}|g" $serviceValuesPath
-#            git commit -a -m "Update $service to ${{ github.sha }}"
-#          done
-#
-#          git push https://😛:$PUSH_TOKEN@github.com/nimbus-mc/argocd-deployments.git
+
+  helm-build:
+    needs: [ docker-build-and-publish ]
+    if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+    steps:
+      - name: Helm build
+        uses: hollow-cube/actions/helm-build@main
+        with:
+          vault-token: ${{ secrets.VAULT_TOKEN }}
+          name: ${{ matrix.service }}
+          path: "services/${{ matrix.service }}/deploy/helm-chart"
+
+  helm-deploy:
+    needs: [ docker-build-and-publish, helm-build ]
+    if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+    steps:
+      - name: Helm deploy
+        uses: hollow-cube/actions/helm-deploy@main
+        with:
+          vault-token: ${{ secrets.VAULT_TOKEN }}
+          name: ${{ matrix.service }}
+          cluster: prod-v2
+          values: "services/${{ matrix.service }}/deploy/helm-chart/values-prod.yaml"
