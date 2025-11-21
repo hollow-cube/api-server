@@ -32,6 +32,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/rueidis"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
@@ -220,6 +221,8 @@ func newS3Client(conf *config.Config) (*s3.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load aws config: %w", err)
 	}
+
+	otelaws.AppendMiddlewares(&cfg.APIOptions)
 
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
