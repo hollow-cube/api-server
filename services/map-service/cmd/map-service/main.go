@@ -1,0 +1,344 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/IBM/sarama"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/go-chi/chi/v5"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
+	intnlV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
+	obungusV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/obungus"
+	publicV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/public"
+	terraformV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/terraform"
+	"github.com/hollow-cube/hc-services/services/map-service/config"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/wkafka"
+	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
+	"github.com/posthog/posthog-go"
+	"github.com/redis/go-redis/v9"
+	"github.com/redis/rueidis"
+	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel/sdk/trace"
+
+	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/handler"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
+
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	"go.uber.org/zap"
+)
+
+const serviceName = "map-service"
+
+func main() {
+	fx.New(
+		// Config
+		fx.Provide(config.NewMergedConfig, newCommonConfigResources),
+		fx.Invoke(func(conf *config.Config) {
+			result, _ := json.MarshalIndent(conf, "", "  ")
+			println(string(result))
+		}),
+
+		// Logging
+		fx.Provide(
+			newZapLogger,
+			newZapSugared,
+		),
+		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
+			return &fxevent.ZapLogger{Logger: log}
+		}),
+
+		// Storage
+		fx.Provide(newStoragePostgres),
+
+		// Authz
+		fx.Provide(newAuthzSpiceDB),
+
+		// Kafka
+		fx.Provide(newKafkaProducer, newSyncKafkaWriter, newKafkaReaderFactory),
+
+		// Metrics
+		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
+
+		fx.Provide(
+			newS3Session,
+			newS3Downloader,
+			newS3Uploader,
+			newS3RawClient,
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker-replays"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-replays"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("legacy-maps-v3"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-legacy-maps"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker-profdump"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-perfdumps"`),
+			),
+		),
+
+		fx.Provide(newRedisClient, newRueidisClient),
+
+		// HTTP server
+		fx.Provide(newDynamicExporter),
+		tracefx.Module,
+		fx.Provide(
+			fx.Annotate(
+				func() *v1.AuthorizerMiddleware {
+					return &v1.AuthorizerMiddleware{}
+				},
+				fx.As(new(oapi_rt.Middleware)),
+				fx.ResultTags(`group:"internal_middleware"`),
+			),
+			handler.NewInternalHandler,
+			httpfx.AsRouteProvider(v1.NewInternalServerWrapper),
+
+			handler.NewTerraformHandler,
+			httpfx.AsRouteProvider(v1.NewTerraformServerWrapper),
+
+			publicV3.NewServer,
+			intnlV3.NewServer,
+			terraformV3.NewServer,
+			obungusV3.NewServer,
+			httpfx.AsRouteProvider(makeV2RouteHandler),
+		),
+		httpfx.Module,
+	).Run()
+}
+
+type v2RouteHandlerImpl struct {
+	public    publicV3.StrictServerInterface
+	intnl     intnlV3.StrictServerInterface
+	terraform terraformV3.StrictServerInterface
+	obungus   obungusV3.StrictServerInterface
+}
+
+func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
+	r.Handle("/v3/maps/*", publicV3.HandlerFromMuxWithBaseURL(publicV3.NewStrictHandler(v.public,
+		[]intnlV3.StrictMiddlewareFunc{publicV3.AuthMiddleware}), nil, "/v3/maps"))
+	r.Handle("/v3/internal/*", intnlV3.HandlerFromMuxWithBaseURL(intnlV3.NewStrictHandler(v.intnl,
+		[]intnlV3.StrictMiddlewareFunc{intnlV3.AuthMiddleware}), nil, "/v3/internal"))
+	r.Handle("/v3/terraform/*", terraformV3.HandlerFromMuxWithBaseURL(terraformV3.NewStrictHandler(v.terraform,
+		[]terraformV3.StrictMiddlewareFunc{}), nil, "/v3/terraform"))
+	r.Handle("/v3/obungus/*", obungusV3.HandlerFromMuxWithBaseURL(obungusV3.NewStrictHandler(v.obungus,
+		[]obungusV3.StrictMiddlewareFunc{}), nil, "/v3/obungus"))
+}
+
+func makeV2RouteHandler(
+	public publicV3.StrictServerInterface,
+	intnl intnlV3.StrictServerInterface,
+	terraform terraformV3.StrictServerInterface,
+	obungus obungusV3.StrictServerInterface,
+) httpTransport.RouteProvider {
+	return &v2RouteHandlerImpl{public, intnl, terraform, obungus}
+}
+
+func newZapLogger(conf *config.Config) (*zap.Logger, error) {
+	if conf.Env == "prod" {
+		return zap.NewProduction()
+	}
+	return zap.NewDevelopment()
+}
+
+func newZapSugared(log *zap.Logger) *zap.SugaredLogger {
+	zap.ReplaceGlobals(log)
+	return log.Sugar()
+}
+
+type CommonConfigResources struct {
+	fx.Out
+
+	Service common.ServiceConfig
+	HTTP    common.HTTPConfig
+	OTLP    common.OtlpConfig
+}
+
+func newCommonConfigResources(conf *config.Config) CommonConfigResources {
+	return CommonConfigResources{
+		Service: common.ServiceConfig{Name: "map-service"},
+		HTTP:    conf.HTTP,
+		OTLP:    conf.OTLP,
+	}
+}
+
+func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
+	if config.Endpoint != "" {
+		return tracefx.NewHttpExporter(config)
+	} else {
+		return tracefx.NewNoopExporter()
+	}
+}
+
+func newStoragePostgres(conf *config.Config, lc fx.Lifecycle) (storage.Client, error) {
+	c, err := storage.NewPostgresClient(conf.Postgres.URI)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.Hook{OnStart: c.Start, OnStop: c.Shutdown})
+	return c, nil
+}
+
+func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
+	return authz.NewSpiceDBClient(
+		conf.SpiceDB.Endpoint,
+		conf.SpiceDB.Token,
+		conf.SpiceDB.TLS,
+	)
+}
+
+func newS3Session(conf *config.Config) (*session.Session, error) {
+	return session.NewSession(&aws.Config{
+		Credentials:      credentials.NewStaticCredentials(conf.S3.AccessKey, conf.S3.SecretKey, ""),
+		Endpoint:         aws.String(conf.S3.Endpoint),
+		Region:           aws.String(conf.S3.Region),
+		S3ForcePathStyle: aws.Bool(true),
+	})
+}
+
+func newS3Downloader(awsSession *session.Session) *s3manager.Downloader {
+	return s3manager.NewDownloader(awsSession)
+}
+
+func newS3Uploader(awsSession *session.Session) *s3manager.Uploader {
+	return s3manager.NewUploader(awsSession)
+}
+
+func newS3RawClient(awsSession *session.Session) *s3.S3 {
+	return s3.New(awsSession)
+}
+
+func newRedisClient(conf *config.Config) (*redis.Client, error) {
+	c := redis.NewClient(&redis.Options{
+		Addr: conf.Redis.Address,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return c, c.Ping(ctx).Err()
+}
+
+func newKafkaProducer(lc fx.Lifecycle, log *zap.SugaredLogger, conf *config.Config) (sarama.AsyncProducer, error) {
+	kc := sarama.NewConfig()
+	p, err := sarama.NewAsyncProducer(strings.Split(conf.Kafka.Brokers, ","), kc)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				for err := range p.Errors() {
+					if err == nil {
+						return
+					}
+
+					log.Errorw("kafka produce failed", zap.Error(err))
+				}
+			}()
+
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			return p.Close()
+		},
+	})
+
+	return p, nil
+}
+
+func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
+	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
+	if conf.Env == "tilt" {
+		log.Info("dropping posthog key because we are in tilt")
+		apiKey = ""
+	}
+
+	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		PersonalApiKey: conf.Posthog.PersonalApiKey,
+		Endpoint:       "https://us.i.posthog.com",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(client.Close))
+	return client, nil
+}
+
+func newSyncKafkaWriter(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.SyncWriter {
+	w := &kafka.Writer{
+		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
+		Balancer:               &kafka.Hash{},
+		Async:                  false,
+		AllowAutoTopicCreation: true,
+		//Logger:                 kafka.LoggerFunc(log.Infof),
+		ErrorLogger: kafka.LoggerFunc(log.Errorf),
+	}
+
+	lc.Append(fx.StopHook(w.Close))
+	return w
+}
+
+func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {
+	brokers := strings.Split(conf.Kafka.Brokers, ",")
+	return wkafka.ReaderFactoryFunc(func(topic string) wkafka.Reader {
+		r := kafka.NewReader(kafka.ReaderConfig{
+			Brokers:  brokers,
+			GroupID:  serviceName,
+			Topic:    topic,
+			MaxBytes: 10e6, // 10mb
+			//Logger:      kafka.LoggerFunc(log.Infof),
+			ErrorLogger: kafka.LoggerFunc(log.Errorf),
+		})
+		lc.Append(fx.StopHook(r.Close))
+		return r
+	})
+}
+
+func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {
+	c, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress: []string{conf.Redis.Address},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return c.Do(ctx, c.B().Ping().Build()).Error()
+		},
+		OnStop: func(_ context.Context) error {
+			c.Close()
+			return nil
+		},
+	})
+
+	return c, nil
+}
