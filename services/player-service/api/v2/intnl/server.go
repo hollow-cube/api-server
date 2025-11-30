@@ -455,6 +455,7 @@ var (
 		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56": "ct_1",
 		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",
 		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",
+		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f": "ct_1",
 
 		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d": "media",
 		/* SandwichLord_ */ "1e2bf44f-122f-4960-a62d-7da9609f52e7": "media",
@@ -470,6 +471,7 @@ var (
 		/* Evbo_ */ "c08ad74b-ad0b-44b5-8d1b-594d790edfb3": "media",
 		/* Purpled */ "1218cdf3-52bd-4e18-ba24-d4b202ec85f3": "media",
 		/* Infume */ "a54e3bc4-c635-4b07-a236-b81efbcfe791": "media",
+		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26": "media",
 	}
 	hardcodedColors = map[string]string{
 		"dev_3": "#fa4141",
