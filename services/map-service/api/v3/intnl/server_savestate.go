@@ -44,6 +44,7 @@ func (s *server) CreateSaveState(ctx context.Context, request CreateSaveStateReq
 	ss.ProtocolVersion = request.Body.ProtocolVersion
 	ss.Completed = false
 	ss.PlayTime = 0
+	ss.Ticks = 0
 
 	if err = s.storageClient.CreateSaveState(ctx, &ss); err != nil {
 		return nil, fmt.Errorf("failed to create save state: %w", err)
@@ -137,6 +138,10 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	}
 	if request.Body.Playtime != nil {
 		ss.PlayTime = *request.Body.Playtime
+		changed = true
+	}
+	if request.Body.Ticks != nil {
+		ss.Ticks = *request.Body.Ticks
 		changed = true
 	}
 	if ss.Type == model.SaveStateTypeEditing {
@@ -346,6 +351,7 @@ func saveStateToAPI(ss model.SaveState) SaveStateDataJSONResponse {
 		LastModified: ss.LastModified,
 		Completed:    ss.Completed,
 		Playtime:     ss.PlayTime,
+		Ticks:        &ss.Ticks,
 
 		DataVersion: ss.DataVersion,
 		PlayState:   &ss.PlayingState,

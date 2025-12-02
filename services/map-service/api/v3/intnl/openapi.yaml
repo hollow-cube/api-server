@@ -696,6 +696,7 @@ components:
         protocolVersion: { type: integer }
         completed: { type: boolean }
         playtime: { type: integer }
+        ticks: { type: integer }
 
         dataVersion: { type: integer }
         editState: { type: object, additionalProperties: true }
@@ -839,6 +840,7 @@ components:
               protocolVersion: { type: integer }
               completed: { type: boolean }
               playtime: { type: integer }
+              ticks: { type: integer }
 
               dataVersion: { type: integer }
               editState: { type: object, additionalProperties: true }

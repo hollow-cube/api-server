@@ -789,7 +789,7 @@ func (c *PostgresClient) CreateSaveState(ctx context.Context, ss *model.SaveStat
 func (c *PostgresClient) GetSaveStateById(ctx context.Context, mapId, playerId, saveStateId string) (*model.SaveState, error) {
 	const query = `
 		select
-			id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version
+			id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version
 		from public.save_states 
 		where deleted is null and id = $1 and map_id = $2 and player_id = $3;
 	`
@@ -800,7 +800,7 @@ func (c *PostgresClient) GetSaveStateById(ctx context.Context, mapId, playerId, 
 func (c *PostgresClient) GetLatestSaveState(ctx context.Context, mapId, playerId string, ssType model.SaveStateType) (*model.SaveState, error) {
 	const query = `
 		select
-			id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version
+			id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version
 		from public.save_states 
 		where deleted is null and map_id = $1 and player_id = $2 and type = $3
 		order by updated desc limit 1;
@@ -821,7 +821,7 @@ func (c *PostgresClient) GetLatestSaveState(ctx context.Context, mapId, playerId
 func (c *PostgresClient) GetBestSaveState(ctx context.Context, mapId, playerId string) (*model.SaveState, error) {
 	const query = `
 		select
-			id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version
+			id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version
 		from public.save_states 
 		where deleted is null and map_id = $1 and player_id = $2 and type = 'playing' and completed = true
 		order by playtime limit 1;
@@ -833,7 +833,7 @@ func (c *PostgresClient) GetBestSaveState(ctx context.Context, mapId, playerId s
 func (c *PostgresClient) GetBestSaveStateSinceBeta(ctx context.Context, mapId, playerId string) (*model.SaveState, error) {
 	const query = `
 		select
-			id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version
+			id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version
 		from public.save_states 
 		where deleted is null and map_id = $1 and player_id = $2 and type = 'playing' and completed = true
         and created > $3
@@ -850,7 +850,7 @@ func (c *PostgresClient) GetBestSaveStateSinceBeta(ctx context.Context, mapId, p
 func (c *PostgresClient) GetAllSaveStates(ctx context.Context, mapId string) ([]*model.SaveState, error) {
 	const query = `
 		select
-			id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version
+			id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version
 		from public.save_states 
 		where deleted is null and completed = true and map_id = $1 and (type = 'playing' or type = 'verifying');
 	`
@@ -876,12 +876,13 @@ func (c *PostgresClient) GetAllSaveStates(ctx context.Context, mapId string) ([]
 
 func (c *PostgresClient) UpdateSaveState(ctx context.Context, ss *model.SaveState) error {
 	const query = `
-		insert into public.save_states (id, map_id, player_id, type, created, updated, completed, playtime, state_v2, data_version, protocol_version)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		insert into public.save_states (id, map_id, player_id, type, created, updated, completed, playtime, ticks, state_v2, data_version, protocol_version)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		on conflict (id, map_id, player_id) do update
 		set updated = excluded.updated,
 		    completed = excluded.completed,
 		    playtime = excluded.playtime,
+		    ticks = excluded.ticks,
 		    state_v2 = excluded.state_v2,
 		    data_version = excluded.data_version,
 		    protocol_version = excluded.protocol_version;
@@ -897,7 +898,7 @@ func (c *PostgresClient) UpdateSaveState(ctx context.Context, ss *model.SaveStat
 
 	return c.safeExec(ctx, query,
 		ss.Id, ss.MapId, ss.PlayerId, ss.Type, ss.Created,
-		ss.LastModified, ss.Completed, ss.PlayTime, state,
+		ss.LastModified, ss.Completed, ss.PlayTime, ss.Ticks, state,
 		ss.DataVersion, ss.ProtocolVersion,
 	)
 }
@@ -1139,7 +1140,7 @@ func (c *PostgresClient) readSaveState(r pgx.Row) (*model.SaveState, error) {
 	// Read the fields and state blob
 	err := r.Scan(
 		&ss.Id, &ss.MapId, &ss.PlayerId, &ss.Type, &ss.Created,
-		&ss.LastModified, &ss.Completed, &ss.PlayTime, &stateBlob,
+		&ss.LastModified, &ss.Completed, &ss.PlayTime, &ss.Ticks, &stateBlob,
 		&ss.DataVersion, &ss.ProtocolVersion,
 	)
 	if err != nil {

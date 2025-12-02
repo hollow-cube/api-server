@@ -21,6 +21,7 @@ type SaveState struct {
 	ProtocolVersion int
 	Completed       bool
 	PlayTime        int
+	Ticks           int
 
 	DataVersion int // Game data version, used by the Minecraft servers to upgrade.
 
