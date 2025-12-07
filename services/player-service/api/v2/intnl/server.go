@@ -472,6 +472,7 @@ var (
 		/* Purpled */ "1218cdf3-52bd-4e18-ba24-d4b202ec85f3": "media",
 		/* Infume */ "a54e3bc4-c635-4b07-a236-b81efbcfe791": "media",
 		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26": "media",
+		/* Greninja */ "ac38802e-9eb0-4fb2-ad79-739796e8c5d6": "media",
 	}
 	hardcodedColors = map[string]string{
 		"dev_3": "#fa4141",
