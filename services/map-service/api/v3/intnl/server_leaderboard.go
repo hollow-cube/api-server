@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
@@ -103,7 +104,7 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 	// Normalize the tied times
 	lastScore, lastRank := -1, 0
 	for i, entry := range lb.Top {
-		score := (entry.Score / 50) * 50 // round to 50ms
+		score := int(math.Round(float64(entry.Score)/50.0)) * 50 // round to 50ms
 		if lastScore != score {
 			lastRank = i + 1 // rank starts at 1
 			lastScore = score
