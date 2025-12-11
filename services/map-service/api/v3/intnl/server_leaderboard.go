@@ -116,7 +116,7 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 		}
 	}
 	if lb.Player != nil {
-		score := (lb.Player.Score / 50) * 50
+		score := int(math.Round(float64(lb.Player.Score)/50.0)) * 50
 		for _, entry := range lb.Top {
 			if score == entry.Score {
 				lb.Player = &LeaderboardEntry{

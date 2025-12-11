@@ -684,7 +684,7 @@ func (c *PostgresClient) GetTopTimesLeaderboard(ctx context.Context) ([]*model.L
 		    ) AS shortest_playtimes
 		        JOIN save_states AS s1
 		             ON s1.map_id = shortest_playtimes.map_id
-		                 AND (round(s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
+		                 AND (round(s1.playtime / 50.0) * 50)::bigint = shortest_playtimes.min_playtime
 		WHERE s1.deleted is null and s1.completed = TRUE
 		GROUP BY s1.player_id
 		ORDER BY top_times DESC
@@ -698,7 +698,7 @@ func (c *PostgresClient) GetTopTimesLeaderboardForPlayer(ctx context.Context, pl
 		SELECT
 			COUNT(distinct s1.map_id) AS top_times
 		FROM(
-			SELECT map_id, (round(MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
+			SELECT map_id, (round(MIN(playtime) / 50.0) * 50)::bigint AS min_playtime FROM save_states
 			JOIN maps ON save_states.map_id = maps.id
 			WHERE deleted is null and
 				completed = TRUE and
@@ -710,7 +710,7 @@ func (c *PostgresClient) GetTopTimesLeaderboardForPlayer(ctx context.Context, pl
 		) AS shortest_playtimes
 			 JOIN save_states AS s1
 			 ON s1.map_id = shortest_playtimes.map_id
-			 AND (round(s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
+			 AND (round(s1.playtime / 50.0) * 50)::bigint = shortest_playtimes.min_playtime
 			 and s1.player_id = $1
 		WHERE s1.deleted is null and s1.completed = TRUE;
 `
