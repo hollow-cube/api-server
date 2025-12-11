@@ -473,6 +473,7 @@ var (
 		/* Infume */ "a54e3bc4-c635-4b07-a236-b81efbcfe791": "media",
 		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26": "media",
 		/* Greninja */ "ac38802e-9eb0-4fb2-ad79-739796e8c5d6": "media",
+		/* Picobit */ "e89da8ad-4211-4bc0-9a45-746fdb535309": "media",
 	}
 	hardcodedColors = map[string]string{
 		"dev_3": "#fa4141",
