@@ -435,9 +435,9 @@ var (
 			&m.ProtocolVersion, &m.Contest, &m.Listed, &m.UniquePlays, &m.ClearRate, &m.Likes, &m.Difficulty2}
 	}
 	mapStatsSubquery = mustCompile(psql.Select("map_id", "play_count", "win_count", "clear_rate", difficultySelect).
-				From("public.map_stats").GroupBy("map_id"))
+		From("public.map_stats").GroupBy("map_id"))
 	mapLikesSubquery = mustCompile(psql.Select("map_id", "SUM(CASE WHEN rating = 1 THEN 1 WHEN rating = 2 THEN -1 ELSE 0 END) AS total_likes").
-				From("public.map_ratings").GroupBy("map_id"))
+		From("public.map_ratings").GroupBy("map_id"))
 )
 
 func (c *PostgresClient) SearchMapsV3(ctx context.Context, params SearchQueryV3) (m []*model.Map, err error) {
@@ -672,7 +672,7 @@ func (c *PostgresClient) GetTopTimesLeaderboard(ctx context.Context) ([]*model.L
 		    s1.player_id,
 		    COUNT(distinct s1.map_id) AS top_times
 		FROM(
-		        SELECT map_id, ((MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
+		        SELECT map_id, (round(MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
 		        JOIN maps ON save_states.map_id = maps.id
 		        WHERE deleted is null and
 		            completed = TRUE and
@@ -684,7 +684,7 @@ func (c *PostgresClient) GetTopTimesLeaderboard(ctx context.Context) ([]*model.L
 		    ) AS shortest_playtimes
 		        JOIN save_states AS s1
 		             ON s1.map_id = shortest_playtimes.map_id
-		                 AND ((s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
+		                 AND (round(s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
 		WHERE s1.deleted is null and s1.completed = TRUE
 		GROUP BY s1.player_id
 		ORDER BY top_times DESC
@@ -698,7 +698,7 @@ func (c *PostgresClient) GetTopTimesLeaderboardForPlayer(ctx context.Context, pl
 		SELECT
 			COUNT(distinct s1.map_id) AS top_times
 		FROM(
-			SELECT map_id, ((MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
+			SELECT map_id, (round(MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
 			JOIN maps ON save_states.map_id = maps.id
 			WHERE deleted is null and
 				completed = TRUE and
@@ -710,7 +710,7 @@ func (c *PostgresClient) GetTopTimesLeaderboardForPlayer(ctx context.Context, pl
 		) AS shortest_playtimes
 			 JOIN save_states AS s1
 			 ON s1.map_id = shortest_playtimes.map_id
-			 AND ((s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
+			 AND (round(s1.playtime / 50) * 50)::bigint = shortest_playtimes.min_playtime
 			 and s1.player_id = $1
 		WHERE s1.deleted is null and s1.completed = TRUE;
 `
