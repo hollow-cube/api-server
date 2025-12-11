@@ -252,7 +252,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 
 	// Update the map
 	var changed bool
-	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != m.ProtocolVersion {
+	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != 0 && *request.Body.ProtocolVersion != m.ProtocolVersion {
 		m.ProtocolVersion = *request.Body.ProtocolVersion
 		changed = true
 	}
