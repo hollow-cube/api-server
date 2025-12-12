@@ -435,9 +435,9 @@ var (
 			&m.ProtocolVersion, &m.Contest, &m.Listed, &m.UniquePlays, &m.ClearRate, &m.Likes, &m.Difficulty2}
 	}
 	mapStatsSubquery = mustCompile(psql.Select("map_id", "play_count", "win_count", "clear_rate", difficultySelect).
-		From("public.map_stats").GroupBy("map_id"))
+				From("public.map_stats").GroupBy("map_id"))
 	mapLikesSubquery = mustCompile(psql.Select("map_id", "SUM(CASE WHEN rating = 1 THEN 1 WHEN rating = 2 THEN -1 ELSE 0 END) AS total_likes").
-		From("public.map_ratings").GroupBy("map_id"))
+				From("public.map_ratings").GroupBy("map_id"))
 )
 
 func (c *PostgresClient) SearchMapsV3(ctx context.Context, params SearchQueryV3) (m []*model.Map, err error) {
@@ -672,7 +672,7 @@ func (c *PostgresClient) GetTopTimesLeaderboard(ctx context.Context) ([]*model.L
 		    s1.player_id,
 		    COUNT(distinct s1.map_id) AS top_times
 		FROM(
-		        SELECT map_id, (round(MIN(playtime) / 50) * 50)::bigint AS min_playtime FROM save_states
+		        SELECT map_id, (round(MIN(playtime) / 50.0) * 50)::bigint AS min_playtime FROM save_states
 		        JOIN maps ON save_states.map_id = maps.id
 		        WHERE deleted is null and
 		            completed = TRUE and
