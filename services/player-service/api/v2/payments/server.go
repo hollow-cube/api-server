@@ -23,6 +23,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -42,6 +43,7 @@ type ServerParams struct {
 	Producer      wkafka.SyncWriter
 	Storage       storage.Client
 	Authz         authz.Client
+	Posthog       posthog.Client
 }
 
 func NewServer(params ServerParams) (ServerInterface, error) {
@@ -61,6 +63,7 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		producer:      params.Producer,
 		storageClient: params.Storage,
 		authClient:    params.Authz,
+		posthog:       params.Posthog,
 	}
 
 	params.Lifecycle.Append(fx.Hook{
@@ -94,6 +97,7 @@ type server struct {
 	producer      wkafka.SyncWriter
 	storageClient storage.Client
 	authClient    authz.Client
+	posthog       posthog.Client
 }
 
 func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params OnTebexWebhookParams) {

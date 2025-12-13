@@ -13,6 +13,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -114,6 +115,29 @@ func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Eve
 	}
 
 	s.writePurchaseUpdates(ctx, changes, newBalances)
+
+	product := event.Products[0]
+	props := posthog.NewProperties().
+		Set("$ip", event.Customer.Ip).
+		Set("amount", int64(event.Price.Amount*100)).
+		Set("currency", event.Price.Currency).
+		Set("product", product.Name)
+	if event.RecurringPaymentReference != nil {
+		props.Set("subscription", *event.RecurringPaymentReference)
+	}
+	eventName := "Payment Completed"
+	if product.Id == 6282911 {
+		// Kinda dumb, but posthog doesnt allow you to read subscription duration
+		// from a property so we need to create a second event to track 1y subscriptions
+		eventName += " (Hypercube 1y)"
+	}
+	_ = s.posthog.Enqueue(posthog.Capture{
+		DistinctId: changes[0].Target,
+		Event:      eventName,
+		Timestamp:  event.CreatedAt,
+		Properties: props,
+	})
+
 	s.log.Infow("tebex payment completed event processed", "txid", event.TransactionId, "new_balances", newBalances)
 
 	return nil
