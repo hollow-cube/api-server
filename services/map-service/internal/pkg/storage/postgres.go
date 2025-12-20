@@ -2,8 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +14,6 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/jackc/pgx/v5"
@@ -33,9 +28,6 @@ var _ Client = &PostgresClient{}
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 const txContextKey = contextKey("tx")
-
-//go:embed migrate/*.sql
-var migrationFS embed.FS
 
 type PostgresClient struct {
 	log *zap.SugaredLogger
@@ -74,36 +66,6 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 	if err = c.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", c.uri)
-	if err != nil {
-		return fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "map-service_migrations",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrate")
-	if err != nil {
-		return fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return fmt.Errorf("failed to create migrate instance: %w", err)
-	}
-
-	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
 	return nil
 }
 
@@ -292,22 +254,6 @@ func (c *PostgresClient) scanMap(r pgx.Row) (*model.Map, error) {
 	}
 
 	return &m, nil
-}
-
-func (c *PostgresClient) GetMapFileById(ctx context.Context, id string) (authzKey string, fileId string, err error) {
-	const query = `select authz_key, file_id from public.maps where id = $1;`
-
-	r := c.pool.QueryRow(ctx, query, id)
-	err = r.Scan(&authzKey, &fileId)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		err = ErrNotFound
-	case err != nil:
-		err = fmt.Errorf("failed to fetch map file: %w", err)
-	default:
-		err = nil
-	}
-	return
 }
 
 func (c *PostgresClient) UpdateMap(ctx context.Context, m *model.Map) error {
@@ -894,7 +840,7 @@ func (c *PostgresClient) UpdateSaveState(ctx context.Context, ss *model.SaveStat
 	}
 
 	// Async update the map stats, if it fails it doesnt really matter much
-	go c.updateMapStats(context.TODO(), ss.MapId) // todo figure out this context since it's done in the background, the parent context will be cancelled.
+	go c.UpdateMapStats(context.TODO(), ss.MapId) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	return c.safeExec(ctx, query,
 		ss.Id, ss.MapId, ss.PlayerId, ss.Type, ss.Created,
@@ -1165,10 +1111,10 @@ func (c *PostgresClient) readSaveState(r pgx.Row) (*model.SaveState, error) {
 	return &ss, nil
 }
 
-// updateMapStats is responsible for updating the stats of a map.
+// UpdateMapStats is responsible for updating the stats of a map.
 //
 // It is intended to be called asynchronously in a goroutine rather than blocking a request path.
-func (c *PostgresClient) updateMapStats(ctx context.Context, mapId string) {
+func (c *PostgresClient) UpdateMapStats(ctx context.Context, mapId string) {
 	const query = `
 		insert into map_stats
 		select $1	                 								  AS map_id,

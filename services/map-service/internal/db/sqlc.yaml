@@ -1,0 +1,58 @@
+version: "2"
+sql:
+  - name: "map-service"
+    engine: "postgresql"
+    schema: "./migrations"
+    queries: "./queries"
+    gen:
+      go:
+        sql_package: "pgx/v5"
+        package: "db"
+        out: "."
+        emit_result_struct_pointers: true
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        query_parameter_limit: 3
+        overrides:
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
+          - db_type: "uuid"
+            go_type: "string"
+          - db_type: "text"
+            go_type: "string"
+          - db_type: "pg_catalog.varchar"
+            go_type: "string"
+
+          # int4 / integer
+          - db_type: "pg_catalog.int4"
+            go_type: "int"
+          - db_type: "pg_catalog.int4"
+            nullable: true
+            go_type:
+              type: "int"
+              pointer: true
+          # int8 / bigint
+          - db_type: "pg_catalog.int8"
+            go_type: "int"
+          - db_type: "pg_catalog.int8"
+            nullable: true
+            go_type:
+              type: "int"
+              pointer: true
+          # int2 / smallint
+          - db_type: "pg_catalog.int2"
+            go_type: "int"
+          - db_type: "pg_catalog.int2"
+            nullable: true
+            go_type:
+              type: "int"
+              pointer: true
+
+    strict_function_checks: true
+    strict_order_by: true

@@ -8,25 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (c *PostgresClient) GetPlayerSession(ctx context.Context, playerId string) (data []byte, err error) {
-	const query = `
-		select state
-		from tf_player_session
-		where player_id = $1;
-	`
-
-	r := c.pool.QueryRow(ctx, query, playerId)
-	if err = r.Scan(&data); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-
-		return nil, err
-	}
-
-	return data, nil
-}
-
 func (c *PostgresClient) GetLocalSession(ctx context.Context, playerId string, worldId string) (data []byte, err error) {
 	const query = `
 		select state

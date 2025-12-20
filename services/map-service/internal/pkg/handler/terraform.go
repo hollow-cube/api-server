@@ -5,39 +5,42 @@ import (
 	"errors"
 
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model/transform"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
-
-type TerraformHandler struct {
-	log           *zap.SugaredLogger
-	storageClient storage.Client
-}
 
 type TerraformHandlerParams struct {
 	fx.In
 
 	Log     *zap.SugaredLogger
 	Storage storage.Client
+	Queries *db.Queries
+}
+
+type TerraformHandler struct {
+	log           *zap.SugaredLogger
+	storageClient storage.Client
+	queries       *db.Queries
 }
 
 func NewTerraformHandler(p TerraformHandlerParams) (v1.TerraformServer, error) {
 	return &TerraformHandler{
 		log:           p.Log.With("handler", "terraform"),
 		storageClient: p.Storage,
+		queries:       p.Queries,
 	}, nil
 }
 
 func (h *TerraformHandler) GetPlayerSession(ctx context.Context, playerId string) ([]byte, error) {
-	data, err := h.storageClient.GetPlayerSession(ctx, playerId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return nil, v1.ErrSessionNotFound
-		}
-
+	data, err := h.queries.TfGetPlayerSession(ctx, playerId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, v1.ErrSessionNotFound
+	} else if err != nil {
 		return nil, err
 	}
 

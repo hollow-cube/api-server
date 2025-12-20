@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
@@ -99,8 +100,8 @@ func (s *server) GetBestSaveState(ctx context.Context, request GetBestSaveStateR
 }
 
 func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateRequestObject) (UpdateSaveStateResponseObject, error) {
-	ss, err := s.storageClient.GetSaveStateById(ctx, request.MapId, request.PlayerId, request.SaveStateId)
-	if errors.Is(err, storage.ErrNotFound) {
+	ss, err := s.queries.GetSaveState(ctx, request.MapId, request.PlayerId, request.SaveStateId)
+	if errors.Is(err, db.ErrNoRows) {
 		if request.Body.Type == nil {
 			return SaveStateNotFoundResponse{}, nil
 		}
@@ -109,14 +110,14 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		if request.Body.Playtime != nil {
 			createdTime = createdTime.Add(-time.Duration(*request.Body.Playtime) * time.Millisecond)
 		}
-		ss = &model.SaveState{
-			Id:              request.SaveStateId,
-			PlayerId:        request.PlayerId,
-			MapId:           request.MapId,
-			Type:            model.SaveStateType(*request.Body.Type),
+		ss = &db.SaveState{
+			ID:              request.SaveStateId,
+			MapID:           request.MapId,
+			PlayerID:        request.PlayerId,
+			Type:            db.SaveStateType(*request.Body.Type),
 			Created:         createdTime,
-			LastModified:    time.Now(),
-			ProtocolVersion: 769, // Remains our default version
+			Updated:         time.Now(),
+			ProtocolVersion: util.Ptr(769), // Remains our default version
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch save state: %w", err)
@@ -129,38 +130,56 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		}}, nil
 	}
 
-	ss.LastModified = util.CurrentTime()
-
 	var changed bool
+	update := db.UpsertSaveStateParams{
+		ID:              ss.ID,
+		MapID:           ss.MapID,
+		PlayerID:        ss.PlayerID,
+		Type:            ss.Type,
+		Updated:         util.CurrentTime(),
+		Completed:       ss.Completed,
+		Playtime:        ss.Playtime,
+		Ticks:           ss.Ticks,
+		StateV2:         ss.StateV2,
+		DataVersion:     ss.DataVersion,
+		ProtocolVersion: ss.ProtocolVersion,
+	}
+
 	if request.Body.Completed != nil {
-		ss.Completed = *request.Body.Completed
+		update.Completed = *request.Body.Completed
 		changed = true
 	}
 	if request.Body.Playtime != nil {
-		ss.PlayTime = *request.Body.Playtime
+		update.Playtime = *request.Body.Playtime
 		changed = true
 	}
 	if request.Body.Ticks != nil {
-		ss.Ticks = *request.Body.Ticks
+		update.Ticks = *request.Body.Ticks
 		changed = true
 	}
-	if ss.Type == model.SaveStateTypeEditing {
+	if ss.Type == db.SaveStateTypeEditing {
 		if request.Body.EditState != nil {
-			ss.EditingState = *request.Body.EditState
+			update.StateV2, err = json.Marshal(request.Body.EditState)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal edit state: %w", err)
+			}
 			changed = true
 		}
-	} else if ss.Type == model.SaveStateTypePlaying || ss.Type == model.SaveStateTypeVerifying {
+	} else if ss.Type == db.SaveStateTypePlaying || ss.Type == db.SaveStateTypeVerifying {
 		if request.Body.PlayState != nil {
-			ss.PlayingState = *request.Body.PlayState
+			update.StateV2, err = json.Marshal(request.Body.PlayState)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal play state: %w", err)
+			}
 			changed = true
 		}
 	}
 	if request.Body.DataVersion != nil && *request.Body.DataVersion != ss.DataVersion {
-		ss.DataVersion = *request.Body.DataVersion
+		update.DataVersion = *request.Body.DataVersion
 		changed = true
 	}
-	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != ss.ProtocolVersion {
-		ss.ProtocolVersion = *request.Body.ProtocolVersion
+	if request.Body.ProtocolVersion != nil && (ss.ProtocolVersion == nil || *request.Body.ProtocolVersion != *ss.ProtocolVersion) {
+		update.ProtocolVersion = request.Body.ProtocolVersion
 		changed = true
 	}
 
@@ -170,9 +189,8 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	}
 
 	// If the save state is completed never store the play/edit state of it.
-	if ss.Completed {
-		ss.EditingState = nil
-		ss.PlayingState = nil
+	if update.Completed {
+		update.StateV2 = nil
 	}
 
 	// Get the best savestate to decide if this is the first completion (BEFORE UPDATING)
@@ -182,13 +200,16 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		return nil, fmt.Errorf("failed to fetch best save state: %w", err)
 	}
 
-	if err = s.storageClient.UpdateSaveState(ctx, ss); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+	if err = s.queries.UpsertSaveState(ctx, update); err != nil {
+		if errors.Is(err, db.ErrNoRows) {
 			return SaveStateNotFoundResponse{}, nil
 		}
 
 		return nil, fmt.Errorf("failed to update save state: %w", err)
 	}
+
+	// Async update the map stats, if it fails it doesnt really matter much
+	go s.storageClient.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	s.log.Infow("updated save state", "mapId", request.MapId, "playerId", request.PlayerId,
 		"saveStateId", request.SaveStateId, "completed", ss.Completed, "type", ss.Type)
@@ -198,7 +219,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	// If this is a verification and was just completed, we need to also update the map to verified.
 	// todo we need to do this update as a transaction
 	// todo random thought, but we should reject any world update message where verification != unverified
-	if ss.Type == model.SaveStateTypeVerifying && ss.Completed {
+	if ss.Type == db.SaveStateTypeVerifying && ss.Completed {
 		m, err = s.storageClient.GetMapById(ctx, request.MapId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch map: %w", err)
@@ -206,7 +227,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 		m.Verification = model.VerificationVerified
 		// Always set the map protocol version to the version which verified it.
-		m.ProtocolVersion = ss.ProtocolVersion
+		m.ProtocolVersion = *ss.ProtocolVersion
 		if err = s.storageClient.UpdateMap(ctx, m); err != nil {
 			return nil, fmt.Errorf("failed to update map: %w", err)
 		}
@@ -216,7 +237,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	var newPlacement = -1
 
 	// If the map was just completed, we should add this playtime to the leaderboard.
-	if ss.Completed && (ss.Type == model.SaveStateTypePlaying || ss.Type == model.SaveStateTypeVerifying) {
+	if ss.Completed && (ss.Type == db.SaveStateTypePlaying || ss.Type == db.SaveStateTypeVerifying) {
 		if m == nil {
 			m, err = s.storageClient.GetMapById(ctx, request.MapId)
 			if err != nil {
@@ -240,11 +261,11 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			}
 
 			err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-				ScoreMember(float64(ss.PlayTime), string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+				ScoreMember(float64(ss.Playtime), string(common.UUIDToBin(request.PlayerId))).Build()).Error()
 			if err != nil {
 				//todo i guess this should go to DLQ or something, but we do not stop the request from succeeding in this case.
 				zap.S().Errorw("failed to update leaderboard", "mapId", request.MapId,
-					"playerId", request.PlayerId, "playTime", ss.PlayTime, "err", err)
+					"playerId", request.PlayerId, "playTime", ss.Playtime, "err", err)
 			}
 
 			// Fetch their placement after update
@@ -261,7 +282,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 	// If the map was just completed (during play), we should compute the rewards and apply them to the player.
 	var resp SaveStateUpdateJSONResponse
-	if ss.Completed && ss.Type == model.SaveStateTypePlaying {
+	if ss.Completed && ss.Type == db.SaveStateTypePlaying {
 		if m == nil {
 			m, err = s.storageClient.GetMapById(ctx, request.MapId)
 			if err != nil {
@@ -315,7 +336,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 				MapId:      m.Id,
 				Variant:    string(m.Settings.Variant),
 				SubVariant: svtString,
-				Playtime:   ss.PlayTime,
+				Playtime:   ss.Playtime,
 				Difficulty: m.Difficulty().String(),
 			})
 		}()

@@ -5,6 +5,7 @@ package intnl
 
 import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
@@ -22,6 +23,7 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Storage  storage.Client
+	Queries  *db.Queries
 	Authz    authz.Client
 	Redis    rueidis.Client
 	Producer wkafka.SyncWriter
@@ -30,26 +32,28 @@ type ServerParams struct {
 	Object object.Client `name:"object-mapmaker"`
 }
 
-func NewServer(params ServerParams) StrictServerInterface {
-	return &server{
-		log:           params.Log,
-		storageClient: params.Storage,
-		authzClient:   params.Authz,
-		redis:         params.Redis,
-		producer:      params.Producer,
-		metrics:       params.Metrics,
-		objectClient:  params.Object,
-	}
-}
-
 type server struct {
 	log *zap.SugaredLogger
 
 	storageClient storage.Client
+	queries       *db.Queries
 	authzClient   authz.Client
 	redis         rueidis.Client
 	producer      wkafka.SyncWriter
 	metrics       metric.Writer
 
 	objectClient object.Client
+}
+
+func NewServer(params ServerParams) StrictServerInterface {
+	return &server{
+		log:           params.Log,
+		storageClient: params.Storage,
+		queries:       params.Queries,
+		authzClient:   params.Authz,
+		redis:         params.Redis,
+		producer:      params.Producer,
+		metrics:       params.Metrics,
+		objectClient:  params.Object,
+	}
 }

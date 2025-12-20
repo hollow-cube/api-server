@@ -49,6 +49,7 @@ type SearchQueryV3 struct {
 	Contest string // Zero value will be ignored
 }
 
+// deprecated
 type Client interface {
 	RunTransaction(ctx context.Context, f func(ctx context.Context) error) error
 
@@ -87,7 +88,6 @@ type Client interface {
 	GetBestSaveState(ctx context.Context, mapId, playerId string) (*model.SaveState, error)
 	GetBestSaveStateSinceBeta(ctx context.Context, mapId, playerId string) (*model.SaveState, error)
 	GetAllSaveStates(ctx context.Context, mapId string) ([]*model.SaveState, error)
-	UpdateSaveState(ctx context.Context, ss *model.SaveState) error
 	DeleteSaveState(ctx context.Context, mapId, playerId, saveStateId string) error
 	DeleteVerifyingStates(ctx context.Context, mapId string) error
 	// Marks save states as deleted. They should not be returned by any other queries.
@@ -95,6 +95,8 @@ type Client interface {
 	SoftDeleteMapSaveStates(ctx context.Context, mapId string, onlyIncomplete bool) error
 	SoftDeletePlayerSaveStates(ctx context.Context, playerId string) error
 	GetCompletedMaps(ctx context.Context, playerId string) ([]string, error)
+
+	UpdateMapStats(ctx context.Context, mapId string)
 
 	// Ratings
 
@@ -118,7 +120,6 @@ type Client interface {
 	GetOrgById(ctx context.Context, id string) (*model.Organization, error)
 
 	// Terraform
-	GetPlayerSession(ctx context.Context, playerId string) ([]byte, error)
 	GetLocalSession(ctx context.Context, playerId string, worldId string) ([]byte, error)
 	UpsertPlayerSession(ctx context.Context, playerId string, state []byte) error
 	UpsertLocalSession(ctx context.Context, playerId string, worldId string, state []byte) error
@@ -131,8 +132,4 @@ type Client interface {
 
 	// Obungus
 	GetUnreviewedBox(ctx context.Context, player string) (*model.Box, error)
-
-	// Old garbage that needs to be deleted
-	// Returns zed token and file id
-	GetMapFileById(ctx context.Context, id string) (string, string, error) // Deprecated
 }

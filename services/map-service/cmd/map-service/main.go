@@ -24,6 +24,7 @@ import (
 	publicV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/public"
 	terraformV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/terraform"
 	"github.com/hollow-cube/hc-services/services/map-service/config"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/wkafka"
@@ -65,7 +66,7 @@ func main() {
 		}),
 
 		// Storage
-		fx.Provide(newStoragePostgres),
+		fx.Provide(newDbQuerySet, newStoragePostgres),
 
 		// Authz
 		fx.Provide(newAuthzSpiceDB),
@@ -194,6 +195,7 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	}
 }
 
+// deprecated
 func newStoragePostgres(conf *config.Config, lc fx.Lifecycle) (storage.Client, error) {
 	c, err := storage.NewPostgresClient(conf.Postgres.URI)
 	if err != nil {
@@ -348,4 +350,18 @@ func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, err
 	})
 
 	return c, nil
+}
+
+func newDbQuerySet(lc fx.Lifecycle, conf *config.Config) (*db.Queries, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	queries, pool, err := db.NewQuerySet(ctx, conf.Postgres.URI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return queries, nil
 }

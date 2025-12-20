@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -23,12 +25,14 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Storage storage.Client
+	Queries *db.Queries
 }
 
 type server struct {
 	log *zap.SugaredLogger
 
 	storageClient storage.Client
+	queries       *db.Queries
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
@@ -39,12 +43,10 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 }
 
 func (s *server) GetPlayerSession(ctx context.Context, request GetPlayerSessionRequestObject) (GetPlayerSessionResponseObject, error) {
-	data, err := s.storageClient.GetPlayerSession(ctx, request.PlayerId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetPlayerSession404Response{}, nil
-		}
-
+	data, err := s.queries.TfGetPlayerSession(ctx, request.PlayerId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GetPlayerSession404Response{}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
