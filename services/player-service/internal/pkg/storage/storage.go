@@ -114,4 +114,7 @@ type Client interface {
 	// This method is generally used in a transaction with AddCurrency/etc.
 	LogTebexEvent(ctx context.Context, id string, time time.Time, raw string) error
 	LogVoteEvent(ctx context.Context, id string, time time.Time, playerId, source, meta string) error
+
+	GetPlayerRecapById(ctx context.Context, id string) (*model.Recap, error)
+	GetPlayerRecapByPlayer(ctx context.Context, playerId string, year int) (*model.Recap, error)
 }

@@ -416,6 +416,9 @@ type ServerInterface interface {
 	// Get the active punishment for a player
 	// (GET /punishments/{playerId}/active)
 	GetActivePunishment(w http.ResponseWriter, r *http.Request, playerId string, params GetActivePunishmentParams)
+	// Get the recap data for a player
+	// (GET /recap/{playerId}/{year})
+	GetPlayerRecap(w http.ResponseWriter, r *http.Request, playerId string, year int)
 	// Generic player "completion" API. Used for completing player names or IDs.
 	// (POST /tab_complete)
 	PerformTabComplete(w http.ResponseWriter, r *http.Request)
@@ -1148,6 +1151,40 @@ func (siw *ServerInterfaceWrapper) GetActivePunishment(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetPlayerRecap operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerRecap(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "year" -------------
+	var year int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "year", r.PathValue("year"), &year, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "year", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlayerRecap(w, r, playerId, year)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PerformTabComplete operation middleware
 func (siw *ServerInterfaceWrapper) PerformTabComplete(w http.ResponseWriter, r *http.Request) {
 
@@ -1323,6 +1360,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/punishments/ladders/entry", wrapper.GetPunishmentLadderEntry)
 	m.HandleFunc("POST "+options.BaseURL+"/punishments/revoke", wrapper.RevokePunishment)
 	m.HandleFunc("GET "+options.BaseURL+"/punishments/{playerId}/active", wrapper.GetActivePunishment)
+	m.HandleFunc("GET "+options.BaseURL+"/recap/{playerId}/{year}", wrapper.GetPlayerRecap)
 	m.HandleFunc("POST "+options.BaseURL+"/tab_complete", wrapper.PerformTabComplete)
 	m.HandleFunc("POST "+options.BaseURL+"/tebex/checkout", wrapper.TebexCheckout)
 
@@ -2089,6 +2127,33 @@ func (response GetActivePunishment404Response) VisitGetActivePunishmentResponse(
 	return nil
 }
 
+type GetPlayerRecapRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Year     int    `json:"year"`
+}
+
+type GetPlayerRecapResponseObject interface {
+	VisitGetPlayerRecapResponse(w http.ResponseWriter) error
+}
+
+type GetPlayerRecap200TextResponse string
+
+func (response GetPlayerRecap200TextResponse) VisitGetPlayerRecapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(200)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetPlayerRecap404Response struct {
+}
+
+func (response GetPlayerRecap404Response) VisitGetPlayerRecapResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type PerformTabCompleteRequestObject struct {
 	Body *PerformTabCompleteJSONRequestBody
 }
@@ -2210,6 +2275,9 @@ type StrictServerInterface interface {
 	// Get the active punishment for a player
 	// (GET /punishments/{playerId}/active)
 	GetActivePunishment(ctx context.Context, request GetActivePunishmentRequestObject) (GetActivePunishmentResponseObject, error)
+	// Get the recap data for a player
+	// (GET /recap/{playerId}/{year})
+	GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error)
 	// Generic player "completion" API. Used for completing player names or IDs.
 	// (POST /tab_complete)
 	PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error)
@@ -3011,6 +3079,33 @@ func (sh *strictHandler) GetActivePunishment(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetActivePunishmentResponseObject); ok {
 		if err := validResponse.VisitGetActivePunishmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlayerRecap operation middleware
+func (sh *strictHandler) GetPlayerRecap(w http.ResponseWriter, r *http.Request, playerId string, year int) {
+	var request GetPlayerRecapRequestObject
+
+	request.PlayerId = playerId
+	request.Year = year
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlayerRecap(ctx, request.(GetPlayerRecapRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlayerRecap")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlayerRecapResponseObject); ok {
+		if err := validResponse.VisitGetPlayerRecapResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

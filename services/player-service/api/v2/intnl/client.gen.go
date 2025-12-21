@@ -192,6 +192,9 @@ type ClientInterface interface {
 	// GetActivePunishment request
 	GetActivePunishment(ctx context.Context, playerId string, params *GetActivePunishmentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetPlayerRecap request
+	GetPlayerRecap(ctx context.Context, playerId string, year int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PerformTabCompleteWithBody request with any body
 	PerformTabCompleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -649,6 +652,18 @@ func (c *Client) RevokePunishment(ctx context.Context, body RevokePunishmentJSON
 
 func (c *Client) GetActivePunishment(ctx context.Context, playerId string, params *GetActivePunishmentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetActivePunishmentRequest(c.Server, playerId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlayerRecap(ctx context.Context, playerId string, year int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlayerRecapRequest(c.Server, playerId, year)
 	if err != nil {
 		return nil, err
 	}
@@ -1877,6 +1892,47 @@ func NewGetActivePunishmentRequest(server string, playerId string, params *GetAc
 	return req, nil
 }
 
+// NewGetPlayerRecapRequest generates requests for GetPlayerRecap
+func NewGetPlayerRecapRequest(server string, playerId string, year int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "year", runtime.ParamLocationPath, year)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/recap/%s/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPerformTabCompleteRequest calls the generic PerformTabComplete builder with application/json body
 func NewPerformTabCompleteRequest(server string, body PerformTabCompleteJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2102,6 +2158,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetActivePunishmentWithResponse request
 	GetActivePunishmentWithResponse(ctx context.Context, playerId string, params *GetActivePunishmentParams, reqEditors ...RequestEditorFn) (*GetActivePunishmentResponse, error)
+
+	// GetPlayerRecapWithResponse request
+	GetPlayerRecapWithResponse(ctx context.Context, playerId string, year int, reqEditors ...RequestEditorFn) (*GetPlayerRecapResponse, error)
 
 	// PerformTabCompleteWithBodyWithResponse request with any body
 	PerformTabCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PerformTabCompleteResponse, error)
@@ -2714,6 +2773,27 @@ func (r GetActivePunishmentResponse) StatusCode() int {
 	return 0
 }
 
+type GetPlayerRecapResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlayerRecapResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlayerRecapResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PerformTabCompleteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3091,6 +3171,15 @@ func (c *ClientWithResponses) GetActivePunishmentWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetActivePunishmentResponse(rsp)
+}
+
+// GetPlayerRecapWithResponse request returning *GetPlayerRecapResponse
+func (c *ClientWithResponses) GetPlayerRecapWithResponse(ctx context.Context, playerId string, year int, reqEditors ...RequestEditorFn) (*GetPlayerRecapResponse, error) {
+	rsp, err := c.GetPlayerRecap(ctx, playerId, year, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlayerRecapResponse(rsp)
 }
 
 // PerformTabCompleteWithBodyWithResponse request with arbitrary body returning *PerformTabCompleteResponse
@@ -3758,6 +3847,22 @@ func ParseGetActivePunishmentResponse(rsp *http.Response) (*GetActivePunishmentR
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetPlayerRecapResponse parses an HTTP response from a GetPlayerRecapWithResponse call
+func ParseGetPlayerRecapResponse(rsp *http.Response) (*GetPlayerRecapResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlayerRecapResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

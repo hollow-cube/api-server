@@ -11,11 +11,15 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Get the recap data for an id
+	// (GET /recap/{id})
+	GetPlayerRecap(w http.ResponseWriter, r *http.Request, id string)
 	// Returns the public stats for players on hc
 	// (GET /stats)
 	GetPublicStats(w http.ResponseWriter, r *http.Request)
@@ -29,6 +33,31 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetPlayerRecap operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerRecap(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlayerRecap(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetPublicStats operation middleware
 func (siw *ServerInterfaceWrapper) GetPublicStats(w http.ResponseWriter, r *http.Request) {
@@ -164,9 +193,40 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/recap/{id}", wrapper.GetPlayerRecap)
 	m.HandleFunc("GET "+options.BaseURL+"/stats", wrapper.GetPublicStats)
 
 	return m
+}
+
+type GetPlayerRecapRequestObject struct {
+	Id string `json:"id"`
+}
+
+type GetPlayerRecapResponseObject interface {
+	VisitGetPlayerRecapResponse(w http.ResponseWriter) error
+}
+
+type GetPlayerRecap200JSONResponse struct {
+	Data     map[string]interface{} `json:"data"`
+	PlayerId string                 `json:"playerId"`
+	Username string                 `json:"username"`
+	Year     int                    `json:"year"`
+}
+
+func (response GetPlayerRecap200JSONResponse) VisitGetPlayerRecapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlayerRecap404Response struct {
+}
+
+func (response GetPlayerRecap404Response) VisitGetPlayerRecapResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
 }
 
 type GetPublicStatsRequestObject struct {
@@ -193,6 +253,9 @@ func (response GetPublicStats200JSONResponse) VisitGetPublicStatsResponse(w http
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Get the recap data for an id
+	// (GET /recap/{id})
+	GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error)
 	// Returns the public stats for players on hc
 	// (GET /stats)
 	GetPublicStats(ctx context.Context, request GetPublicStatsRequestObject) (GetPublicStatsResponseObject, error)
@@ -225,6 +288,32 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetPlayerRecap operation middleware
+func (sh *strictHandler) GetPlayerRecap(w http.ResponseWriter, r *http.Request, id string) {
+	var request GetPlayerRecapRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlayerRecap(ctx, request.(GetPlayerRecapRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlayerRecap")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlayerRecapResponseObject); ok {
+		if err := validResponse.VisitGetPlayerRecapResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetPublicStats operation middleware

@@ -742,6 +742,32 @@ paths:
                 required: [ url ]
                 properties:
                   url: { type: string }
+  /recap/{playerId}/{year}:
+    get:
+      summary: Get the recap data for a player
+      operationId: getPlayerRecap
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID of the recap
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: path
+          description: The year of the recap
+          required: true
+          schema:
+              type: integer
+      responses:
+        '200':
+          description: Returns the recap data
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Recap not found
 
 components:
   responses:
