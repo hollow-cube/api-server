@@ -1,15 +1,16 @@
 package http
 
 import (
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type Middleware interface {
@@ -101,9 +102,14 @@ func PrometheusMiddleware() MiddlewareFunc {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
+
 			code := strconv.Itoa(ww.Status())
-			reqs.WithLabelValues(code, r.Method, r.URL.Path).Inc()
-			latency.WithLabelValues(code, r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
+			path := chi.RouteContext(r.Context()).RoutePattern()
+			if r.Pattern != "" && strings.Contains(r.Pattern, " ") {
+				path = strings.Split(r.Pattern, " ")[1]
+			}
+			reqs.WithLabelValues(code, r.Method, path).Inc()
+			latency.WithLabelValues(code, r.Method, path).Observe(time.Since(start).Seconds())
 		})
 	}
 }
