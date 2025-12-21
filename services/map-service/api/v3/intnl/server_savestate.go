@@ -190,7 +190,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 	// If the save state is completed never store the play/edit state of it.
 	if update.Completed {
-		update.StateV2 = nil
+		update.StateV2 = []byte("null")
 	}
 
 	// Get the best savestate to decide if this is the first completion (BEFORE UPDATING)
@@ -212,14 +212,14 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	go s.storageClient.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	s.log.Infow("updated save state", "mapId", request.MapId, "playerId", request.PlayerId,
-		"saveStateId", request.SaveStateId, "completed", ss.Completed, "type", ss.Type)
+		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type)
 
 	var m *model.Map
 
 	// If this is a verification and was just completed, we need to also update the map to verified.
 	// todo we need to do this update as a transaction
 	// todo random thought, but we should reject any world update message where verification != unverified
-	if ss.Type == db.SaveStateTypeVerifying && ss.Completed {
+	if update.Type == db.SaveStateTypeVerifying && update.Completed {
 		m, err = s.storageClient.GetMapById(ctx, request.MapId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch map: %w", err)
@@ -227,7 +227,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 		m.Verification = model.VerificationVerified
 		// Always set the map protocol version to the version which verified it.
-		m.ProtocolVersion = *ss.ProtocolVersion
+		m.ProtocolVersion = *update.ProtocolVersion
 		if err = s.storageClient.UpdateMap(ctx, m); err != nil {
 			return nil, fmt.Errorf("failed to update map: %w", err)
 		}
@@ -237,7 +237,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	var newPlacement = -1
 
 	// If the map was just completed, we should add this playtime to the leaderboard.
-	if ss.Completed && (ss.Type == db.SaveStateTypePlaying || ss.Type == db.SaveStateTypeVerifying) {
+	if update.Completed && (update.Type == db.SaveStateTypePlaying || update.Type == db.SaveStateTypeVerifying) {
 		if m == nil {
 			m, err = s.storageClient.GetMapById(ctx, request.MapId)
 			if err != nil {
@@ -261,11 +261,11 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			}
 
 			err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-				ScoreMember(float64(ss.Playtime), string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+				ScoreMember(float64(update.Playtime), string(common.UUIDToBin(request.PlayerId))).Build()).Error()
 			if err != nil {
 				//todo i guess this should go to DLQ or something, but we do not stop the request from succeeding in this case.
 				zap.S().Errorw("failed to update leaderboard", "mapId", request.MapId,
-					"playerId", request.PlayerId, "playTime", ss.Playtime, "err", err)
+					"playerId", request.PlayerId, "playTime", update.Playtime, "err", err)
 			}
 
 			// Fetch their placement after update
@@ -282,7 +282,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 	// If the map was just completed (during play), we should compute the rewards and apply them to the player.
 	var resp SaveStateUpdateJSONResponse
-	if ss.Completed && ss.Type == db.SaveStateTypePlaying {
+	if update.Completed && update.Type == db.SaveStateTypePlaying {
 		if m == nil {
 			m, err = s.storageClient.GetMapById(ctx, request.MapId)
 			if err != nil {
@@ -336,7 +336,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 				MapId:      m.Id,
 				Variant:    string(m.Settings.Variant),
 				SubVariant: svtString,
-				Playtime:   ss.Playtime,
+				Playtime:   update.Playtime,
 				Difficulty: m.Difficulty().String(),
 			})
 		}()

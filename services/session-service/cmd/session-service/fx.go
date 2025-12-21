@@ -40,7 +40,7 @@ type CommonConfigResources struct {
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 	return CommonConfigResources{
-		Service: common.ServiceConfig{Name: "session-service"},
+		Service: common.ServiceConfig{Name: "session-service", Env: conf.Env},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
 	}
