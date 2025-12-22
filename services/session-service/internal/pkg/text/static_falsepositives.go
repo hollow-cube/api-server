@@ -467,7 +467,7 @@ var falsePositives = []string{
 	"pricks",
 	"pushbutton",
 	"pushit",
-	"pussycats",
+	"pussycat",
 	"pussyfoot",
 	"queerly",
 	"raccoon",

@@ -17,9 +17,11 @@ var profanities = []string{
 	"bitch",
 	"btch",
 	"biatch",
+	"bussy",
 	"blowjob",
 	"blowme",
 	"bukakke",
+	"buttplug",
 	"buttchug",
 	"butagorosi", // https://www.urbandictionary.com/define.php?term=butagorosi
 	"cagada",
