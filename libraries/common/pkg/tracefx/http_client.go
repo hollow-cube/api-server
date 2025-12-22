@@ -32,7 +32,7 @@ func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.rt.RoundTrip(req)
 
 	if err == nil && t.okStatusCodes[resp.StatusCode] {
-		span := trace.SpanFromContext(req.Context())
+		span := trace.SpanFromContext(resp.Request.Context())
 		span.SetStatus(codes.Ok, "")
 	}
 
