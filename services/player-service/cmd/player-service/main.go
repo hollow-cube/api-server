@@ -3,8 +3,18 @@ package main
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hollow-cube/hc-services/services/player-service/api/v2/auth"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/kafkafx"
+	"github.com/hollow-cube/tebex-go"
+	"github.com/posthog/posthog-go"
+	"google.golang.org/grpc"
+
+	envoyAuth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
@@ -15,13 +25,8 @@ import (
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/handler"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
-	"github.com/hollow-cube/hc-services/services/player-service/pkg/kafkafx"
-	"github.com/hollow-cube/tebex-go"
-	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel/sdk/trace"
 
@@ -73,11 +78,9 @@ func main() {
 		),
 		httpfx.Module,
 
-		// Vote handler
-		fx.Provide(handler.NewVoteHandler),
-
-		// Init tasks
-		fx.Invoke(func(*handler.VoteHandler) {}),
+		// GRPC server (for Envoy)
+		fx.Provide(auth.NewServer),
+		fx.Invoke(newGrpcServer),
 	).Run()
 }
 
@@ -150,6 +153,20 @@ func newStoragePostgres(conf *config.Config, lc fx.Lifecycle, metrics metric.Wri
 	return c, nil
 }
 
+func newStoragePostgresV2(conf *config.Config, lc fx.Lifecycle) (*db.Queries, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	queries, pool, err := db.NewQuerySet(ctx, conf.Postgres.URI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return queries, nil
+}
+
 func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 	return authz.NewSpiceDBClient(
 		conf.SpiceDB.Endpoint,
@@ -191,7 +208,7 @@ func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.Sugare
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
 	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
 	if conf.Env == "tilt" {
-		log.Warn("dropping posthog client because tilt is enabled")
+		log.Info("dropping posthog client because tilt is enabled")
 		apiKey = ""
 	}
 
@@ -215,5 +232,21 @@ func newTebexHeadlessClient(conf *config.Config) *tebex.HeadlessClient {
 	return tebex.NewHeadlessClientWithOptions(tebex.HeadlessClientParams{
 		Url:        tebex.DefaultBaseUrl,
 		PrivateKey: conf.Tebex.PrivateKey,
+	})
+}
+
+func newGrpcServer(lc fx.Lifecycle, authServer *auth.Server) {
+	lis, _ := net.Listen("tcp", ":9001")
+	grpcServer := grpc.NewServer()
+	envoyAuth.RegisterAuthorizationServer(grpcServer, authServer)
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go grpcServer.Serve(lis)
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			grpcServer.GracefulStop()
+			return nil
+		},
 	})
 }

@@ -12,7 +12,9 @@ import (
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/services/player-service/api/v2/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
@@ -36,6 +38,7 @@ type ServerParams struct {
 	TBHeadless *tebex.HeadlessClient
 
 	Storage           storage.Client
+	Queries           *db.Queries
 	Authz             authz.Client
 	PunishmentLadders map[string]*model.PunishmentLadder
 }
@@ -64,6 +67,7 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
 		storageClient:     p.Storage,
+		queries:           p.Queries,
 		authzClient:       p.Authz,
 		producer:          p.Producer,
 		tbHeadless:        p.TBHeadless,
@@ -78,6 +82,7 @@ type server struct {
 	metrics metric.Writer
 
 	storageClient storage.Client
+	queries       *db.Queries
 	authzClient   authz.Client
 	producer      wkafka.Writer
 	tbHeadless    *tebex.HeadlessClient
@@ -272,6 +277,38 @@ func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequest
 	}
 
 	return GetPlayerAlts200JSONResponse{Results: results}, nil
+}
+
+func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
+	res, err := db.Tx(ctx, s.queries, func(ctx context.Context, queries *db.Queries) (*CyclePlayerApiKey200JSONResponse, error) {
+		_, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil, nil
+		} else if err != nil {
+			return nil, fmt.Errorf("failed to get player data: %w", err)
+		}
+
+		err = s.queries.DeleteAllApiKeys(ctx, request.PlayerId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete existing api keys: %w", err)
+		}
+
+		key, hash, err := auth.GenerateAPIKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate api key: %w", err)
+		}
+
+		err = s.queries.InsertApiKey(ctx, hash, request.PlayerId)
+		return &CyclePlayerApiKey200JSONResponse{
+			ApiKey: key,
+		}, err
+	})
+	if err != nil {
+		return nil, err
+	} else if res == nil {
+		return &CyclePlayerApiKey404Response{}, nil
+	}
+	return res, nil
 }
 
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {

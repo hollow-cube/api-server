@@ -262,6 +262,29 @@ paths:
                 $ref: '#/components/schemas/PlayerAlts'
         '404':
           $ref: '#/components/responses/PlayerNotFound'
+  /players/{playerId}/api:
+    post:
+      summary: Cycle the API key for a player. Deletes all active keys and creates a new one
+      operationId: cyclePlayerApiKey
+      parameters:
+        - name: playerId
+          in: path
+          description: The player to cycle a key for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: API key cycled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiKey]
+                properties:
+                  apiKey: { type: string }
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
   /players/{idOrUsername}/id:
     get:
       summary: Get the player ID for a player
