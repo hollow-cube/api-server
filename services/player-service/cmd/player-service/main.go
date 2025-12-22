@@ -58,6 +58,7 @@ func main() {
 		}),
 
 		fx.Provide(newStoragePostgres),
+		fx.Provide(newStoragePostgresV2),
 		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(newSyncKafkaWriter, newKafkaReaderFactory),
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),

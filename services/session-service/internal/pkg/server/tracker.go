@@ -170,7 +170,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 
 	// Eager insert the server & map states
 	server, err := db.Tx(ctx, t.queries, func(ctx context.Context, queries *db.Queries) (*db.ServerState, error) {
-		server, err := t.queries.InsertServerState(ctx, db.InsertServerStateParams{
+		server, err := queries.InsertServerState(ctx, db.InsertServerStateParams{
 			ID:        podName,
 			Role:      "map-isolate",
 			Status:    0,
@@ -179,7 +179,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert server state: %w", err)
 		}
-		if _, err = t.queries.InsertMapState(ctx, db.InsertMapStateParams{
+		if _, err = queries.InsertMapState(ctx, db.InsertMapStateParams{
 			ID:     uuid.NewString(),
 			MapID:  mapId,
 			Server: podName,

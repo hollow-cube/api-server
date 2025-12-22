@@ -281,14 +281,14 @@ func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequest
 
 func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
 	res, err := db.Tx(ctx, s.queries, func(ctx context.Context, queries *db.Queries) (*CyclePlayerApiKey200JSONResponse, error) {
-		_, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+		_, err := queries.GetPlayerData(ctx, request.PlayerId)
 		if errors.Is(err, db.ErrNoRows) {
 			return nil, nil
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to get player data: %w", err)
 		}
 
-		err = s.queries.DeleteAllApiKeys(ctx, request.PlayerId)
+		err = queries.DeleteAllApiKeys(ctx, request.PlayerId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete existing api keys: %w", err)
 		}
@@ -298,7 +298,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 			return nil, fmt.Errorf("failed to generate api key: %w", err)
 		}
 
-		err = s.queries.InsertApiKey(ctx, hash, request.PlayerId)
+		err = queries.InsertApiKey(ctx, hash, request.PlayerId)
 		return &CyclePlayerApiKey200JSONResponse{
 			ApiKey: key,
 		}, err
