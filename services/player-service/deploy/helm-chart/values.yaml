@@ -7,3 +7,8 @@ base:
     repository: mworzala/player-service
   imagePullSecrets:
     - name: dockerio
+
+  service:
+    extraPorts:
+      - name: grpc
+        containerPort: 9001

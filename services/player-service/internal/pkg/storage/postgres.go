@@ -2,8 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"hash"
@@ -13,9 +11,6 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
@@ -28,8 +23,6 @@ var _ Client = &PostgresClient{}
 
 const txContextKey = contextKey("tx")
 
-//go:embed migrate/*.sql
-var migrationFS embed.FS
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 var (
@@ -99,36 +92,6 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 }
 
 func (c *PostgresClient) buildSchema(ctx context.Context) error {
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", c.uri)
-	if err != nil {
-		return fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "player-service_migrations",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrate")
-	if err != nil {
-		return fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return fmt.Errorf("failed to create migrate instance: %w", err)
-	}
-
-	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
 	// Build backpack schema (always updated from backpack item constants)
 	for _, item := range model.BackpackItems {
 		query := fmt.Sprintf("alter table player_backpack add column if not exists %s int not null default 0;", item)

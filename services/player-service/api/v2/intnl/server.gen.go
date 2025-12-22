@@ -365,6 +365,9 @@ type ServerInterface interface {
 	// Get the (ip-based) alt accounts for a player
 	// (GET /players/{playerId}/alts)
 	GetPlayerAlts(w http.ResponseWriter, r *http.Request, playerId string)
+	// Cycle the API key for a player. Deletes all active keys and creates a new one
+	// (POST /players/{playerId}/api)
+	CyclePlayerApiKey(w http.ResponseWriter, r *http.Request, playerId string)
 	// Get the backpack for a player
 	// (GET /players/{playerId}/backpack)
 	GetPlayerBackpack(w http.ResponseWriter, r *http.Request, playerId string)
@@ -651,6 +654,31 @@ func (siw *ServerInterfaceWrapper) GetPlayerAlts(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlayerAlts(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CyclePlayerApiKey operation middleware
+func (siw *ServerInterfaceWrapper) CyclePlayerApiKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CyclePlayerApiKey(w, r, playerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1343,6 +1371,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}", wrapper.GetPlayerData)
 	m.HandleFunc("PATCH "+options.BaseURL+"/players/{playerId}", wrapper.UpdatePlayerData)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/alts", wrapper.GetPlayerAlts)
+	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/api", wrapper.CyclePlayerApiKey)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GetPlayerBackpack)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GivePlayerItems)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.GetPlayerCosmetics)
@@ -1656,6 +1685,32 @@ func (response GetPlayerAlts200JSONResponse) VisitGetPlayerAltsResponse(w http.R
 type GetPlayerAlts404Response = PlayerNotFoundResponse
 
 func (response GetPlayerAlts404Response) VisitGetPlayerAltsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type CyclePlayerApiKeyRequestObject struct {
+	PlayerId string `json:"playerId"`
+}
+
+type CyclePlayerApiKeyResponseObject interface {
+	VisitCyclePlayerApiKeyResponse(w http.ResponseWriter) error
+}
+
+type CyclePlayerApiKey200JSONResponse struct {
+	ApiKey string `json:"apiKey"`
+}
+
+func (response CyclePlayerApiKey200JSONResponse) VisitCyclePlayerApiKeyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CyclePlayerApiKey404Response = PlayerNotFoundResponse
+
+func (response CyclePlayerApiKey404Response) VisitCyclePlayerApiKeyResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -2224,6 +2279,9 @@ type StrictServerInterface interface {
 	// Get the (ip-based) alt accounts for a player
 	// (GET /players/{playerId}/alts)
 	GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error)
+	// Cycle the API key for a player. Deletes all active keys and creates a new one
+	// (POST /players/{playerId}/api)
+	CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error)
 	// Get the backpack for a player
 	// (GET /players/{playerId}/backpack)
 	GetPlayerBackpack(ctx context.Context, request GetPlayerBackpackRequestObject) (GetPlayerBackpackResponseObject, error)
@@ -2597,6 +2655,32 @@ func (sh *strictHandler) GetPlayerAlts(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlayerAltsResponseObject); ok {
 		if err := validResponse.VisitGetPlayerAltsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CyclePlayerApiKey operation middleware
+func (sh *strictHandler) CyclePlayerApiKey(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request CyclePlayerApiKeyRequestObject
+
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CyclePlayerApiKey(ctx, request.(CyclePlayerApiKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CyclePlayerApiKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CyclePlayerApiKeyResponseObject); ok {
+		if err := validResponse.VisitCyclePlayerApiKeyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

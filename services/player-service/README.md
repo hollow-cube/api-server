@@ -13,7 +13,7 @@ go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 To create a new migration, run the following command (**make sure to replace <migration_name> with a reasonable name**):
 
 ```shell
-migrate create -ext sql -dir internal/pkg/storage/migrate -seq <migration_name>
+migrate create -ext sql -dir internal/db/migrations -seq <migration_name>
 ```
 
 Before writing any migrations, make sure to read through the best practices in the
