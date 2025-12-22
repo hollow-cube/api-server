@@ -18,6 +18,7 @@ import (
 	"net/http"
 
 	"github.com/hollow-cube/hc-services/services/player-service/config"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
@@ -42,6 +43,7 @@ type ServerParams struct {
 	ReaderFactory wkafka.ReaderFactory
 	Producer      wkafka.SyncWriter
 	Storage       storage.Client
+	Queries       *db.Queries
 	Authz         authz.Client
 	Posthog       posthog.Client
 }
@@ -62,6 +64,7 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		tebexSecret:   []byte(tebexSecret),
 		producer:      params.Producer,
 		storageClient: params.Storage,
+		queries:       params.Queries,
 		authClient:    params.Authz,
 		posthog:       params.Posthog,
 	}
@@ -96,6 +99,7 @@ type server struct {
 
 	producer      wkafka.SyncWriter
 	storageClient storage.Client
+	queries       *db.Queries
 	authClient    authz.Client
 	posthog       posthog.Client
 }

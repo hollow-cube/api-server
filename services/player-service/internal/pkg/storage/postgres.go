@@ -325,24 +325,6 @@ func (c *PostgresClient) AddLinkedAccount(ctx context.Context, playerId, socialI
 	return c.safeExec(ctx, query, playerId, socialId, platform)
 }
 
-func (c *PostgresClient) LookupPlayerByIdOrUsername(ctx context.Context, idOrUsername string) (id string, err error) {
-	const query = `
-		select id
-		from public.player_data
-		where id = $1 or lower(username) = $1;
-	`
-
-	scanFunc := func(id *string) []any {
-		return []any{id}
-	}
-
-	result, err := querySingleFunc[string](ctx, c.pool, scanFunc, query, strings.ToLower(idOrUsername))
-	if err != nil {
-		return "", err
-	}
-	return *result, nil
-}
-
 func (c *PostgresClient) CreatePendingVerification(ctx context.Context, v *model.PendingVerification) error {
 	const query = `
 		insert into public.pending_verification (

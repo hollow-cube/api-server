@@ -21,6 +21,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/jackc/pgx/v5"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -312,9 +313,9 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 }
 
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
-	pid, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.IdOrUsername)
+	pid, err := s.queries.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
 		}
 

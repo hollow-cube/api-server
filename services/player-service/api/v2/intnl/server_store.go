@@ -25,7 +25,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 		}}, nil
 	}
 
-	_, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.Body.PlayerId)
+	_, err := s.queries.LookupPlayerById(ctx, request.Body.PlayerId)
 	if errors.Is(err, storage.ErrNotFound) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
@@ -59,7 +59,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 
 func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.PlayerId)
+	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
 	if errors.Is(err, storage.ErrNotFound) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
@@ -147,7 +147,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 
 func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.PlayerId)
+	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
 	if errors.Is(err, storage.ErrNotFound) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
@@ -245,7 +245,7 @@ func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHyperc
 
 func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.PlayerId)
+	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
 	if errors.Is(err, storage.ErrNotFound) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
@@ -302,7 +302,7 @@ func (s *server) TebexCheckout(ctx context.Context, request TebexCheckoutRequest
 		return nil, fmt.Errorf("invalid package: %s", request.Body.Package)
 	}
 
-	playerId, err := s.storageClient.LookupPlayerByIdOrUsername(ctx, request.Body.Username)
+	playerId, err := s.queries.LookupPlayerByUsername(ctx, request.Body.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	}

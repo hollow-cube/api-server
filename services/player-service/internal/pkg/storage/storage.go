@@ -43,7 +43,6 @@ type Client interface {
 
 	AddLinkedAccount(ctx context.Context, playerId, socialId, platform string) error
 
-	LookupPlayerByIdOrUsername(ctx context.Context, idOrUsername string) (string, error)
 	LookupPlayerDataBySocial(ctx context.Context, id string, platform string) (*model.PlayerData, error)
 	LookupSocialByPlayerId(ctx context.Context, platform, playerId string) (string, error)
 

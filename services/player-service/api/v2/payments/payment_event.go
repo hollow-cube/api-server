@@ -363,7 +363,7 @@ func (s *server) handlePaymentDisputeLostEvent(ctx context.Context, raw *tebex.E
 
 // findPlayer will lookup a player by their username.
 func (s *server) findPlayer(ctx context.Context, username string) (string, error) {
-	return s.storageClient.LookupPlayerByIdOrUsername(ctx, username)
+	return s.queries.LookupPlayerByUsername(ctx, username)
 }
 
 func extractTargetFromEvent(event interface{}) string {

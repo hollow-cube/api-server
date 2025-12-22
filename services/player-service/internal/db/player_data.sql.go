@@ -12,8 +12,7 @@ import (
 const getPlayerData = `-- name: GetPlayerData :one
 select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
 from player_data
-where id = $1
-limit 1
+where id = $1 limit 1
 `
 
 func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerDatum, error) {
@@ -32,4 +31,43 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerDatum, e
 		&i.Cubits,
 	)
 	return &i, err
+}
+
+const lookupPlayerById = `-- name: LookupPlayerById :one
+select id
+from public.player_data
+where id = $1
+`
+
+func (q *Queries) LookupPlayerById(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, lookupPlayerById, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
+select id
+from public.player_data
+where id = $1
+   or lower(username) = lower($2)
+`
+
+func (q *Queries) LookupPlayerByIdOrUsername(ctx context.Context, iD string, lower string) (string, error) {
+	row := q.db.QueryRow(ctx, lookupPlayerByIdOrUsername, iD, lower)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lookupPlayerByUsername = `-- name: LookupPlayerByUsername :one
+select id
+from public.player_data
+where lower(username) = lower($1)
+`
+
+func (q *Queries) LookupPlayerByUsername(ctx context.Context, lower string) (string, error) {
+	row := q.db.QueryRow(ctx, lookupPlayerByUsername, lower)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
