@@ -5,11 +5,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/player-service/pkg/kafkafx"
-	"github.com/hollow-cube/tebex-go"
-	"github.com/posthog/posthog-go"
-
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
@@ -21,8 +16,12 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/handler"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/kafkafx"
+	"github.com/hollow-cube/tebex-go"
+	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel/sdk/trace"
 
@@ -134,6 +133,10 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	if config.Endpoint != "" {
 		return tracefx.NewHttpExporter(config)
 	} else {
+		// Uncomment the below if you want to print out traces to stdout - for debugging traces
+		//return stdouttrace.New(
+		//	stdouttrace.WithPrettyPrint(),
+		//)
 		return tracefx.NewNoopExporter()
 	}
 }

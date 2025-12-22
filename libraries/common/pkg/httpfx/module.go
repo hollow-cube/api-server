@@ -10,6 +10,8 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -18,6 +20,7 @@ var Module = fx.Module("http",
 	fx.Provide(
 		AsMiddleware(httpTransport.ZapMiddleware),
 		AsMiddleware(httpTransport.PrometheusMiddleware),
+		AsMiddleware(httpTransport.TraceNameMiddleware),
 		NewChiServer,
 	),
 
@@ -29,38 +32,53 @@ type ChiServerParams struct {
 	fx.In
 	Lifecycle fx.Lifecycle
 
-	Log    *zap.SugaredLogger
-	Config common.HTTPConfig
+	Log        *zap.SugaredLogger
+	SvcConfig  common.ServiceConfig
+	HTTPConfig common.HTTPConfig
 
 	Middleware          []httpTransport.Middleware         `group:"middleware"`
 	MiddlewareProviders []httpTransport.MiddlewareProvider `group:"middleware_provider"`
 	Routes              []httpTransport.RouteProvider      `group:"routes"`
+
+	// force the TracerProvider to be created if not already - we depend on it for traces to be properly stored and exported
+	TracerProvider trace.TracerProvider
 }
 
 func NewChiServer(p ChiServerParams) *http.Server {
-	r := chi.NewRouter()
+	chiR := chi.NewRouter()
 	// It is important that providers go first, the trace provider must be before the logging middleware.
 	for _, provider := range p.MiddlewareProviders {
-		r.Use(provider.Provide(r).Run)
+		chiR.Use(provider.Provide(chiR).Run)
 	}
 	for _, middleware := range p.Middleware {
-		r.Use(middleware.Run)
+		chiR.Use(middleware.Run)
 	}
 
-	r.Get("/metrics", promhttp.Handler().ServeHTTP)
+	chiR.Get("/metrics", promhttp.Handler().ServeHTTP)
 	for _, routeProvider := range p.Routes {
 		p.Log.Infof("Registering route %T", routeProvider)
-		routeProvider.Apply(r)
+		routeProvider.Apply(chiR)
 	}
 
 	// todo make these configurable
 	aliveHandler := &httpTransport.AliveHandler{}
-	r.Get("/alive", aliveHandler.ServeHTTP)
+	chiR.Get("/alive", aliveHandler.ServeHTTP)
 	readyHandler := &httpTransport.ReadyHandler{}
-	r.Get("/ready", readyHandler.ServeHTTP)
+	chiR.Get("/ready", readyHandler.ServeHTTP)
 
-	address := fmt.Sprintf("%s:%d", p.Config.Address, p.Config.Port)
-	srv := &http.Server{Addr: address, Handler: r}
+	traceIgnoredPaths := map[string]bool{
+		"/alive":   true,
+		"/ready":   true,
+		"/metrics": true,
+	}
+	otelR := otelhttp.NewHandler(chiR, p.SvcConfig.Name+"-chi",
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return !traceIgnoredPaths[r.URL.Path]
+		}),
+	)
+
+	address := fmt.Sprintf("%s:%d", p.HTTPConfig.Address, p.HTTPConfig.Port)
+	srv := &http.Server{Addr: address, Handler: otelR}
 	p.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			ln, err := net.Listen("tcp", srv.Addr)

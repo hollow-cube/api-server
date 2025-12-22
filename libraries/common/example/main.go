@@ -21,7 +21,7 @@ func main() {
 					Env:  "dev",
 					Name: "example",
 				},
-				HTTPConfig: common.HTTPConfig{
+				HTTP: common.HTTPConfig{
 					Address: "0.0.0.0",
 					Port:    9120,
 				},

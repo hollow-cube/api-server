@@ -104,12 +104,31 @@ func PrometheusMiddleware() MiddlewareFunc {
 			next.ServeHTTP(ww, r)
 
 			code := strconv.Itoa(ww.Status())
-			path := chi.RouteContext(r.Context()).RoutePattern()
-			if r.Pattern != "" && strings.Contains(r.Pattern, " ") {
-				path = strings.Split(r.Pattern, " ")[1]
-			}
+			path := extractRoutePattern(r)
+
 			reqs.WithLabelValues(code, r.Method, path).Inc()
 			latency.WithLabelValues(code, r.Method, path).Observe(time.Since(start).Seconds())
 		})
 	}
+}
+
+// TraceNameMiddleware sets the span name to the METHOD + routePattern
+// Necessary as we can't set it inside the otelR as that is before it hits the chiR, meaning the pattern isn't parsed yet.
+func TraceNameMiddleware() MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+
+			span := trace.SpanFromContext(r.Context())
+			span.SetName(r.Method + " " + extractRoutePattern(r))
+		})
+	}
+}
+
+func extractRoutePattern(r *http.Request) string {
+	path := chi.RouteContext(r.Context()).RoutePattern()
+	if r.Pattern != "" && strings.Contains(r.Pattern, " ") {
+		path = strings.Split(r.Pattern, " ")[1]
+	}
+	return path
 }
