@@ -610,6 +610,32 @@ func (c *PostgresClient) AddCurrency(
 	return newBalance, nil
 }
 
+func (c *PostgresClient) GetPlayerRecapById(ctx context.Context, id string) (*model.Recap, error) {
+	query := psql.Select("player_recaps.id", "player_data.id", "player_data.username", "player_recaps.year", "player_recaps.data").
+		From("player_recaps").
+		Join("player_data ON player_recaps.player_id = player_data.id").
+		Where(sq.Expr("player_recaps.id = $1", id))
+
+	scanFunc := func(v *model.Recap) []any {
+		return []any{&v.Id, &v.PlayerId, &v.Username, &v.Year, &v.Data}
+	}
+
+	return querySingleFunc2(ctx, c.pool, scanFunc, query)
+}
+
+func (c *PostgresClient) GetPlayerRecapByPlayer(ctx context.Context, playerId string, year int) (*model.Recap, error) {
+	query := psql.Select("player_recaps.id", "player_data.id", "player_data.username", "player_recaps.year", "player_recaps.data").
+		From("player_recaps").
+		Join("player_data ON player_recaps.player_id = player_data.id").
+		Where(sq.Expr("player_id = $1 AND year = $2", playerId, year))
+
+	scanFunc := func(v *model.Recap) []any {
+		return []any{&v.Id, &v.PlayerId, &v.Username, &v.Year, &v.Data}
+	}
+
+	return querySingleFunc2(ctx, c.pool, scanFunc, query)
+}
+
 func (c *PostgresClient) CreatePendingTransaction(ctx context.Context, checkoutId, playerId, username string) error {
 	const query = `
 		insert into public.pending_tebex_transactions (

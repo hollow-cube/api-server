@@ -4,6 +4,9 @@ package public
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
@@ -53,4 +56,32 @@ func (s *server) GetPublicStats(ctx context.Context, _ GetPublicStatsRequestObje
 		TotalPlayers:  s.cachedTotalPlayers,
 		TotalPlaytime: s.cachedTotalPlaytime / 1000,
 	}, nil
+}
+
+type GetPlayerRecapCorsResponse struct {
+	Body GetPlayerRecapResponseObject
+}
+
+func (response GetPlayerRecapCorsResponse) VisitGetPlayerRecapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+
+	return response.Body.VisitGetPlayerRecapResponse(w)
+}
+
+func (s *server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error) {
+	recap, err := s.storageClient.GetPlayerRecapById(ctx, request.Id)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return GetPlayerRecapCorsResponse{Body: GetPlayerRecap404Response{}}, nil
+		}
+		return nil, fmt.Errorf("failed to get player recap: %w", err)
+	}
+
+	return GetPlayerRecapCorsResponse{Body: &GetPlayerRecap200JSONResponse{
+		Data:     recap.Data,
+		PlayerId: recap.PlayerId,
+		Username: recap.Username,
+		Year:     recap.Year,
+	}}, nil
 }

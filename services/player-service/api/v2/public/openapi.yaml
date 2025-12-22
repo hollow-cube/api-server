@@ -22,3 +22,32 @@ paths:
                   totalPlaytime:
                     type: integer
                     description: Total playtime in seconds
+  /recap/{id}:
+    get:
+      summary: Get the recap data for an id
+      operationId: getPlayerRecap
+      parameters:
+        - name: id
+          in: path
+          description: The ID of the recap
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns the recap data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ playerId, username, year, data ]
+                properties:
+                  playerId: { type: string }
+                  username: { type: string }
+                  year: { type: integer }
+                  data:
+                    type: object
+                    additionalProperties: true
+        '404':
+          description: Recap not found
+
