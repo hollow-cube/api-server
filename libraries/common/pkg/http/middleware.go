@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -117,10 +118,16 @@ func PrometheusMiddleware() MiddlewareFunc {
 func TraceNameMiddleware() MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			next.ServeHTTP(ww, r)
 
 			span := trace.SpanFromContext(r.Context())
 			span.SetName(r.Method + " " + extractRoutePattern(r))
+
+			// Don't log an error for NotFound and BadRequest as they are expected in our CRUD use-case
+			if ww.Status() == 404 || ww.Status() == 409 {
+				span.SetStatus(codes.Ok, "")
+			}
 		})
 	}
 }
