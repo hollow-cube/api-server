@@ -98,12 +98,11 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	_ = m
 	// Apply all migrations up to the latest
-	//err = m.Up()
-	//if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-	//	return fmt.Errorf("failed to apply migrations: %w", err)
-	//}
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
 
 	return nil
 }
