@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	gitHubAPIToken                = os.Getenv("GH_API_TOKEN")
+	gitHubAPIToken                 = os.Getenv("GH_API_TOKEN")
 	overrideLastSuccessfulBuildSha = os.Getenv("OVERRIDE_LAST_SUCCESSFUL_BUILD_SHA")
-	ignoredServices               = []string{} // Add a service to this array to ignore it
+	ignoredServices                = []string{} // Add a service to this array to ignore it
 )
 
 const (
@@ -223,7 +223,8 @@ func getModuleDependencies(module string) ([]string, error) {
 
 	for _, line := range lines {
 		dep := strings.TrimSpace(line)
-		if !strings.HasPrefix(dep, packagePrefix) || dep == filepath.Join(packagePrefix, module) {
+		// Only add dependencies of libraries - we do not add any service dependencies to the graph (e.g. player-service depending on session-service will not trigger a rebuild when session is changed)
+		if !strings.HasPrefix(dep, packagePrefix+"/"+libsPath) || dep == filepath.Join(packagePrefix, module) {
 			continue
 		}
 		dependencies = append(dependencies, strings.TrimPrefix(dep, packagePrefix+"/"))
