@@ -611,7 +611,9 @@ var falsePositives = []string{
 	"wessex",
 	"wharfage",
 	"whoever",
-	"whores",
+	"whores",      // who responded, who restarted, etc..
+	"whorev",      // who revolutionized, who revolted, etc..
+	"whoreturned", // who returned (can't unblock whoret or someone can say whore tits)
 	"windhoek",
 	"wistful",
 	"wistfully",
