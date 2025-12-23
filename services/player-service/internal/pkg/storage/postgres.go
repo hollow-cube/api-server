@@ -131,30 +131,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 	return nil
 }
 
-func (c *PostgresClient) CountPlayerStats(ctx context.Context) (int, int, error) {
-	const queryString = `
-		select count(*), sum(playtime) from public.player_data;
-	`
-
-	var totalPlayers, totalPlaytime int
-	err := c.safeQueryRow(ctx, queryString).Scan(&totalPlayers, &totalPlaytime)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return totalPlayers, totalPlaytime, nil
-}
-
-func (c *PostgresClient) CreatePlayerData(ctx context.Context, p *model.PlayerData) error {
-	const queryString = `
-		insert into public.player_data (
-		    id, username, first_join, last_online, beta_enabled
-		) VALUES ($1, $2, $3, $4, $5);
-	`
-
-	return c.safeExec(ctx, queryString, p.Id, p.Username, p.FirstJoin, p.LastOnline, p.BetaEnabled)
-}
-
 func (c *PostgresClient) GetPlayerData(ctx context.Context, id string) (*model.PlayerData, error) {
 	query := psql.Select(playerDataColumns...).
 		From("player_data pd").

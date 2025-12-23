@@ -1,7 +1,13 @@
+-- name: CreatePlayerData :one
+insert into public.player_data (id, username, first_join, last_online)
+values ($1, $2, $3, $4)
+RETURNING *;
+
 -- name: GetPlayerData :one
 select *
-from player_data
-where id = $1 limit 1;
+from public.player_data
+where id = $1
+limit 1;
 
 -- name: LookupPlayerById :one
 select id
@@ -18,3 +24,7 @@ select id
 from public.player_data
 where id = $1
    or lower(username) = lower($2);
+
+-- name: GetPlayerStats :one
+select count(*), sum(playtime)
+from public.player_data;

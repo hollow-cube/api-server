@@ -63,19 +63,8 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 	}
 
 	// Fetch the player data, creating it if it doesn't exist.
-	pd, err := s.storageClient.GetPlayerData(ctx, request.Body.PlayerId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			// Create the player data if they don't exist
-			pd = &model.PlayerData{
-				Id:         request.Body.PlayerId,
-				LastOnline: time.Now(),
-			}
-			if err = s.storageClient.CreatePlayerData(ctx, pd); err != nil {
-				return nil, fmt.Errorf("failed to create player data: %w", err)
-			}
-		}
-
+	if _, err = s.storageClient.GetPlayerData(ctx, request.Body.PlayerId); err != nil {
+		// user must be logged into the server to attempt verification, so should be impossible for an ErrNotFound here
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 

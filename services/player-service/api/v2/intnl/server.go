@@ -107,34 +107,29 @@ func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 }
 
 func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
-	time_0 := time.UnixMilli(0)
-	p := &model.PlayerData{
-		Id:             request.Body.Id,
-		Username:       request.Body.Username,
-		FirstJoin:      time_0,
-		LastOnline:     time_0,
-		Settings:       make(model.PlayerSettings),
-		LinkedAccounts: []model.LinkedAccount{},
-	}
-
-	err := s.storageClient.CreatePlayerData(ctx, p)
+	p, err := s.queries.CreatePlayerData(ctx, db.CreatePlayerDataParams{
+		ID:         request.Body.Id,
+		Username:   request.Body.Username,
+		FirstJoin:  time.Now(),
+		LastOnline: time.Now(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create player data: %w", err)
 	}
 
-	err = s.storageClient.AddPlayerIP(ctx, p.Id, request.Body.Ip)
+	err = s.storageClient.AddPlayerIP(ctx, p.ID, request.Body.Ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add player ip: %w", err)
 	}
 
-	displayName2, err := s.computeDisplayNameV2(ctx, p)
+	displayName2, err := s.dbComputeDisplayNameV2(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute display name 2: %w", err)
 	}
 
-	go s.metrics.Write(&model.NewPlayer{PlayerId: p.Id})
+	go s.metrics.Write(&model.NewPlayer{PlayerId: p.ID})
 
-	return CreatePlayerData201JSONResponse(*playerDataToAPI(p, displayName2, false, nil)), nil
+	return CreatePlayerData201JSONResponse(*dbPlayerDataToAPI(p, displayName2, false, nil)), nil
 }
 
 func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
@@ -450,6 +445,33 @@ func playerDataToAPI(p *model.PlayerData, displayName2 DisplayNameV2, totpEnable
 	}
 }
 
+func dbPlayerDataToAPI(p *db.PlayerData, displayName2 DisplayNameV2, totpEnabled bool, hypercubeTime *time.Time) *PlayerData {
+	var settings map[string]interface{}
+	if p.Settings != nil {
+		settings = p.Settings
+	} else {
+		settings = make(map[string]interface{})
+	}
+
+	return &PlayerData{
+		Id:            p.ID,
+		Username:      p.Username,
+		DisplayNameV2: displayName2,
+		FirstJoin:     p.FirstJoin,
+		LastOnline:    p.LastOnline,
+		Playtime:      p.Playtime,
+		Settings:      settings,
+		Experience:    p.Experience,
+		BetaEnabled:   *p.BetaEnabled,
+
+		Coins:          int(p.Coins),
+		Cubits:         int(p.Cubits),
+		HypercubeUntil: hypercubeTime,
+
+		TotpEnabled: totpEnabled,
+	}
+}
+
 var (
 	orgMapNames = map[string]DisplayNameV2{
 		"b571aed9-19f4-4032-9c06-75a4b7cf6c00": {
@@ -526,6 +548,34 @@ var (
 		"media": "#cc39e9",
 	}
 )
+
+func dbPlayerToModel(p *db.PlayerData) *model.PlayerData {
+	var settings map[string]interface{}
+	if p.Settings != nil {
+		settings = p.Settings
+	} else {
+		settings = make(map[string]interface{})
+	}
+
+	return &model.PlayerData{
+		Id:             p.ID,
+		Username:       p.Username,
+		FirstJoin:      p.FirstJoin,
+		LastOnline:     p.LastOnline,
+		Playtime:       p.Playtime,
+		Settings:       settings,
+		BetaEnabled:    *p.BetaEnabled,
+		Experience:     int(p.Experience),
+		HypercubeExp:   0, // legit no idea where this comes from
+		Coins:          int(p.Coins),
+		Cubits:         int(p.Cubits),
+		LinkedAccounts: nil, // not present, separate req
+	}
+}
+
+func (s *server) dbComputeDisplayNameV2(ctx context.Context, p *db.PlayerData) (DisplayNameV2, error) {
+	return s.computeDisplayNameV2(ctx, dbPlayerToModel(p))
+}
 
 func (s *server) computeDisplayNameV2(ctx context.Context, p *model.PlayerData) (DisplayNameV2, error) {
 	var parts DisplayNameV2

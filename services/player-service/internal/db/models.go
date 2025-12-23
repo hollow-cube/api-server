@@ -16,7 +16,7 @@ type ApiKey struct {
 	DeletedAt *time.Time
 }
 
-type PlayerDatum struct {
+type PlayerData struct {
 	ID          string
 	Username    string
 	FirstJoin   time.Time
@@ -24,7 +24,7 @@ type PlayerDatum struct {
 	Playtime    int64
 	Experience  int64
 	BetaEnabled *bool
-	Settings    []byte
+	Settings    PlayerSettings
 	Coins       int64
 	Cubits      int64
 }

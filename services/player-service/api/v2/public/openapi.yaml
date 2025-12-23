@@ -18,9 +18,11 @@ paths:
                 properties:
                   totalPlayers:
                     type: integer
+                    format: int64
                     description: Total number of players
                   totalPlaytime:
                     type: integer
+                    format: int64
                     description: Total playtime in seconds
   /recap/{id}:
     get:
