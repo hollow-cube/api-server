@@ -94,3 +94,25 @@ func Tx[T any](ctx context.Context, q *Queries, fn func(ctx context.Context, que
 
 	return ret, nil
 }
+
+func TxNoReturn(ctx context.Context, q *Queries, fn func(ctx context.Context, queries *Queries) error) error {
+	pool, ok := q.db.(*pgxpool.Pool)
+	if !ok {
+		return fmt.Errorf("failed to acquire connection to postgres")
+	}
+
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(ctx, q.WithTx(tx)); err != nil {
+		return fmt.Errorf("failed to apply transaction: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}

@@ -135,7 +135,7 @@ func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
 	p, err := s.queries.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
 		}
 
@@ -158,19 +158,6 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 		dbUpdates.Playtime = &newPlaytime
 		changed = true
 	}
-	if updates.IpHistory != nil && len(*updates.IpHistory) > 0 {
-		for _, ip := range *updates.IpHistory {
-			if ip == "" {
-				continue
-			}
-
-			// todo this should really be in a transaction
-			if err = s.storageClient.AddPlayerIP(ctx, p.ID, ip); err != nil {
-				return nil, fmt.Errorf("failed to record player ip: %w", err)
-			}
-		}
-		changed = true
-	}
 	if updates.BetaEnabled != nil {
 		dbUpdates.BetaEnabled = updates.BetaEnabled
 		changed = true
@@ -182,18 +169,35 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 			changed = true
 		}
 	}
+	if err := db.TxNoReturn(ctx, s.queries, func(ctx context.Context, queries *db.Queries) error {
+		if updates.IpHistory != nil && len(*updates.IpHistory) > 0 {
+			for _, ip := range *updates.IpHistory {
+				if ip == "" {
+					continue
+				}
 
-	if !changed {
-		return UpdatePlayerData200Response{}, nil
-	}
-
-	err = s.queries.UpdatePlayerData(ctx, dbUpdates)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return PlayerNotFoundResponse{}, nil
+				if err = s.storageClient.AddPlayerIP(ctx, p.ID, ip); err != nil {
+					return fmt.Errorf("failed to record player ip: %w", err)
+				}
+			}
+			changed = true
 		}
 
-		return nil, fmt.Errorf("failed to update player data: %w", err)
+		if !changed {
+			return nil
+		}
+
+		err = queries.UpdatePlayerData(ctx, dbUpdates)
+		if err != nil {
+			return fmt.Errorf("failed to update player data: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PlayerNotFoundResponse{}, nil
+		}
+		return nil, fmt.Errorf("failed to apply transaction: %w", err)
 	}
 
 	return UpdatePlayerData200Response{}, nil
@@ -234,7 +238,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	// Load it from storage
 	p, err := s.queries.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return GetPlayerDisplayNameV2404Response{}, nil
 		}
 
@@ -417,7 +421,7 @@ func (s *server) playerDataToAPIWithName(p *model.PlayerData, err error, ctx con
 
 func (s *server) dbPlayerDataToAPIWithName(p *db.PlayerData, err error, ctx context.Context) (*PlayerData, error) { // abstracted to reduce boilerplate
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 
@@ -624,7 +628,7 @@ func dbPlayerToModel(p *db.PlayerData) *model.PlayerData {
 		HypercubeExp:   0, // legit no idea where this comes from
 		Coins:          int(p.Coins),
 		Cubits:         int(p.Cubits),
-		LinkedAccounts: nil, // not present, separate req
+		LinkedAccounts: nil, // not present, separate req, not needed where this is used
 	}
 }
 
