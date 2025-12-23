@@ -23,10 +23,6 @@ type contextKey string
 type Client interface {
 	RunTransaction(ctx context.Context, f func(ctx context.Context) error) error
 
-	CountPlayerStats(ctx context.Context) (int, int, error)
-	CreatePlayerData(ctx context.Context, p *model.PlayerData) error
-	GetPlayerData(ctx context.Context, id string) (*model.PlayerData, error)
-	UpdatePlayerData(ctx context.Context, p *model.PlayerData) error
 	AddExperience(ctx context.Context, id string, amount int) (int, error)
 	GetPlayerBackpack(ctx context.Context, playerId string) (model.PlayerBackpack, error)
 

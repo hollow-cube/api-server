@@ -13,6 +13,8 @@ sql:
         emit_pointers_for_null_types: true
         omit_unused_structs: true
         query_parameter_limit: 3
+        rename:
+          player_datum: "PlayerData" # SQLC will use PlayerDatum as the struct name by default, as it's the singular of data
         overrides:
           - db_type: "timestamptz"
             go_type: "time.Time"
@@ -28,6 +30,11 @@ sql:
             go_type: "string"
           - db_type: "pg_catalog.varchar"
             go_type: "string"
+          - column: "player_data.settings"
+            nullable: true
+            go_type:
+              type: "PlayerSettings"
+              pointer: false
 
     strict_function_checks: true
     strict_order_by: true

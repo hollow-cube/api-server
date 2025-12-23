@@ -25,11 +25,10 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 		}}, nil
 	}
 
-	_, err := s.queries.LookupPlayerById(ctx, request.Body.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		return PlayerNotFoundResponse{}, nil
-	} else if err != nil {
+	if pExists, err := s.queries.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
+	} else if !pExists {
+		return PlayerNotFoundResponse{}, nil
 	}
 
 	meta := map[string]interface{}{}
@@ -59,11 +58,10 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 
 func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		return PlayerNotFoundResponse{}, nil
-	} else if err != nil {
+	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
+	} else if !pExists {
+		return PlayerNotFoundResponse{}, nil
 	}
 
 	meta := map[string]interface{}{"cosmetic": request.Body.CosmeticId, "raw": request.Body}
@@ -88,7 +86,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 	}
 
 	// Do all the updates as a transaction
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
+	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
 		if request.Body.Coins != nil && *request.Body.Coins > 0 {
 			newCoins, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Coins,
 				-*request.Body.Coins, model.BalanceChangeReasonBuyCosmetic, meta)
@@ -122,7 +120,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 		}
 
 		// Finally, actually add the cosmetic
-		err = s.storageClient.UnlockCosmetic(ctx, request.PlayerId, request.Body.CosmeticId)
+		err := s.storageClient.UnlockCosmetic(ctx, request.PlayerId, request.Body.CosmeticId)
 		if err != nil {
 			return fmt.Errorf("failed to unlock cosmetic: %w", err)
 		}
@@ -147,11 +145,10 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 
 func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		return PlayerNotFoundResponse{}, nil
-	} else if err != nil {
+	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
+	} else if !pExists {
+		return PlayerNotFoundResponse{}, nil
 	}
 
 	var backpackUpdate model.PlayerBackpack
@@ -170,7 +167,7 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 	newState := PlayerInventory{}
 
 	// Do all the updates as a transaction
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
+	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
 		if request.Body.Change.Coins != nil && *request.Body.Change.Coins > 0 {
 			newCoins, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Coins, *request.Body.Change.Coins, model.BalanceChangeReasonGiveItemGeneric, request.Body.TxMeta)
 			if errors.Is(err, storage.ErrBalanceTooLow) {
@@ -245,11 +242,10 @@ func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHyperc
 
 func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	_, err := s.queries.LookupPlayerById(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		return PlayerNotFoundResponse{}, nil
-	} else if err != nil {
+	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
+	} else if !pExists {
+		return PlayerNotFoundResponse{}, nil
 	}
 
 	meta := map[string]interface{}{"upgrade": request.Body.UpgradeId, "raw": request.Body}
@@ -262,10 +258,10 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 
 	// We need to update SpiceDB, so we apply the change as a 2-phase commit
 
-	if err = s.authzClient.UnlockUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); err != nil { // 2pc: Update SpiceDB
+	if err := s.authzClient.UnlockUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); err != nil { // 2pc: Update SpiceDB
 		return nil, fmt.Errorf("failed to unlock upgrade: %w", err)
 	}
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error { // 2pc: Begin transaction
+	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error { // 2pc: Begin transaction
 
 		if request.Body.Cubits != nil && *request.Body.Cubits > 0 {
 			newCubits, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Cubits, -*request.Body.Cubits,

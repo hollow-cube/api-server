@@ -8,6 +8,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/totp"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
+	"github.com/jackc/pgx/v5"
 	"github.com/skip2/go-qrcode"
 )
 
@@ -37,8 +38,8 @@ func (s *server) CheckTotp(ctx context.Context, request CheckTotpRequestObject) 
 }
 
 func (s *server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupRequestObject) (BeginTotpSetupResponseObject, error) {
-	pd, err := s.storageClient.GetPlayerData(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
+	pd, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return BeginTotpSetup404Response{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to read player data: %w", err)

@@ -7,17 +7,30 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
-const getPlayerData = `-- name: GetPlayerData :one
-select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
-from player_data
-where id = $1 limit 1
+const createPlayerData = `-- name: CreatePlayerData :one
+insert into public.player_data (id, username, first_join, last_online)
+values ($1, $2, $3, $4)
+RETURNING id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
 `
 
-func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerDatum, error) {
-	row := q.db.QueryRow(ctx, getPlayerData, id)
-	var i PlayerDatum
+type CreatePlayerDataParams struct {
+	ID         string
+	Username   string
+	FirstJoin  time.Time
+	LastOnline time.Time
+}
+
+func (q *Queries) CreatePlayerData(ctx context.Context, arg CreatePlayerDataParams) (*PlayerData, error) {
+	row := q.db.QueryRow(ctx, createPlayerData,
+		arg.ID,
+		arg.Username,
+		arg.FirstJoin,
+		arg.LastOnline,
+	)
+	var i PlayerData
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -33,16 +46,46 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerDatum, e
 	return &i, err
 }
 
-const lookupPlayerById = `-- name: LookupPlayerById :one
-select id
+const getPlayerData = `-- name: GetPlayerData :one
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
 from public.player_data
 where id = $1
+limit 1
 `
 
-func (q *Queries) LookupPlayerById(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, lookupPlayerById, id)
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerData, error) {
+	row := q.db.QueryRow(ctx, getPlayerData, id)
+	var i PlayerData
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.FirstJoin,
+		&i.LastOnline,
+		&i.Playtime,
+		&i.Experience,
+		&i.BetaEnabled,
+		&i.Settings,
+		&i.Coins,
+		&i.Cubits,
+	)
+	return &i, err
+}
+
+const getPlayerStats = `-- name: GetPlayerStats :one
+select count(*), sum(playtime)
+from public.player_data
+`
+
+type GetPlayerStatsRow struct {
+	Count int64
+	Sum   int64
+}
+
+func (q *Queries) GetPlayerStats(ctx context.Context) (*GetPlayerStatsRow, error) {
+	row := q.db.QueryRow(ctx, getPlayerStats)
+	var i GetPlayerStatsRow
+	err := row.Scan(&i.Count, &i.Sum)
+	return &i, err
 }
 
 const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
@@ -70,4 +113,49 @@ func (q *Queries) LookupPlayerByUsername(ctx context.Context, lower string) (str
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const playerExistsById = `-- name: PlayerExistsById :one
+SELECT exists (SELECT 1
+               FROM public.player_data
+               WHERE id = $1)
+`
+
+func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, playerExistsById, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const updatePlayerData = `-- name: UpdatePlayerData :exec
+UPDATE public.player_data
+SET
+    username     = COALESCE($2, username),
+    last_online  = COALESCE($3, last_online),
+    playtime     = COALESCE($4, playtime),
+    beta_enabled = COALESCE($5, beta_enabled),
+    settings     = COALESCE($6, settings)
+WHERE id = $1
+`
+
+type UpdatePlayerDataParams struct {
+	ID          string
+	Username    *string
+	LastOnline  *time.Time
+	Playtime    *int64
+	BetaEnabled *bool
+	Settings    PlayerSettings
+}
+
+func (q *Queries) UpdatePlayerData(ctx context.Context, arg UpdatePlayerDataParams) error {
+	_, err := q.db.Exec(ctx, updatePlayerData,
+		arg.ID,
+		arg.Username,
+		arg.LastOnline,
+		arg.Playtime,
+		arg.BetaEnabled,
+		arg.Settings,
+	)
+	return err
 }

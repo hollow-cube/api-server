@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -20,12 +21,14 @@ type ServerParams struct {
 	fx.In
 
 	Log     *zap.SugaredLogger
+	Queries *db.Queries
 	Storage storage.Client
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:           params.Log.With("handler", "public"),
+		queries:       params.Queries,
 		storageClient: params.Storage,
 	}, nil
 }
@@ -33,6 +36,7 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 type server struct {
 	log *zap.SugaredLogger
 
+	queries       *db.Queries
 	storageClient storage.Client
 
 	cachedTotalPlayers, cachedTotalPlaytime int
@@ -41,12 +45,17 @@ type server struct {
 
 func (s *server) GetPublicStats(ctx context.Context, _ GetPublicStatsRequestObject) (GetPublicStatsResponseObject, error) {
 	if s.cachedTotalsLastUpdated == nil || time.Since(*s.cachedTotalsLastUpdated) > 5*time.Minute {
-		var err error
-		s.cachedTotalPlayers, s.cachedTotalPlaytime, err = s.storageClient.CountPlayerStats(ctx)
+		result, err := s.queries.GetPlayerStats(ctx)
 		if err != nil {
 			s.log.Errorw("failed to get player stats", "error", err)
 			return nil, err
 		}
+
+		s.cachedTotalPlayers = int(result.Count)
+		// int64 is probably fine here:
+		// 2.56204778e12 hours total possible (divided since we store in ms)
+		// An average of 500 hours of playtime would accommodate 5,124,095,560 unique players
+		s.cachedTotalPlaytime = int(result.Sum)
 
 		now := time.Now()
 		s.cachedTotalsLastUpdated = &now
