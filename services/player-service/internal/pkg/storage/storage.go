@@ -23,13 +23,7 @@ type contextKey string
 type Client interface {
 	RunTransaction(ctx context.Context, f func(ctx context.Context) error) error
 
-	AddExperience(ctx context.Context, id string, amount int) (int, error)
 	GetPlayerBackpack(ctx context.Context, playerId string) (model.PlayerBackpack, error)
-
-	AddPlayerIP(ctx context.Context, playerId string, ip string) error
-	// GetPlayerIPs returns the IP addresses used by the player ordered from most recent to oldest.
-	GetPlayerIPs(ctx context.Context, playerId string) ([]string, error)
-	GetPlayersByIPs(ctx context.Context, ips []string) ([]*model.PlayerData, error)
 
 	// TOTP
 	GetTOTP(ctx context.Context, playerId string) (*totp.Config, error)

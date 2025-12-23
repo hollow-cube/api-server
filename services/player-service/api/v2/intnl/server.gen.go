@@ -106,7 +106,7 @@ type PlayerInventory struct {
 	Backpack *map[string]interface{} `json:"backpack,omitempty"`
 	Coins    *int                    `json:"coins,omitempty"`
 	Cubits   *int                    `json:"cubits,omitempty"`
-	Exp      *int                    `json:"exp,omitempty"`
+	Exp      *int64                  `json:"exp,omitempty"`
 }
 
 // PlayerSettings defines model for PlayerSettings.

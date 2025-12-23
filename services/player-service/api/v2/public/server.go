@@ -21,14 +21,14 @@ type ServerParams struct {
 	fx.In
 
 	Log     *zap.SugaredLogger
-	Queries *db.Queries
+	Store   *db.Store
 	Storage storage.Client
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:           params.Log.With("handler", "public"),
-		queries:       params.Queries,
+		store:         params.Store,
 		storageClient: params.Storage,
 	}, nil
 }
@@ -36,7 +36,7 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 type server struct {
 	log *zap.SugaredLogger
 
-	queries       *db.Queries
+	store         *db.Store
 	storageClient storage.Client
 
 	cachedTotalPlayers, cachedTotalPlaytime int
@@ -45,7 +45,7 @@ type server struct {
 
 func (s *server) GetPublicStats(ctx context.Context, _ GetPublicStatsRequestObject) (GetPublicStatsResponseObject, error) {
 	if s.cachedTotalsLastUpdated == nil || time.Since(*s.cachedTotalsLastUpdated) > 5*time.Minute {
-		result, err := s.queries.GetPlayerStats(ctx)
+		result, err := s.store.GetPlayerStats(ctx)
 		if err != nil {
 			s.log.Errorw("failed to get player stats", "error", err)
 			return nil, err

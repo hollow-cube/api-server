@@ -63,7 +63,7 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 	}
 
 	// Ensure the player exists already - they always should so error if not as they must have logged into the server before.
-	if pExists, err := s.queries.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
+	if pExists, err := s.store.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	} else if !pExists {
 		s.log.Warnw("player attempted to link discord account but does not exist", "playerId", request.Body.PlayerId, "discordId", rep.UserID)

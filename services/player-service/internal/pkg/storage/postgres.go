@@ -131,29 +131,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 	return nil
 }
 
-func (c *PostgresClient) AddExperience(ctx context.Context, id string, amount int) (int, error) {
-	const query = `
-		update public.player_data 
-		set experience = experience + $2 
-		where id = $1 and experience + $2 >= 0 
-		returning experience;
-	`
-
-	var newExperience int
-	err := c.safeQueryRow(ctx, query, id, amount).Scan(&newExperience)
-	if err != nil {
-		return 0, err
-	}
-
-	go c.metrics.Write(&model.ExpChanged{
-		PlayerId: id,
-		Delta:    amount,
-		NewValue: newExperience,
-	})
-
-	return newExperience, nil
-}
-
 var backpackSelect string
 
 func init() {
@@ -190,51 +167,6 @@ func (c *PostgresClient) GetPlayerBackpack(ctx context.Context, playerId string)
 		result[item] = *quantities[i]
 	}
 	return result, nil
-}
-
-func (c *PostgresClient) AddPlayerIP(ctx context.Context, playerId string, ip string) error {
-	query := psql.Insert("ip_history").
-		Columns("player_id", "address", "first_seen", "last_seen", "seen_count").
-		Values(playerId, ip, time.Now(), time.Now(), 1).
-		Suffix("on conflict (player_id, address) do update set last_seen = excluded.last_seen, seen_count = ip_history.seen_count + 1;")
-
-	return c.safeExec3(ctx, query)
-}
-
-func (c *PostgresClient) GetPlayerIPs(ctx context.Context, playerId string) ([]string, error) {
-	const query = `
-		select address from public.ip_history
-		where player_id = $1 order by last_seen desc;
-	`
-
-	rows, err := c.pool.Query(ctx, query, playerId)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return []string{}, err
-	} else if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := make([]string, 0, 10)
-	for rows.Next() {
-		var ip string
-		if err := rows.Scan(&ip); err != nil {
-			return nil, err
-		}
-		result = append(result, ip)
-	}
-
-	return result, nil
-}
-
-func (c *PostgresClient) GetPlayersByIPs(ctx context.Context, ips []string) ([]*model.PlayerData, error) {
-	query := psql.Select(playerDataColumns...).
-		From("ip_history").
-		InnerJoin("player_data pd ON ip_history.player_id = pd.id").
-		Where(sq.Expr("address = ANY(?)", ips)).
-		GroupBy("pd.id")
-
-	return queryFunc2(ctx, c.pool, playerDataScanFunc, query)
 }
 
 func (c *PostgresClient) LookupPlayerDataBySocial(ctx context.Context, id string, platform string) (*model.PlayerData, error) {

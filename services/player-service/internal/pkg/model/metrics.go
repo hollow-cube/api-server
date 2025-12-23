@@ -18,8 +18,8 @@ type CubitBalanceChanged struct {
 
 type ExpChanged struct {
 	PlayerId string `mapstructure:"player_id"`
-	Delta    int    `mapstructure:"delta"`
-	NewValue int    `mapstructure:"new_value"`
+	Delta    int64  `mapstructure:"delta"`
+	NewValue int64  `mapstructure:"new_value"`
 }
 
 type BackpackEntryChanged struct {

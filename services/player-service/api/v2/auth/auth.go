@@ -24,16 +24,16 @@ const ApiKeyPrefix = "sk-hc-"
 type ServerParams struct {
 	fx.In
 
-	Queries *db.Queries
+	Store *db.Store
 }
 
 type Server struct {
-	queries *db.Queries
+	store *db.Store
 }
 
 func NewServer(params ServerParams) *Server {
 	return &Server{
-		queries: params.Queries,
+		store: params.Store,
 	}
 }
 
@@ -42,7 +42,7 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 
 	var apiKey *db.ApiKey
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
-		apiKey, err = s.queries.GetApiKeyByHash(ctx, apiKeyStr[len(ApiKeyPrefix):])
+		apiKey, err = s.store.GetApiKeyByHash(ctx, apiKeyStr[len(ApiKeyPrefix):])
 		if err != nil && !errors.Is(err, db.ErrNoRows) {
 			return nil, err
 		}

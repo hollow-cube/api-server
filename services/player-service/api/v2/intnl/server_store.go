@@ -25,7 +25,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 		}}, nil
 	}
 
-	if pExists, err := s.queries.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
+	if pExists, err := s.store.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	} else if !pExists {
 		return PlayerNotFoundResponse{}, nil
@@ -58,7 +58,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 
 func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
+	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	} else if !pExists {
 		return PlayerNotFoundResponse{}, nil
@@ -145,7 +145,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 
 func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
+	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	} else if !pExists {
 		return PlayerNotFoundResponse{}, nil
@@ -189,7 +189,7 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 		}
 
 		if request.Body.Change.Exp != nil && *request.Body.Change.Exp > 0 {
-			newExp, err := s.storageClient.AddExperience(ctx, request.PlayerId, *request.Body.Change.Exp)
+			newExp, err := s.store.AddExperience(ctx, request.PlayerId, *request.Body.Change.Exp)
 			if err != nil {
 				return fmt.Errorf("failed to add experience: %w", err)
 			}
@@ -242,7 +242,7 @@ func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHyperc
 
 func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
-	if pExists, err := s.queries.PlayerExistsById(ctx, request.PlayerId); err != nil {
+	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	} else if !pExists {
 		return PlayerNotFoundResponse{}, nil
@@ -298,11 +298,11 @@ func (s *server) TebexCheckout(ctx context.Context, request TebexCheckoutRequest
 		return nil, fmt.Errorf("invalid package: %s", request.Body.Package)
 	}
 
-	playerId, err := s.queries.LookupPlayerByUsername(ctx, request.Body.Username)
+	playerId, err := s.store.LookupPlayerByUsername(ctx, request.Body.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	}
-	ips, err := s.storageClient.GetPlayerIPs(ctx, playerId)
+	ips, err := s.store.GetPlayerIPHistory(ctx, playerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get player ips: %w", err)
 	} else if len(ips) == 0 {

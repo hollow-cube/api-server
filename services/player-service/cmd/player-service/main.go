@@ -156,18 +156,18 @@ func newStoragePostgres(conf *config.Config, lc fx.Lifecycle, metrics metric.Wri
 	return c, nil
 }
 
-func newStoragePostgresV2(conf *config.Config, lc fx.Lifecycle) (*db.Queries, error) {
+func newStoragePostgresV2(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*db.Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	queries, pool, err := db.NewQuerySet(ctx, conf.Postgres.URI)
+	store, pool, err := db.NewQuerySet(ctx, metrics, conf.Postgres.URI)
 	if err != nil {
 		return nil, err
 	}
 
 	lc.Append(fx.StopHook(pool.Close))
 
-	return queries, nil
+	return store, nil
 }
 
 func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {

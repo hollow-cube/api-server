@@ -900,7 +900,9 @@ components:
       properties:
         coins: { type: integer }
         cubits: { type: integer }
-        exp: { type: integer }
+        exp:
+          type: integer
+          format: int64
         backpack:
           type: object
           additionalProperties: true

@@ -129,14 +129,13 @@ func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error)
 }
 
 const updatePlayerData = `-- name: UpdatePlayerData :exec
-UPDATE public.player_data
-SET
-    username     = COALESCE($2, username),
+update public.player_data
+set username     = COALESCE($2, username),
     last_online  = COALESCE($3, last_online),
     playtime     = COALESCE($4, playtime),
     beta_enabled = COALESCE($5, beta_enabled),
     settings     = COALESCE($6, settings)
-WHERE id = $1
+where id = $1
 `
 
 type UpdatePlayerDataParams struct {
@@ -158,4 +157,19 @@ func (q *Queries) UpdatePlayerData(ctx context.Context, arg UpdatePlayerDataPara
 		arg.Settings,
 	)
 	return err
+}
+
+const addExperience = `-- name: addExperience :one
+update public.player_data
+set experience = experience + $2
+where id = $1
+  and experience + $2 >= 0
+returning experience as exp
+`
+
+func (q *Queries) addExperience(ctx context.Context, iD string, experience int64) (int64, error) {
+	row := q.db.QueryRow(ctx, addExperience, iD, experience)
+	var exp int64
+	err := row.Scan(&exp)
+	return exp, err
 }

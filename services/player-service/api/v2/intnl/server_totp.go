@@ -38,7 +38,7 @@ func (s *server) CheckTotp(ctx context.Context, request CheckTotpRequestObject) 
 }
 
 func (s *server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupRequestObject) (BeginTotpSetupResponseObject, error) {
-	pd, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BeginTotpSetup404Response{}, nil
 	} else if err != nil {

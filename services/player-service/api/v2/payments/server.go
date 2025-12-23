@@ -43,7 +43,7 @@ type ServerParams struct {
 	ReaderFactory wkafka.ReaderFactory
 	Producer      wkafka.SyncWriter
 	Storage       storage.Client
-	Queries       *db.Queries
+	Store         *db.Store
 	Authz         authz.Client
 	Posthog       posthog.Client
 }
@@ -64,7 +64,7 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		tebexSecret:   []byte(tebexSecret),
 		producer:      params.Producer,
 		storageClient: params.Storage,
-		queries:       params.Queries,
+		store:         params.Store,
 		authClient:    params.Authz,
 		posthog:       params.Posthog,
 	}
@@ -99,7 +99,7 @@ type server struct {
 
 	producer      wkafka.SyncWriter
 	storageClient storage.Client
-	queries       *db.Queries
+	store         *db.Store
 	authClient    authz.Client
 	posthog       posthog.Client
 }

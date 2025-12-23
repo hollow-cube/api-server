@@ -39,7 +39,7 @@ type ServerParams struct {
 	TBHeadless *tebex.HeadlessClient
 
 	Storage           storage.Client
-	Queries           *db.Queries
+	Store             *db.Store
 	Authz             authz.Client
 	PunishmentLadders map[string]*model.PunishmentLadder
 }
@@ -68,7 +68,7 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
 		storageClient:     p.Storage,
-		queries:           p.Queries,
+		store:             p.Store,
 		authzClient:       p.Authz,
 		producer:          p.Producer,
 		tbHeadless:        p.TBHeadless,
@@ -83,7 +83,7 @@ type server struct {
 	metrics metric.Writer
 
 	storageClient storage.Client
-	queries       *db.Queries
+	store         *db.Store
 	authzClient   authz.Client
 	producer      wkafka.Writer
 	tbHeadless    *tebex.HeadlessClient
@@ -96,7 +96,7 @@ type server struct {
 }
 
 func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
-	p, err := s.queries.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
+	p, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
 	apiPlayer, err := s.dbPlayerDataToAPIWithName(p, err, ctx)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 
 func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
 	now := time.Now()
-	p, err := s.queries.CreatePlayerData(ctx, db.CreatePlayerDataParams{
+	p, err := s.store.CreatePlayerData(ctx, db.CreatePlayerDataParams{
 		ID:         request.Body.Id,
 		Username:   request.Body.Username,
 		FirstJoin:  now,
@@ -118,7 +118,7 @@ func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 		return nil, fmt.Errorf("failed to create player data: %w", err)
 	}
 
-	err = s.storageClient.AddPlayerIP(ctx, p.ID, request.Body.Ip)
+	err = s.store.AddPlayerIP(ctx, p.ID, request.Body.Ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add player ip: %w", err)
 	}
@@ -134,7 +134,7 @@ func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 }
 
 func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
-	p, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
@@ -170,14 +170,14 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 			changed = true
 		}
 	}
-	if err := db.TxNoReturn(ctx, s.queries, func(ctx context.Context, queries *db.Queries) error {
+	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
 		if updates.IpHistory != nil && len(*updates.IpHistory) > 0 {
 			for _, ip := range *updates.IpHistory {
 				if ip == "" {
 					continue
 				}
 
-				if err = s.storageClient.AddPlayerIP(ctx, p.ID, ip); err != nil {
+				if err = txStore.AddPlayerIP(ctx, p.ID, ip); err != nil {
 					return fmt.Errorf("failed to record player ip: %w", err)
 				}
 			}
@@ -188,7 +188,7 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 			return nil
 		}
 
-		err = queries.UpdatePlayerData(ctx, dbUpdates)
+		err = txStore.UpdatePlayerData(ctx, dbUpdates)
 		if err != nil {
 			return fmt.Errorf("failed to update player data: %w", err)
 		}
@@ -237,7 +237,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	}
 
 	// Load it from storage
-	p, err := s.queries.GetPlayerData(ctx, request.PlayerId)
+	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return GetPlayerDisplayNameV2404Response{}, nil
@@ -254,25 +254,25 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 }
 
 func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error) {
-	playerIPs, err := s.storageClient.GetPlayerIPs(ctx, request.PlayerId)
+	playerIPs, err := s.store.GetPlayerIPHistory(ctx, request.PlayerId)
 	if err != nil {
 		return nil, err
 	}
 
-	sharedPlayers, err := s.storageClient.GetPlayersByIPs(ctx, playerIPs)
+	sharedPlayers, err := s.store.GetPlayersByIPs(ctx, playerIPs)
 	if err != nil {
 		return nil, err
 	}
 
 	results := make([]PlayerAltsItem, 0, 10)
-	for _, player := range sharedPlayers {
-		if player.Id == request.PlayerId {
+	for _, row := range sharedPlayers {
+		if row.ID == request.PlayerId {
 			continue
 		}
 
 		results = append(results, PlayerAltsItem{
-			Id:       player.Id,
-			Username: player.Username,
+			Id:       row.ID,
+			Username: row.Username,
 		})
 	}
 
@@ -280,15 +280,15 @@ func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequest
 }
 
 func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
-	res, err := db.Tx(ctx, s.queries, func(ctx context.Context, queries *db.Queries) (*CyclePlayerApiKey200JSONResponse, error) {
-		_, err := queries.GetPlayerData(ctx, request.PlayerId)
+	res, err := db.Tx(ctx, s.store, func(ctx context.Context, txStore *db.Store) (*CyclePlayerApiKey200JSONResponse, error) {
+		_, err := txStore.GetPlayerData(ctx, request.PlayerId)
 		if errors.Is(err, db.ErrNoRows) {
 			return nil, nil
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to get player data: %w", err)
 		}
 
-		err = queries.DeleteAllApiKeys(ctx, request.PlayerId)
+		err = txStore.DeleteAllApiKeys(ctx, request.PlayerId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete existing api keys: %w", err)
 		}
@@ -298,7 +298,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 			return nil, fmt.Errorf("failed to generate api key: %w", err)
 		}
 
-		err = queries.InsertApiKey(ctx, hash, request.PlayerId)
+		err = txStore.InsertApiKey(ctx, hash, request.PlayerId)
 		return &CyclePlayerApiKey200JSONResponse{
 			ApiKey: key,
 		}, err
@@ -312,7 +312,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 }
 
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
-	pid, err := s.queries.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
+	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
@@ -540,60 +540,60 @@ var (
 	}
 	hardcodedBadges = map[string]string{
 		/* notmattw */ "aceb326f-da15-45bc-bf2f-11940c21780c": "dev_3",
-		/* Ontal */ "ed017f08-fd89-46e2-bba0-495686319801":    "mod_3",
-		/* SethPRG */ "a3634428-40a0-45b3-8583-a3b5813d64c5":  "ct_3",
-		/* Tamto */ "b6496267-8dfe-485c-982f-85871ae4cbe4":    "ct_3",
+		/* Ontal */ "ed017f08-fd89-46e2-bba0-495686319801": "mod_3",
+		/* SethPRG */ "a3634428-40a0-45b3-8583-a3b5813d64c5": "ct_3",
+		/* Tamto */ "b6496267-8dfe-485c-982f-85871ae4cbe4": "ct_3",
 
-		/* ArcaneWarrior */ "3e66e238-ec72-49bb-b9dc-6a8a83d0aae6":  "dev_2",
-		/* cosrnic */ "702c7a80-bf6f-4fa8-b079-f7931b0ff2f6":        "dev_2",
-		/* Kha0x */ "f36ce582-48a9-42b8-9956-b883224f9dc0":          "mod_2",
-		/* YouAreRexist */ "b0045e0e-bb24-424b-b6d0-a64e1d7a73a1":   "mod_2",
-		/* dude_guy_boy */ "82452dc0-fa2b-42ad-acf3-5236c2afeba4":   "mod_2",
-		/* caseyclosed */ "d921706f-ba93-4ebb-a0a3-14fbbe6cbead":    "mod_2",
-		/* chilee */ "849f5535-5e30-4dce-bc2f-6dba16573eb9":         "mod_2",
-		/* Salad_Cadabra */ "695c36e2-d650-498e-961a-473794296e65":  "ct_2",
-		/* Ossipago1 */ "47cc8695-2681-4dcd-b772-7eeb8d69c09b":      "ct_2",
-		/* ThatGravyBoat */ "503450fc-72c2-4e87-8243-94e264977437":  "dev_2",
-		/* JakeMT04 */ "d9ac68bc-886a-4669-8c7b-d3dc5bf373df":       "dev_2",
-		/* M1lkys */ "3b5b3f6b-865b-4995-850e-68949836435f":         "mod_2",
-		/* Expectational */ "8d36737e-1c0a-4a71-87de-9906f577845e":  "dev_2",
-		/* ThatOneLance */ "212a971c-82fd-47e9-95e7-ddca39781b47":   "ct_1",
-		/* dgdteftw */ "6681431c-19b7-4e90-a5cb-57f9e724f2b0":       "ct_1",
-		/* Tado */ "9eeb4bdb-4bce-4cfb-b221-02f790d69600":           "ct_2",
-		/* FritzAngelos */ "4ea0db0e-626f-4030-ac40-05455ed06963":   "ct_2",
-		/* deopixel */ "4066a491-ee59-4561-bdef-efd15bf41eef":       "ct_2",
-		/* Knubby */ "1d8093b3-520c-4be9-8cc0-426e7e539f27":         "mod_2",
-		/* BeaverMon */ "dd95b882-1dcc-4b8a-b427-c7c080df2dd8":      "ct_1",
+		/* ArcaneWarrior */ "3e66e238-ec72-49bb-b9dc-6a8a83d0aae6": "dev_2",
+		/* cosrnic */ "702c7a80-bf6f-4fa8-b079-f7931b0ff2f6": "dev_2",
+		/* Kha0x */ "f36ce582-48a9-42b8-9956-b883224f9dc0": "mod_2",
+		/* YouAreRexist */ "b0045e0e-bb24-424b-b6d0-a64e1d7a73a1": "mod_2",
+		/* dude_guy_boy */ "82452dc0-fa2b-42ad-acf3-5236c2afeba4": "mod_2",
+		/* caseyclosed */ "d921706f-ba93-4ebb-a0a3-14fbbe6cbead": "mod_2",
+		/* chilee */ "849f5535-5e30-4dce-bc2f-6dba16573eb9": "mod_2",
+		/* Salad_Cadabra */ "695c36e2-d650-498e-961a-473794296e65": "ct_2",
+		/* Ossipago1 */ "47cc8695-2681-4dcd-b772-7eeb8d69c09b": "ct_2",
+		/* ThatGravyBoat */ "503450fc-72c2-4e87-8243-94e264977437": "dev_2",
+		/* JakeMT04 */ "d9ac68bc-886a-4669-8c7b-d3dc5bf373df": "dev_2",
+		/* M1lkys */ "3b5b3f6b-865b-4995-850e-68949836435f": "mod_2",
+		/* Expectational */ "8d36737e-1c0a-4a71-87de-9906f577845e": "dev_2",
+		/* ThatOneLance */ "212a971c-82fd-47e9-95e7-ddca39781b47": "ct_1",
+		/* dgdteftw */ "6681431c-19b7-4e90-a5cb-57f9e724f2b0": "ct_1",
+		/* Tado */ "9eeb4bdb-4bce-4cfb-b221-02f790d69600": "ct_2",
+		/* FritzAngelos */ "4ea0db0e-626f-4030-ac40-05455ed06963": "ct_2",
+		/* deopixel */ "4066a491-ee59-4561-bdef-efd15bf41eef": "ct_2",
+		/* Knubby */ "1d8093b3-520c-4be9-8cc0-426e7e539f27": "mod_2",
+		/* BeaverMon */ "dd95b882-1dcc-4b8a-b427-c7c080df2dd8": "ct_1",
 		/* ashfromupthere */ "c77ae0a8-19fb-46d8-be79-e7cc3d1b0dcb": "ct_2",
-		/* NautikSM */ "6863b7e9-6a65-4e2a-9142-23fa99504578":       "mod_2",
-		/* justcat_ */ "a894acf4-1080-4232-8375-b1e7d2d7fabb":       "mod_2",
-		/* meoworawr */ "e90ea9ec-080a-401b-8d10-6a53c407ac53":      "dev_2",
-		/* Devilsta */ "e7b2bef3-7c97-4446-9657-fdbf4f09a0fd":       "mod_2",
-		/* kimoi_ */ "8df33c65-09a3-4d89-8096-d220ec97a416":         "mod_2",
-		/* xLaurenRose */ "090c4e2a-37ff-4fae-88bb-c4de51c37776":    "mod_2",
-		/* TuxedoLemon */ "e7a98851-920a-49cc-a644-a880f638d14e":    "mod_2",
-		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56":         "ct_1",
-		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c":        "ct_1",
-		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee":        "ct_1",
-		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f":         "ct_1",
+		/* NautikSM */ "6863b7e9-6a65-4e2a-9142-23fa99504578": "mod_2",
+		/* justcat_ */ "a894acf4-1080-4232-8375-b1e7d2d7fabb": "mod_2",
+		/* meoworawr */ "e90ea9ec-080a-401b-8d10-6a53c407ac53": "dev_2",
+		/* Devilsta */ "e7b2bef3-7c97-4446-9657-fdbf4f09a0fd": "mod_2",
+		/* kimoi_ */ "8df33c65-09a3-4d89-8096-d220ec97a416": "mod_2",
+		/* xLaurenRose */ "090c4e2a-37ff-4fae-88bb-c4de51c37776": "mod_2",
+		/* TuxedoLemon */ "e7a98851-920a-49cc-a644-a880f638d14e": "mod_2",
+		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56": "ct_1",
+		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",
+		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",
+		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f": "ct_1",
 
-		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d":   "media",
+		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d": "media",
 		/* SandwichLord_ */ "1e2bf44f-122f-4960-a62d-7da9609f52e7": "media",
-		/* fruitberries */ "4d2eb015-44af-45ae-9a2c-a6a7bcbae7a4":  "media",
-		/* iTMG */ "3e5ef799-73bc-44fb-a279-b015c4fb4c84":          "media",
-		/* Feinberg */ "9a8e24df-4c85-49d6-96a6-951da84fa5c4":      "media",
-		/* dasnerth */ "82c13d8a-6157-49ae-b66f-85deeaf2e54c":      "media",
-		/* Antfrost */ "0a28b182-9fb3-4d6e-bd96-fabd2fe6648a":      "media",
-		/* SlushieVRC */ "3f1561ed-1e33-4269-96e6-770efe13c150":    "media",
-		/* Kaelan_ */ "f0b2acfc-60ca-42e4-b7a4-640bf8ab2dd4":       "media",
-		/* AntVenom */ "0c063bfd-3521-413d-a766-50be1d71f00e":      "media",
-		/* HanabiYaki */ "7952495b-6a93-4e81-8dd0-2e282a68f732":    "media",
-		/* Evbo_ */ "c08ad74b-ad0b-44b5-8d1b-594d790edfb3":         "media",
-		/* Purpled */ "1218cdf3-52bd-4e18-ba24-d4b202ec85f3":       "media",
-		/* Infume */ "a54e3bc4-c635-4b07-a236-b81efbcfe791":        "media",
-		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26":       "media",
-		/* Greninja */ "ac38802e-9eb0-4fb2-ad79-739796e8c5d6":      "media",
-		/* Picobit */ "e89da8ad-4211-4bc0-9a45-746fdb535309":       "media",
+		/* fruitberries */ "4d2eb015-44af-45ae-9a2c-a6a7bcbae7a4": "media",
+		/* iTMG */ "3e5ef799-73bc-44fb-a279-b015c4fb4c84": "media",
+		/* Feinberg */ "9a8e24df-4c85-49d6-96a6-951da84fa5c4": "media",
+		/* dasnerth */ "82c13d8a-6157-49ae-b66f-85deeaf2e54c": "media",
+		/* Antfrost */ "0a28b182-9fb3-4d6e-bd96-fabd2fe6648a": "media",
+		/* SlushieVRC */ "3f1561ed-1e33-4269-96e6-770efe13c150": "media",
+		/* Kaelan_ */ "f0b2acfc-60ca-42e4-b7a4-640bf8ab2dd4": "media",
+		/* AntVenom */ "0c063bfd-3521-413d-a766-50be1d71f00e": "media",
+		/* HanabiYaki */ "7952495b-6a93-4e81-8dd0-2e282a68f732": "media",
+		/* Evbo_ */ "c08ad74b-ad0b-44b5-8d1b-594d790edfb3": "media",
+		/* Purpled */ "1218cdf3-52bd-4e18-ba24-d4b202ec85f3": "media",
+		/* Infume */ "a54e3bc4-c635-4b07-a236-b81efbcfe791": "media",
+		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26": "media",
+		/* Greninja */ "ac38802e-9eb0-4fb2-ad79-739796e8c5d6": "media",
+		/* Picobit */ "e89da8ad-4211-4bc0-9a45-746fdb535309": "media",
 	}
 	hardcodedColors = map[string]string{
 		"dev_3": "#fa4141",
