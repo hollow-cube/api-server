@@ -521,10 +521,11 @@ func dbPlayerDataToAPI(p *db.PlayerData, displayName2 DisplayNameV2, totpEnabled
 		LastOnline:    p.LastOnline,
 		Playtime:      p.Playtime,
 		Settings:      settings,
-		Experience:    p.Experience,
 		BetaEnabled:   *p.BetaEnabled,
 
-		Coins:          int(p.Coins),
+		//Experience:    p.Experience,
+		//Coins:          int(p.Coins),
+		Coins:          0,
 		Cubits:         int(p.Cubits),
 		HypercubeUntil: hypercubeTime,
 
