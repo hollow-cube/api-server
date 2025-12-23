@@ -13,6 +13,7 @@ var falsePositives = []string{
 	"abutting",
 	"acumen",
 	"acuminate",
+	"advertisement",
 	"agassi",
 	"agassiz",
 	"altocumulus",
