@@ -131,33 +131,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 	return nil
 }
 
-func (c *PostgresClient) GetPlayerData(ctx context.Context, id string) (*model.PlayerData, error) {
-	query := psql.Select(playerDataColumns...).
-		From("player_data pd").
-		Where(sq.Eq{"id": id})
-
-	return querySingleFunc2(ctx, c.pool, playerDataScanFunc, query)
-}
-
-func (c *PostgresClient) UpdatePlayerData(ctx context.Context, p *model.PlayerData) error {
-	// NOTE: This function intentionally does NOT update any currency values.
-	// Use the dedicated functions for that!
-
-	if p.Settings == nil {
-		p.Settings = make(model.PlayerSettings)
-	}
-
-	query := psql.Update("player_data").SetMap(map[string]interface{}{
-		"username":     p.Username,
-		"last_online":  p.LastOnline,
-		"playtime":     p.Playtime,
-		"beta_enabled": p.BetaEnabled,
-		"settings":     p.Settings,
-	}).Where(sq.Eq{"id": p.Id})
-
-	return c.safeExec3(ctx, query)
-}
-
 func (c *PostgresClient) AddExperience(ctx context.Context, id string, amount int) (int, error) {
 	const query = `
 		update public.player_data 

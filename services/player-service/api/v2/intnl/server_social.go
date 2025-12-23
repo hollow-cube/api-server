@@ -62,10 +62,12 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 		return AttemptVerification409Response{}, nil
 	}
 
-	// Fetch the player data, creating it if it doesn't exist.
-	if _, err = s.storageClient.GetPlayerData(ctx, request.Body.PlayerId); err != nil {
-		// user must be logged into the server to attempt verification, so should be impossible for an ErrNotFound here
+	// Ensure the player exists already - they always should so error if not as they must have logged into the server before.
+	if pExists, err := s.queries.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
+	} else if !pExists {
+		s.log.Warnw("player attempted to link discord account but does not exist", "playerId", request.Body.PlayerId, "discordId", rep.UserID)
+		return AttemptVerification404Response{}, nil
 	}
 
 	// Delete the pending verification and add the linked account

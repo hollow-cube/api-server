@@ -28,3 +28,13 @@ where id = $1
 -- name: GetPlayerStats :one
 select count(*), sum(playtime)
 from public.player_data;
+
+-- name: UpdatePlayerData :exec
+UPDATE public.player_data
+SET
+    username     = COALESCE(sqlc.narg('username'), username),
+    last_online  = COALESCE(sqlc.narg('last_online'), last_online),
+    playtime     = COALESCE(sqlc.narg('playtime'), playtime),
+    beta_enabled = COALESCE(sqlc.narg('beta_enabled'), beta_enabled),
+    settings     = COALESCE(sqlc.narg('settings'), settings)
+WHERE id = $1;
