@@ -107,11 +107,12 @@ func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 }
 
 func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
+	now := time.Now()
 	p, err := s.queries.CreatePlayerData(ctx, db.CreatePlayerDataParams{
 		ID:         request.Body.Id,
 		Username:   request.Body.Username,
-		FirstJoin:  time.Now(),
-		LastOnline: time.Now(),
+		FirstJoin:  now,
+		LastOnline: now,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create player data: %w", err)
@@ -625,10 +626,10 @@ func dbPlayerToModel(p *db.PlayerData) *model.PlayerData {
 		Settings:       settings,
 		BetaEnabled:    *p.BetaEnabled,
 		Experience:     int(p.Experience),
-		HypercubeExp:   0, // legit no idea where this comes from
+		HypercubeExp:   0, // legit no idea where this comes from - it's also not referenced or used ANYWHERE
 		Coins:          int(p.Coins),
 		Cubits:         int(p.Cubits),
-		LinkedAccounts: nil, // not present, separate req, not needed where this is used
+		LinkedAccounts: nil, // not present, separate req, not needed where this is used - it's also not referenced or used ANYWHERE
 	}
 }
 
