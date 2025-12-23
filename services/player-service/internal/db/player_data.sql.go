@@ -88,18 +88,6 @@ func (q *Queries) GetPlayerStats(ctx context.Context) (*GetPlayerStatsRow, error
 	return &i, err
 }
 
-const lookupPlayerById = `-- name: LookupPlayerById :one
-select id
-from public.player_data
-where id = $1
-`
-
-func (q *Queries) LookupPlayerById(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, lookupPlayerById, id)
-	err := row.Scan(&id)
-	return id, err
-}
-
 const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
 select id
 from public.player_data
@@ -125,4 +113,17 @@ func (q *Queries) LookupPlayerByUsername(ctx context.Context, lower string) (str
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const playerExistsById = `-- name: PlayerExistsById :one
+SELECT exists (SELECT 1
+               FROM public.player_data
+               WHERE id = $1)
+`
+
+func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, playerExistsById, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

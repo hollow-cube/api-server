@@ -9,10 +9,10 @@ from public.player_data
 where id = $1
 limit 1;
 
--- name: LookupPlayerById :one
-select id
-from public.player_data
-where id = $1;
+-- name: PlayerExistsById :one
+SELECT exists (SELECT 1
+               FROM public.player_data
+               WHERE id = $1);
 
 -- name: LookupPlayerByUsername :one
 select id
