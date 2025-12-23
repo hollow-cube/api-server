@@ -13,7 +13,7 @@ var falsePositives = []string{
 	"abutting",
 	"acumen",
 	"acuminate",
-	"advertisement",
+	"sement", // advertisement, amusement
 	"agassi",
 	"agassiz",
 	"altocumulus",
@@ -529,6 +529,7 @@ var falsePositives = []string{
 	"shuttlecock",
 	"shuttlecocks",
 	"silvanus",
+	"slagheap",
 	"slocum",
 	"snaked",
 	"snigger",

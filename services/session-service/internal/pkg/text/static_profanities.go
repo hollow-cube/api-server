@@ -114,6 +114,7 @@ var profanities = []string{
 	"retard",
 	"rimjob",
 	"shit",
+	"slag",
 	"slut",
 	"spunk",
 	"suckmy",
