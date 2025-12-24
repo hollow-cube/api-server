@@ -1,0 +1,1 @@
+alter table linked_accounts alter column player_id type uuid using player_id::uuid;

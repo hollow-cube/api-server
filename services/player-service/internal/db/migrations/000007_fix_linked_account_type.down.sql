@@ -1,0 +1,1 @@
+alter table linked_accounts alter column player_id type varchar(36) using player_id::varchar;
