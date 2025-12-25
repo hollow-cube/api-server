@@ -12,7 +12,7 @@ import (
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
-	"github.com/hollow-cube/hc-services/services/player-service/api/v2/auth"
+	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"

@@ -21,6 +21,14 @@ import (
 
 const ApiKeyPrefix = "sk-hc-"
 
+var publicEndpoints = []string{
+	"/v2/players/stats",
+	"/v2/players/recap/*",
+	"/v2/payments/tebex/webhook",
+	"/v2/payments/tebex/basket",
+	"/v3/maps/stats",
+}
+
 type ServerParams struct {
 	fx.In
 
@@ -38,6 +46,18 @@ func NewServer(params ServerParams) *Server {
 }
 
 func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *auth.CheckResponse, err error) {
+	path := request.Attributes.Request.Http.Path
+	if isPublicEndpoint(path) {
+		return &auth.CheckResponse{
+			Status: &status.Status{Code: 0},
+			HttpResponse: &auth.CheckResponse_OkResponse{
+				OkResponse: &auth.OkHttpResponse{
+					HeadersToRemove: []string{"x-auth-user"},
+				},
+			},
+		}, nil
+	}
+
 	apiKeyStr := request.Attributes.Request.Http.Headers["x-api-key"]
 
 	var apiKey *db.ApiKey
@@ -90,4 +110,35 @@ func GenerateAPIKey() (key string, hash string, err error) {
 	h := sha256.Sum256([]byte(key))
 	hash = hex.EncodeToString(h[:])
 	return key, hash, nil
+}
+
+func isPublicEndpoint(path string) bool {
+	if idx := strings.Index(path, "?"); idx != -1 {
+		path = path[:idx]
+	}
+	for _, pattern := range publicEndpoints {
+		if matchPath(pattern, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchPath(pattern, path string) bool {
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+
+	if len(patternParts) != len(pathParts) {
+		return false
+	}
+
+	for i, p := range patternParts {
+		if p == "*" {
+			continue
+		}
+		if p != pathParts[i] {
+			return false
+		}
+	}
+	return true
 }
