@@ -205,16 +205,6 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 }
 
 func (s *server) GetPlayerBackpack(_ context.Context, _ GetPlayerBackpackRequestObject) (GetPlayerBackpackResponseObject, error) {
-	// todo: reenable these values when adding back experience and coins
-	//bp, err := h.storageClient.GetPlayerBackpack(ctx, playerId)
-	//if err != nil {
-	//	if errors.Is(err, storage.ErrNotFound) {
-	//		return nil, v1.ErrPlayerDataNotFound
-	//	}
-	//
-	//	return nil, fmt.Errorf("failed to get player backpack: %w", err)
-	//}
-
 	return GetPlayerBackpack200JSONResponse{}, nil
 }
 
@@ -373,35 +363,15 @@ func (s *server) playerDataToAPIWithName(p *model.PlayerData, err error, ctx con
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 
-	var hypercubeTime *time.Time
-	hasHypercube, err := s.authzClient.HasHypercube(ctx, p.Id, authz.NoKey)
+	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, p.Id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check hypercube status: %w", err)
-	}
-	if hasHypercube {
-		// Try to get the time, though there may not be an entry because some people get it implicitly
-		// from other relationships. In that case we should simply grant it for a year from now.
-		hcStartTime, hcTerm, err := s.authzClient.GetHypercubeStats(ctx, p.Id, authz.NoKey)
-		if errors.Is(err, authz.ErrNotFound) {
-			// Implicit grant
-			temp := time.Now().Add(365 * 24 * time.Hour)
-			hypercubeTime = &temp
-		} else if err == nil {
-			temp := hcStartTime.Add(hcTerm)
-			if time.Now().After(temp) {
-				// This is also an implicit grant case, kinda gross but oh well
-				temp = time.Now().Add(365 * 24 * time.Hour)
-			}
-			hypercubeTime = &temp
-		} else {
-			return nil, fmt.Errorf("failed to check hypercube time: %w", err)
-		}
+		return nil, err
 	}
 
 	var ok bool
 	var displayName2 DisplayNameV2
 	if displayName2, ok = s.nameCache2.Get(p.Id); !ok || true { //todo temporarily disable display name v2 cache
-		displayName2, err = s.computeDisplayNameV2(ctx, p)
+		displayName2, err = s.computeDisplayNameV2(ctx, p.Id, p.Username)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute display name 2: %w", err)
 		}
@@ -429,29 +399,9 @@ func (s *server) dbPlayerDataToAPIWithName(p *db.PlayerData, err error, ctx cont
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 
-	var hypercubeTime *time.Time
-	hasHypercube, err := s.authzClient.HasHypercube(ctx, p.ID, authz.NoKey)
+	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, p.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check hypercube status: %w", err)
-	}
-	if hasHypercube {
-		// Try to get the time, though there may not be an entry because some people get it implicitly
-		// from other relationships. In that case we should simply grant it for a year from now.
-		hcStartTime, hcTerm, err := s.authzClient.GetHypercubeStats(ctx, p.ID, authz.NoKey)
-		if errors.Is(err, authz.ErrNotFound) {
-			// Implicit grant
-			temp := time.Now().Add(365 * 24 * time.Hour)
-			hypercubeTime = &temp
-		} else if err == nil {
-			temp := hcStartTime.Add(hcTerm)
-			if time.Now().After(temp) {
-				// This is also an implicit grant case, kinda gross but oh well
-				temp = time.Now().Add(365 * 24 * time.Hour)
-			}
-			hypercubeTime = &temp
-		} else {
-			return nil, fmt.Errorf("failed to check hypercube time: %w", err)
-		}
+		return nil, err
 	}
 
 	var ok bool
@@ -492,12 +442,10 @@ func playerDataToAPI(p *model.PlayerData, displayName2 DisplayNameV2, totpEnable
 		LastOnline:    p.LastOnline,
 		Playtime:      p.Playtime,
 		Settings:      settings,
-		//Experience:    int64(p.Experience),
-		Experience:  int64(0),
-		BetaEnabled: p.BetaEnabled,
+		Experience:    int64(0),
+		BetaEnabled:   p.BetaEnabled,
 
-		Coins: 0,
-		//Coins:  p.Coins,
+		Coins:          0,
 		Cubits:         p.Cubits,
 		HypercubeUntil: hypercubeTime,
 
@@ -523,8 +471,6 @@ func dbPlayerDataToAPI(p *db.PlayerData, displayName2 DisplayNameV2, totpEnabled
 		Settings:      settings,
 		BetaEnabled:   *p.BetaEnabled,
 
-		//Experience:    p.Experience,
-		//Coins:          int(p.Coins),
 		Coins:          0,
 		Cubits:         int(p.Cubits),
 		HypercubeUntil: hypercubeTime,
@@ -635,14 +581,14 @@ func dbPlayerToModel(p *db.PlayerData) *model.PlayerData {
 }
 
 func (s *server) dbComputeDisplayNameV2(ctx context.Context, p *db.PlayerData) (DisplayNameV2, error) {
-	return s.computeDisplayNameV2(ctx, dbPlayerToModel(p))
+	return s.computeDisplayNameV2(ctx, p.ID, p.Username)
 }
 
-func (s *server) computeDisplayNameV2(ctx context.Context, p *model.PlayerData) (DisplayNameV2, error) {
+func (s *server) computeDisplayNameV2(ctx context.Context, playerId, playerUsername string) (DisplayNameV2, error) {
 	var parts DisplayNameV2
 	var nameColor string
 
-	if badge, ok := hardcodedBadges[p.Id]; ok {
+	if badge, ok := hardcodedBadges[playerId]; ok {
 		nameColor = hardcodedColors[badge]
 		parts = append(parts, DisplayNamePart{
 			Type: "badge",
@@ -651,7 +597,7 @@ func (s *server) computeDisplayNameV2(ctx context.Context, p *model.PlayerData) 
 	} else {
 		// try to check hypercube
 		//todo this can use a lower spicedb req consistency. High consistency is only relevant for admin/other high ranks.
-		hasHypercube, err := s.authzClient.HasHypercube(ctx, p.Id, authz.NoKey)
+		hasHypercube, err := s.authzClient.HasHypercube(ctx, playerId, authz.NoKey)
 		if err != nil {
 			return DisplayNameV2{}, fmt.Errorf("failed to check hypercube status: %w", err)
 		}
@@ -668,11 +614,11 @@ func (s *server) computeDisplayNameV2(ctx context.Context, p *model.PlayerData) 
 	// Username
 	parts = append(parts, DisplayNamePart{
 		Type:  "username",
-		Text:  p.Username,
+		Text:  playerUsername,
 		Color: nameColor,
 	})
-	if p.Username != "" {
-		s.nameCache2.Add(p.Id, parts)
+	if playerUsername != "" {
+		s.nameCache2.Add(playerId, parts)
 	}
 
 	return parts, nil

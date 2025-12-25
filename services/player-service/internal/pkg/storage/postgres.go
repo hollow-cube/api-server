@@ -61,10 +61,6 @@ func NewPostgresClientFromClient(pool *pgxpool.Pool) (*PostgresClient, error) {
 	c, _ := NewPostgresClient("", nil)
 	c.pool = pool
 
-	if err := c.buildSchema(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to build schema: %w", err)
-	}
-
 	return c, nil
 }
 
@@ -85,18 +81,6 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 
 	if err = c.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping postgres: %w", err)
-	}
-
-	return c.buildSchema(ctx)
-}
-
-func (c *PostgresClient) buildSchema(ctx context.Context) error {
-	// Build backpack schema (always updated from backpack item constants)
-	for _, item := range model.BackpackItems {
-		query := fmt.Sprintf("alter table player_backpack add column if not exists %s int not null default 0;", item)
-		if _, err := c.pool.Exec(ctx, query); err != nil {
-			return fmt.Errorf("failed to add settings column: %w", err)
-		}
 	}
 
 	return nil
@@ -128,81 +112,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return nil
-}
-
-func (c *PostgresClient) LookupPlayerDataBySocial(ctx context.Context, id string, platform string) (*model.PlayerData, error) {
-	query := psql.Select(playerDataColumns...).
-		From("player_data pd").
-		RightJoin("linked_accounts la ON pd.id = la.player_id").
-		Where(sq.Eq{"la.social_id": id, "la.type": platform})
-
-	return querySingleFunc2(ctx, c.pool, playerDataScanFunc, query)
-}
-
-func (c *PostgresClient) LookupSocialByPlayerId(ctx context.Context, platform, playerId string) (string, error) {
-	const query = `
-		select social_id from public.linked_accounts
-		where player_id = $1 and type = $2;
-	`
-
-	scanFunc := func(s *string) []any {
-		return []any{s}
-	}
-
-	socialId, err := querySingleFunc(ctx, c.pool, scanFunc, query, playerId, platform)
-	if err != nil {
-		return "", err
-	}
-
-	return *socialId, nil
-}
-
-func (c *PostgresClient) AddLinkedAccount(ctx context.Context, playerId, socialId, platform string) error {
-	const query = `
-		insert into public.linked_accounts (
-		    player_id, social_id, type
-		) VALUES ($1, $2, $3);
-	`
-
-	return c.safeExec(ctx, query, playerId, socialId, platform)
-}
-
-func (c *PostgresClient) CreatePendingVerification(ctx context.Context, v *model.PendingVerification) error {
-	const query = `
-		insert into public.pending_verification (
-		    type, user_id, user_secret, expiration
-		) VALUES ($1, $2, $3, $4)
-		on conflict (type, user_id) do update set user_secret = $3, expiration = $4;
-	`
-
-	return c.safeExec(ctx, query, v.Type, v.UserID, v.UserSecret, v.Expiration)
-}
-
-func (c *PostgresClient) DeletePendingVerification(ctx context.Context, uniqueVal *string, t model.VerificationType, isValueId bool) error {
-	query := c.templateQuery(`
-		delete from public.pending_verification
-		where type = $1
-		{{ if .IsValueId }}and user_secret = $2
-		{{ else }}and user_id = $2{{ end }};
-	`, struct {
-		IsValueId bool
-	}{isValueId})
-
-	return c.safeExec(ctx, query, t, uniqueVal)
-}
-
-func (c *PostgresClient) GetPendingVerification(ctx context.Context, t model.VerificationType, userSecret string) (*model.PendingVerification, error) {
-	const queryString = `
-		select type, user_id, user_secret, expiration 
-		from public.pending_verification
-		where type = $1 and user_secret = $2;
-	`
-
-	scanFunc := func(v *model.PendingVerification) []any {
-		return []any{&v.Type, &v.UserID, &v.UserSecret, &v.Expiration}
-	}
-
-	return querySingleFunc(ctx, c.pool, scanFunc, queryString, t, userSecret)
 }
 
 func (c *PostgresClient) SearchPlayersFuzzy(ctx context.Context, queryString string) ([]*model.PlayerData, error) {

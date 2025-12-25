@@ -29,15 +29,6 @@ type Client interface {
 	ActivateTOTP(ctx context.Context, playerId string, key []byte) error
 	DeleteTOTP(ctx context.Context, playerId string) error
 
-	AddLinkedAccount(ctx context.Context, playerId, socialId, platform string) error
-
-	LookupPlayerDataBySocial(ctx context.Context, id string, platform string) (*model.PlayerData, error)
-	LookupSocialByPlayerId(ctx context.Context, platform, playerId string) (string, error)
-
-	CreatePendingVerification(ctx context.Context, v *model.PendingVerification) error
-	GetPendingVerification(ctx context.Context, t model.VerificationType, userSecret string) (*model.PendingVerification, error)
-	DeletePendingVerification(ctx context.Context, uniqueVal *string, t model.VerificationType, isValueId bool) error
-
 	// SearchPlayersFuzzy searches the player data collection for a fuzzy match of the given query string.
 	// The returned objects ONLY have the ID and username fields.
 	// Currently has a hardcoded limit of 25 entries.

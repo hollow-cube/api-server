@@ -8,25 +8,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 )
 
 func (s *server) LookupPlayerDataBySocial(ctx context.Context, request LookupPlayerDataBySocialRequestObject) (LookupPlayerDataBySocialResponseObject, error) {
-	p, err := s.storageClient.LookupPlayerDataBySocial(ctx, request.PlatformId, request.Platform)
-	apiPlayer, err := s.playerDataToAPIWithName(p, err, ctx)
+	pd, err := s.store.LookupPlayerDataBySocialId(ctx, request.Platform, request.PlatformId)
+	if errors.Is(err, db.ErrNoRows) {
+		return LookupPlayerDataBySocial404Response{}, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	apiPlayer, err := s.hydratePlayerData(ctx, pd)
 	if err != nil {
 		return nil, err
-	} else if apiPlayer == nil {
-		return PlayerNotFoundResponse{}, nil
 	}
 	return LookupPlayerDataBySocial200JSONResponse(*apiPlayer), nil
 }
 
 func (s *server) LookupSocialByPlayerId(ctx context.Context, request LookupSocialByPlayerIdRequestObject) (LookupSocialByPlayerIdResponseObject, error) {
-	socialId, err := s.storageClient.LookupSocialByPlayerId(ctx, request.Platform, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
+	socialId, err := s.store.LookupSocialIdByPlayerId(ctx, request.Platform, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
 		return LookupSocialByPlayerId404Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -40,25 +44,25 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 	verificationType := model.VerificationType(request.Body.VerificationType)
 
 	// Fetch the existing verification, handling a case where it's expired.
-	rep, err := s.storageClient.GetPendingVerification(ctx, verificationType, request.Body.UserSecret)
+	pending, err := s.store.GetPendingVerificationBySecret(ctx, string(verificationType), request.Body.UserSecret)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, db.ErrNoRows) {
 			return AttemptVerification404Response{}, nil
 		}
 		return nil, fmt.Errorf("failed to fetch pending verification: %w", err)
 	}
-	if rep.Expiration.UnixNano() <= time.Now().UnixNano() {
-		err = s.storageClient.DeletePendingVerification(ctx, &request.Body.UserSecret, verificationType, false)
+	if pending.Expiration.UnixNano() <= time.Now().UnixNano() {
+		err = s.store.DeletePendingVerificationBySecret(ctx, string(verificationType), request.Body.UserSecret)
 		if err != nil {
-			s.log.Fatalw("Couldn't delete expired verification record: %w", err)
+			s.log.Errorw("Couldn't delete expired verification record: %w", err)
 		}
 
 		return AttemptVerification204Response{}, nil
 	}
 
 	// Ensure there is not already an account linked with this discord account
-	_, err = s.storageClient.LookupPlayerDataBySocial(ctx, rep.UserID, "discord")
-	if !errors.Is(err, storage.ErrNotFound) {
+	_, err = s.store.LookupPlayerDataBySocialId(ctx, "discord", pending.UserID)
+	if !errors.Is(err, db.ErrNoRows) {
 		return AttemptVerification409Response{}, nil
 	}
 
@@ -66,18 +70,18 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 	if pExists, err := s.store.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	} else if !pExists {
-		s.log.Warnw("player attempted to link discord account but does not exist", "playerId", request.Body.PlayerId, "discordId", rep.UserID)
+		s.log.Warnw("player attempted to link discord account but does not exist", "playerId", request.Body.PlayerId, "discordId", pending.UserID)
 		return AttemptVerification404Response{}, nil
 	}
 
 	// Delete the pending verification and add the linked account
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
-		err = s.storageClient.DeletePendingVerification(ctx, &request.Body.UserSecret, verificationType, false)
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) (err error) {
+		err = tx.DeletePendingVerificationBySecret(ctx, string(verificationType), request.Body.UserSecret)
 		if err != nil {
 			return fmt.Errorf("failed to delete pending verification: %w", err)
 		}
 
-		err = s.storageClient.AddLinkedAccount(ctx, request.Body.PlayerId, rep.UserID, "discord")
+		err = tx.AddLinkedAccount(ctx, "discord", request.Body.PlayerId, pending.UserID)
 		if err != nil {
 			return fmt.Errorf("failed to add linked account: %w", err)
 		}
@@ -90,27 +94,27 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 
 	return AttemptVerification200JSONResponse{
 		Type:   request.Body.VerificationType,
-		UserId: rep.UserID,
+		UserId: pending.UserID,
 	}, nil
 }
 
 func (s *server) BeginVerifyDiscord(ctx context.Context, request BeginVerifyDiscordRequestObject) (BeginVerifyDiscordResponseObject, error) {
-	_, err := s.storageClient.LookupPlayerDataBySocial(ctx, request.Body.DiscordId, "discord")
-	if err == nil {
+	_, err := s.store.LookupPlayerDataBySocialId(ctx, "discord", request.Body.DiscordId)
+	if !errors.Is(err, db.ErrNoRows) {
 		return BeginVerifyDiscord409Response{}, nil
 	}
 
 	const verificationExpirationTimer = 5 * time.Minute
 
 	var secret = genVerifySecret()
-	err = s.storageClient.CreatePendingVerification(ctx, &model.PendingVerification{
-		Type:       model.VerificationTypeDiscord,
+	err = s.store.UpsertPendingVerification(ctx, db.UpsertPendingVerificationParams{
+		Type:       string(model.VerificationTypeDiscord),
 		UserID:     request.Body.DiscordId,
 		UserSecret: secret,
 		Expiration: time.Now().Add(verificationExpirationTimer),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create verifcation record: %w", err)
+		return nil, fmt.Errorf("failed to create verification record: %w", err)
 	}
 
 	return BeginVerifyDiscord201JSONResponse{UserSecret: secret}, nil

@@ -16,6 +16,13 @@ type ApiKey struct {
 	DeletedAt *time.Time
 }
 
+type PendingVerification struct {
+	Type       string
+	UserID     string
+	UserSecret string
+	Expiration time.Time
+}
+
 type PlayerData struct {
 	ID          string
 	Username    string
