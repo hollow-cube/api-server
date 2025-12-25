@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"strings"
 	"text/template"
 	"time"
 
@@ -129,44 +128,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return nil
-}
-
-var backpackSelect string
-
-func init() {
-	var query strings.Builder
-	query.WriteString("select ")
-	for i, item := range model.BackpackItems {
-		if i != 0 {
-			query.WriteString(", ")
-		}
-		query.WriteString(string(item))
-	}
-	query.WriteString(" from public.player_backpack where player_id = $1;")
-	backpackSelect = query.String()
-}
-
-func (c *PostgresClient) GetPlayerBackpack(ctx context.Context, playerId string) (model.PlayerBackpack, error) {
-	quantities := make([]*int, len(model.BackpackItems))
-	scanEntries := make([]any, len(model.BackpackItems))
-	for i := range model.BackpackItems {
-		quantity := 0
-		quantities[i] = &quantity
-		scanEntries[i] = &quantity
-	}
-
-	err := c.safeQueryRow(ctx, backpackSelect, playerId).Scan(scanEntries...)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return make(model.PlayerBackpack), nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	result := make(model.PlayerBackpack, len(model.BackpackItems))
-	for i, item := range model.BackpackItems {
-		result[item] = *quantities[i]
-	}
-	return result, nil
 }
 
 func (c *PostgresClient) LookupPlayerDataBySocial(ctx context.Context, id string, platform string) (*model.PlayerData, error) {

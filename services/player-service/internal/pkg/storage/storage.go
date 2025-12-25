@@ -23,8 +23,6 @@ type contextKey string
 type Client interface {
 	RunTransaction(ctx context.Context, f func(ctx context.Context) error) error
 
-	GetPlayerBackpack(ctx context.Context, playerId string) (model.PlayerBackpack, error)
-
 	// TOTP
 	GetTOTP(ctx context.Context, playerId string) (*totp.Config, error)
 	AddTOTP(ctx context.Context, config *totp.Config) (bool, error)
@@ -72,13 +70,6 @@ type Client interface {
 		currencyType model.CurrencyType, amount int,
 		reason model.BalanceChangeReason, meta map[string]interface{},
 	) (int, error)
-	// UpdateBackpack adds the relative values from the given backpack if they are nonzero, otherwise ignores.
-	// It is valid to have negative values present, however the caller should validate the update.
-	//
-	// todo: this makes no sense. The caller cannot do that validation transactionally. it needs to be enforced by the query in a txn.
-	//
-	// Returns a backpack with the current value of each material ONLY if it was present in the initial change.
-	UpdateBackpack(ctx context.Context, playerId string, relativeBackpack model.PlayerBackpack) (model.PlayerBackpack, error)
 
 	// Misc methods
 

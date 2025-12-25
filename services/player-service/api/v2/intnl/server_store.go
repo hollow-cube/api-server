@@ -110,13 +110,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 		}
 
 		if len(backpackUpdate) > 0 {
-			newBackpack, err := s.storageClient.UpdateBackpack(ctx, request.PlayerId, backpackUpdate)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
-				return fmt.Errorf("failed to update backpack: %w", err)
-			}
-			update.Backpack = newBackpack
+			panic("backpack changes not supported anymore :(")
 		}
 
 		// Finally, actually add the cosmetic
@@ -197,17 +191,7 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 		}
 
 		if len(backpackUpdate) > 0 {
-			newBackpack, err := s.storageClient.UpdateBackpack(ctx, request.PlayerId, backpackUpdate)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
-				return fmt.Errorf("failed to update backpack: %w", err)
-			}
-			backpack := make(map[string]interface{})
-			newState.Backpack = &backpack
-			for k, v := range newBackpack {
-				(*newState.Backpack)[string(k)] = v
-			}
+			panic("backpack changes not supported anymore :(")
 		}
 
 		return nil
