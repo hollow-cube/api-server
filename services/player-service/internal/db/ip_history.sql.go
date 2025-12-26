@@ -57,8 +57,8 @@ group by player_data.id
 `
 
 type GetPlayersByIPsRow struct {
-	ID       string
-	Username string
+	ID       string `json:"id"`
+	Username string `json:"username"`
 }
 
 func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]*GetPlayersByIPsRow, error) {

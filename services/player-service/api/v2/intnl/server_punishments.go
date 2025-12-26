@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -20,12 +20,10 @@ func (s *server) GetActivePunishment(ctx context.Context, request GetActivePunis
 		return nil, fmt.Errorf("invalid active punishment type: %s", ty)
 	}
 
-	p, err := s.storageClient.GetActivePunishment(ctx, request.PlayerId, ty)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetActivePunishment404Response{}, nil
-		}
-
+	p, err := s.store.GetActivePunishment(ctx, string(ty), request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
+		return GetActivePunishment404Response{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to get active punishment: %w", err)
 	}
 
@@ -44,7 +42,11 @@ func (s *server) GetPunishments(ctx context.Context, request GetPunishmentsReque
 	if request.Params.ExecutorId != nil && *request.Params.ExecutorId != "" {
 		executorId = *request.Params.ExecutorId
 	}
-	punishments, err := s.storageClient.SearchPunishments(ctx, request.Params.PlayerId, executorId, punishmentType, "")
+	punishments, err := s.store.SearchPunishments(ctx, db.SearchPunishmentsParams{
+		Type:       string(punishmentType),
+		PlayerID:   request.Params.PlayerId,
+		ExecutorID: executorId,
+	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get punishments: %w", err)
@@ -90,15 +92,19 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 		ladderId = &ladder.Id
 
 		// Check if the player is already punished with this type
-		_, err := s.storageClient.GetActivePunishment(ctx, request.Body.PlayerId, model.PunishmentType(request.Body.PunishmentType))
-		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		_, err := s.store.GetActivePunishment(ctx, string(request.Body.PunishmentType), request.Body.PlayerId)
+		if err != nil && !errors.Is(err, db.ErrNoRows) {
 			return nil, fmt.Errorf("failed to get active punishment: %w", err)
 		} else if err == nil {
 			return nil, fmt.Errorf("player already has an active punishment of type %s", request.Body.PunishmentType)
 		}
 
 		// Find the existing punishments in the given ladder
-		punishments, err := s.storageClient.SearchPunishments(ctx, request.Body.PlayerId, "", model.PunishmentType(request.Body.PunishmentType), ladder.Id)
+		punishments, err := s.store.SearchPunishments(ctx, db.SearchPunishmentsParams{
+			Type:     string(request.Body.PunishmentType),
+			PlayerID: request.Body.PlayerId,
+			LadderID: &ladder.Id,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to search punishments: %w", err)
 		}
@@ -133,17 +139,14 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 		comment = fmt.Sprintf("%s: %s", *rawReason, comment)
 	}
 
-	punishment := &model.Punishment{
-		PlayerId:   request.Body.PlayerId,
-		ExecutorId: request.Body.ExecutorId,
-		Type:       model.PunishmentType(request.Body.PunishmentType),
-		CreatedAt:  time.Now(),
-		LadderId:   ladderId,
+	punishment, err := s.store.CreatePunishment(ctx, db.CreatePunishmentParams{
+		PlayerID:   request.Body.PlayerId,
+		ExecutorID: request.Body.ExecutorId,
+		Type:       string(request.Body.PunishmentType),
+		LadderID:   ladderId,
 		Comment:    comment,
 		ExpiresAt:  expiresAt,
-	}
-
-	err := s.storageClient.CreatePunishment(ctx, punishment)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create punishment: %w", err)
 	}
@@ -155,19 +158,19 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 
 	go func() {
 		switch punishment.Type {
-		case model.PunishmentTypeBan:
+		case string(model.PunishmentTypeBan):
 			s.metrics.Write(&model.PlayerBanned{
 				PlayerId:   request.Body.PlayerId,
 				ExecutorId: request.Body.ExecutorId,
 				LadderId:   *ladderId,
 			})
-		case model.PunishmentTypeMute:
+		case string(model.PunishmentTypeMute):
 			s.metrics.Write(&model.PlayerMuted{
 				PlayerId:   request.Body.PlayerId,
 				ExecutorId: request.Body.ExecutorId,
 				LadderId:   *ladderId,
 			})
-		case model.PunishmentTypeKick:
+		case string(model.PunishmentTypeKick):
 			s.metrics.Write(&model.PlayerKicked{
 				PlayerId:   request.Body.PlayerId,
 				ExecutorId: request.Body.ExecutorId,
@@ -229,13 +232,17 @@ func (s *server) GetPunishmentLadderEntry(_ context.Context, request GetPunishme
 	return GetPunishmentLadderEntry200JSONResponse{
 		Id:       ladder.Id,
 		Name:     ladder.Name,
-		Duration: entry.Duration,
+		Duration: int(entry.Duration),
 	}, nil
 }
 
 func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentRequestObject) (RevokePunishmentResponseObject, error) {
-	p, err := s.storageClient.RevokePunishment(ctx, request.Body.PlayerId, model.PunishmentType(request.Body.Type),
-		request.Body.RevokedBy, request.Body.RevokedReason)
+	p, err := s.store.RevokePunishment(ctx, db.RevokePunishmentParams{
+		Type:          string(request.Body.Type),
+		PlayerID:      request.Body.PlayerId,
+		RevokedBy:     &request.Body.RevokedBy,
+		RevokedReason: &request.Body.RevokedReason,
+	})
 
 	err = s.sendPunishmentUpdateMessage(ctx, model.PunishmentUpdateAction_Revoke, p)
 	if err != nil {
@@ -243,12 +250,12 @@ func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentR
 	}
 
 	go func() {
-		if p.Type == model.PunishmentTypeBan {
+		if p.Type == string(model.PunishmentTypeBan) {
 			s.metrics.Write(&model.PlayerUnbanned{
 				PlayerId:  request.Body.PlayerId,
 				RevokerId: request.Body.RevokedBy,
 			})
-		} else if p.Type == model.PunishmentTypeMute {
+		} else if p.Type == string(model.PunishmentTypeMute) { // todo punishment type should be a pg enum
 			s.metrics.Write(&model.PlayerUnmuted{
 				PlayerId:  request.Body.PlayerId,
 				RevokerId: request.Body.RevokedBy,
@@ -259,7 +266,7 @@ func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentR
 	return RevokePunishment200Response{}, nil
 }
 
-func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.PunishmentUpdateAction, punishment *model.Punishment) error {
+func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.PunishmentUpdateAction, punishment *db.Punishment) error {
 	msg := &model.PunishmentUpdateMessage{
 		Action:     action,
 		Punishment: punishment,
@@ -276,13 +283,13 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 	})
 }
 
-func punishmentToAPI(p *model.Punishment) Punishment {
+func punishmentToAPI(p *db.Punishment) Punishment {
 	return Punishment{
-		PlayerId:   p.PlayerId,
-		ExecutorId: p.ExecutorId,
+		PlayerId:   p.PlayerID,
+		ExecutorId: p.ExecutorID,
 		Type:       PunishmentType(p.Type),
 		CreatedAt:  p.CreatedAt,
-		LadderId:   p.LadderId,
+		LadderId:   p.LadderID,
 		Comment:    p.Comment,
 		ExpiresAt:  p.ExpiresAt,
 
@@ -295,7 +302,7 @@ func punishmentToAPI(p *model.Punishment) Punishment {
 func ladderToAPI(l *model.PunishmentLadder) PunishmentLadder {
 	entries := make([]PunishmentLadderEntry, len(l.Entries))
 	for i, entry := range l.Entries {
-		entries[i] = PunishmentLadderEntry{Duration: entry.Duration}
+		entries[i] = PunishmentLadderEntry{Duration: int(entry.Duration)}
 	}
 
 	reasons := make([]PunishmentLadderReason, len(l.Reasons))

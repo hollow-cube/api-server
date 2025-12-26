@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/totp"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/jackc/pgx/v5"
@@ -51,11 +51,16 @@ func (s *server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupReque
 	}
 
 	// This will insert the new config into the database only if there is not an *active* record currently.
-	// If there is, false will be returned from the first argument and we can return an error.
-	inserted, err := s.storageClient.AddTOTP(ctx, config)
+	// If there is, 0 will be returned from the first argument and we can return an error.
+	insertedRows, err := s.store.AddTOTP(ctx, db.AddTOTPParams{
+		PlayerID:      config.PlayerID,
+		Active:        &config.Active,
+		Key:           config.Key,
+		RecoveryCodes: config.RecoveryCodes,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert totp record: %w", err)
-	} else if !inserted {
+	} else if insertedRows == 0 {
 		return BeginTotpSetup409Response{}, nil // They already have TOTP configured
 	}
 
@@ -103,7 +108,7 @@ func (s *server) CompleteTotpSetup(ctx context.Context, request CompleteTotpSetu
 	}
 
 	// All good, activate it :)
-	err = s.storageClient.ActivateTOTP(ctx, request.PlayerId, config.Key)
+	_, err = s.store.ActivateTOTP(ctx, request.PlayerId, config.Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to activate totp: %w", err)
 	}
@@ -111,7 +116,7 @@ func (s *server) CompleteTotpSetup(ctx context.Context, request CompleteTotpSetu
 }
 
 func (s *server) RemoveTotp(ctx context.Context, request RemoveTotpRequestObject) (RemoveTotpResponseObject, error) {
-	if err := s.storageClient.DeleteTOTP(ctx, request.PlayerId); err != nil {
+	if err := s.store.DeleteTOTP(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to delete totp record: %w", err)
 	}
 	return RemoveTotp204Response{}, nil
@@ -126,17 +131,17 @@ func (s *server) RemoveTotp(ctx context.Context, request RemoveTotpRequestObject
 //
 // It is valid to test an empty string and check for errNotConfigured to determine if TOTP is setup or not
 // unsafeAllowInactive will still test an inactive totp entry. Should not be set unless you know why its set.
-func (s *server) testTotpCode(ctx context.Context, playerId, code string, unsafeAllowInactive bool) (*totp.Config, error) {
+func (s *server) testTotpCode(ctx context.Context, playerId, code string, unsafeAllowInactive bool) (*db.PlayerTotp, error) {
 	if code != "" && len(code) != 6 {
 		return nil, errInvalidCode
 	}
 
-	config, err := s.storageClient.GetTOTP(ctx, playerId)
-	if errors.Is(err, storage.ErrNotFound) {
+	config, err := s.store.GetTOTP(ctx, playerId)
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, errNotConfigured
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to read totp record: %w", err)
-	} else if !unsafeAllowInactive && !config.Active {
+	} else if !unsafeAllowInactive && !*config.Active { // todo active should not be nullable
 		return nil, errNotConfigured
 	}
 

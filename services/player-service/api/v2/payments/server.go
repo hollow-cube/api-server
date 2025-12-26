@@ -21,7 +21,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
@@ -42,7 +41,6 @@ type ServerParams struct {
 
 	ReaderFactory wkafka.ReaderFactory
 	Producer      wkafka.SyncWriter
-	Storage       storage.Client
 	Store         *db.Store
 	Authz         authz.Client
 	Posthog       posthog.Client
@@ -60,13 +58,12 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 	}
 
 	s := &server{
-		log:           params.Log.With("handler", "payments"),
-		tebexSecret:   []byte(tebexSecret),
-		producer:      params.Producer,
-		storageClient: params.Storage,
-		store:         params.Store,
-		authClient:    params.Authz,
-		posthog:       params.Posthog,
+		log:         params.Log.With("handler", "payments"),
+		tebexSecret: []byte(tebexSecret),
+		producer:    params.Producer,
+		store:       params.Store,
+		authClient:  params.Authz,
+		posthog:     params.Posthog,
 	}
 
 	params.Lifecycle.Append(fx.Hook{
@@ -97,11 +94,10 @@ type server struct {
 
 	cancelConsumerCtx func()
 
-	producer      wkafka.SyncWriter
-	storageClient storage.Client
-	store         *db.Store
-	authClient    authz.Client
-	posthog       posthog.Client
+	producer   wkafka.SyncWriter
+	store      *db.Store
+	authClient authz.Client
+	posthog    posthog.Client
 }
 
 func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params OnTebexWebhookParams) {
@@ -158,8 +154,8 @@ func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params O
 }
 
 func (s *server) GetTebexBasket(w http.ResponseWriter, r *http.Request, params GetTebexBasketParams) {
-	basketId, username, err := s.storageClient.GetPendingTransaction(r.Context(), params.Ref)
-	if errors.Is(err, storage.ErrNotFound) {
+	res, err := s.store.GetPendingTransactionByCheckoutId(r.Context(), params.Ref)
+	if errors.Is(err, db.ErrNoRows) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -168,6 +164,7 @@ func (s *server) GetTebexBasket(w http.ResponseWriter, r *http.Request, params G
 		return
 	}
 
+	basketId, username := res.BasketID, res.Username
 	if basketId == nil {
 		// Indicates that we have not created the basket yet and the client should refetch.
 		w.WriteHeader(http.StatusNoContent)

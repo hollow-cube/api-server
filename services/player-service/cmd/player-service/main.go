@@ -27,7 +27,6 @@ import (
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -57,8 +56,7 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
-		fx.Provide(newStoragePostgres),
-		fx.Provide(newStoragePostgresV2),
+		fx.Provide(newPostgresStore),
 		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(newSyncKafkaWriter, newKafkaReaderFactory),
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -147,16 +145,7 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	}
 }
 
-func newStoragePostgres(conf *config.Config, lc fx.Lifecycle, metrics metric.Writer) (storage.Client, error) {
-	c, err := storage.NewPostgresClient(conf.Postgres.URI, metrics)
-	if err != nil {
-		return nil, err
-	}
-	lc.Append(fx.Hook{OnStart: c.Start, OnStop: c.Shutdown})
-	return c, nil
-}
-
-func newStoragePostgresV2(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*db.Store, error) {
+func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*db.Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

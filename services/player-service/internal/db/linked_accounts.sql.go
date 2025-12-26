@@ -100,10 +100,10 @@ on conflict (type, user_id)
 `
 
 type UpsertPendingVerificationParams struct {
-	Type       string
-	UserID     string
-	UserSecret string
-	Expiration time.Time
+	Type       string    `json:"type"`
+	UserID     string    `json:"userId"`
+	UserSecret string    `json:"userSecret"`
+	Expiration time.Time `json:"expiration"`
 }
 
 func (q *Queries) UpsertPendingVerification(ctx context.Context, arg UpsertPendingVerificationParams) error {

@@ -8,6 +8,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -16,6 +17,7 @@ import (
 	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 var ErrNoRows = pgx.ErrNoRows
@@ -39,6 +41,8 @@ func (s *Store) WithTx(tx pgx.Tx) *Store {
 }
 
 func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string) (*Store, *pgxpool.Pool, error) {
+	// TODO: move the bulk of this function to common-go
+
 	// Config options
 	config, err := pgxpool.ParseConfig(databaseUri)
 	if err != nil {
@@ -79,39 +83,78 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
+	targetVersion, err := migrateSource.First()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get latest migration version: %w", err)
+	}
+	for {
+		next, err := migrateSource.Next(targetVersion)
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		targetVersion = next
+	}
+
+	version, dirty, err := m.Version()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get current migration version: %w", err)
+	}
+	for i := 0; i < 100; i++ {
+		println(fmt.Sprintf("current = %d, target = %d", version, targetVersion))
+	}
+	if dirty || version < targetVersion {
+		// Apply all migrations up our current version
+		err = m.Up()
+		if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
+		}
+	}
+	if version > targetVersion {
+		zap.S().Infow("database has later version than I know about!", "target_version", targetVersion, "current_version", version)
 	}
 
 	return &Store{Queries: New(pool), metrics: metrics}, pool, nil
 }
 
-func Tx[T any](ctx context.Context, s *Store, fn func(ctx context.Context, txStore *Store) (*T, error)) (*T, error) {
+func Tx[T any](ctx context.Context, s *Store, fn func(ctx context.Context, txStore *Store) (T, error)) (T, error) {
+	if _, ok := s.db.(pgx.Tx); ok {
+		return fn(ctx, s) // Already in a transaction, just proxy
+	}
+
 	pool, ok := s.db.(*pgxpool.Pool)
 	if !ok {
-		return nil, fmt.Errorf("failed to acquire connection to postgres")
+		var z T
+		return z, fmt.Errorf("failed to acquire connection to postgres")
 	}
 
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
 	ret, err := fn(ctx, s.WithTx(tx))
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to apply transaction: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return ret, nil
 }
 
 func TxNoReturn(ctx context.Context, s *Store, fn func(ctx context.Context, txStore *Store) error) error {
+	if _, ok := s.db.(pgx.Tx); ok {
+		return fn(ctx, s) // Already in a transaction, just proxy
+	}
+
 	pool, ok := s.db.(*pgxpool.Pool)
 	if !ok {
 		return fmt.Errorf("failed to acquire connection to postgres")
