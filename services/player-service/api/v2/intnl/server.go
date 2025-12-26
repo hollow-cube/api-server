@@ -19,7 +19,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
-	"github.com/jackc/pgx/v5"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -92,7 +91,7 @@ type server struct {
 
 func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
 	pd, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return GetPlayerData404Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -128,7 +127,7 @@ func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 
 func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
 	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
@@ -187,7 +186,7 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 
 		return nil
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return PlayerNotFoundResponse{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to apply transaction: %w", err)
@@ -221,7 +220,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	// Load it from storage
 	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return GetPlayerDisplayNameV2404Response{}, nil
 		}
 
@@ -297,7 +296,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
 	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
 		}
 
