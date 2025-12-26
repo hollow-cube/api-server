@@ -16,6 +16,12 @@ import (
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
+// Defines values for FriendRequestDirection.
+const (
+	Incoming FriendRequestDirection = "incoming"
+	Outgoing FriendRequestDirection = "outgoing"
+)
+
 // Defines values for PunishmentType.
 const (
 	PunishmentTypeBan  PunishmentType = "ban"
@@ -37,6 +43,13 @@ const (
 	Mute GetPunishmentLaddersParamsPunishmentType = "mute"
 )
 
+// BlockedPlayer defines model for BlockedPlayer.
+type BlockedPlayer struct {
+	BlockedAt time.Time `json:"blockedAt"`
+	PlayerId  string    `json:"playerId"`
+	Username  string    `json:"username"`
+}
+
 // DisplayNamePart defines model for DisplayNamePart.
 type DisplayNamePart struct {
 	Color string `json:"color"`
@@ -46,6 +59,16 @@ type DisplayNamePart struct {
 
 // DisplayNameV2 defines model for DisplayNameV2.
 type DisplayNameV2 = []DisplayNamePart
+
+// FriendRequest defines model for FriendRequest.
+type FriendRequest struct {
+	PlayerId string    `json:"playerId"`
+	SentAt   time.Time `json:"sentAt"`
+	Username string    `json:"username"`
+}
+
+// FriendRequestDirection defines model for FriendRequestDirection.
+type FriendRequestDirection string
 
 // HypercubeStatus If since and until are missing, the player does not have hypercube.
 type HypercubeStatus struct {
@@ -99,6 +122,13 @@ type PlayerDataUpdateRequest struct {
 	PlaytimeInc     *int            `json:"playtimeInc,omitempty"`
 	SettingsUpdates *PlayerSettings `json:"settingsUpdates,omitempty"`
 	Username        *string         `json:"username,omitempty"`
+}
+
+// PlayerFriend defines model for PlayerFriend.
+type PlayerFriend struct {
+	FriendsSince time.Time `json:"friendsSince"`
+	PlayerId     string    `json:"playerId"`
+	Username     string    `json:"username"`
 }
 
 // PlayerInventory defines model for PlayerInventory.
@@ -195,12 +225,28 @@ type GivePlayerItemsJSONBody struct {
 	TxMeta map[string]interface{} `json:"txMeta"`
 }
 
+// BlockPlayerJSONBody defines parameters for BlockPlayer.
+type BlockPlayerJSONBody struct {
+	TargetId string `json:"targetId"`
+}
+
 // BuyCosmeticJSONBody defines parameters for BuyCosmetic.
 type BuyCosmeticJSONBody struct {
 	Coins      *int                    `json:"coins,omitempty"`
 	CosmeticId string                  `json:"cosmeticId"`
 	Cubits     *int                    `json:"cubits,omitempty"`
 	Items      *map[string]interface{} `json:"items,omitempty"`
+}
+
+// GetFriendRequestsParams defines parameters for GetFriendRequests.
+type GetFriendRequestsParams struct {
+	// Direction The direction of requests to get
+	Direction FriendRequestDirection `form:"direction" json:"direction"`
+}
+
+// SendFriendRequestJSONBody defines parameters for SendFriendRequest.
+type SendFriendRequestJSONBody struct {
+	TargetId string `json:"targetId"`
 }
 
 // CheckTotpParams defines parameters for CheckTotp.
@@ -312,8 +358,14 @@ type UpdatePlayerDataJSONRequestBody = PlayerDataUpdateRequest
 // GivePlayerItemsJSONRequestBody defines body for GivePlayerItems for application/json ContentType.
 type GivePlayerItemsJSONRequestBody GivePlayerItemsJSONBody
 
+// BlockPlayerJSONRequestBody defines body for BlockPlayer for application/json ContentType.
+type BlockPlayerJSONRequestBody BlockPlayerJSONBody
+
 // BuyCosmeticJSONRequestBody defines body for BuyCosmetic for application/json ContentType.
 type BuyCosmeticJSONRequestBody BuyCosmeticJSONBody
+
+// SendFriendRequestJSONRequestBody defines body for SendFriendRequest for application/json ContentType.
+type SendFriendRequestJSONRequestBody SendFriendRequestJSONBody
 
 // CompleteTotpSetupJSONRequestBody defines body for CompleteTotpSetup for application/json ContentType.
 type CompleteTotpSetupJSONRequestBody CompleteTotpSetupJSONBody
@@ -374,6 +426,15 @@ type ServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get players blocked by this player
+	// (GET /players/{playerId}/blocks)
+	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string)
+	// Block a player
+	// (POST /players/{playerId}/blocks)
+	BlockPlayer(w http.ResponseWriter, r *http.Request, playerId string)
+	// Unblock a player
+	// (DELETE /players/{playerId}/blocks/{targetId})
+	UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Fetch all unlocked cosmetics for the given player
 	// (GET /players/{playerId}/cosmetics)
 	GetPlayerCosmetics(w http.ResponseWriter, r *http.Request, playerId string)
@@ -383,6 +444,24 @@ type ServerInterface interface {
 	// Get the display name for a player
 	// (GET /players/{playerId}/displayname)
 	GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get a player's friends
+	// (GET /players/{playerId}/friends)
+	GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get a player's friend requests
+	// (GET /players/{playerId}/friends/requests)
+	GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams)
+	// Send a friend request to another player
+	// (POST /players/{playerId}/friends/requests)
+	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string)
+	// Delete a friend request (cancel outgoing or decline incoming)
+	// (DELETE /players/{playerId}/friends/requests/{targetId})
+	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
+	// Accept an incoming friend request
+	// (POST /players/{playerId}/friends/requests/{targetId}/accept)
+	AcceptFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
+	// Remove a friend
+	// (DELETE /players/{playerId}/friends/{targetId})
+	RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(w http.ResponseWriter, r *http.Request, playerId string)
@@ -738,6 +817,90 @@ func (siw *ServerInterfaceWrapper) GivePlayerItems(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetBlockedPlayers operation middleware
+func (siw *ServerInterfaceWrapper) GetBlockedPlayers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBlockedPlayers(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BlockPlayer operation middleware
+func (siw *ServerInterfaceWrapper) BlockPlayer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BlockPlayer(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnblockPlayer operation middleware
+func (siw *ServerInterfaceWrapper) UnblockPlayer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "targetId" -------------
+	var targetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnblockPlayer(w, r, playerId, targetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPlayerCosmetics operation middleware
 func (siw *ServerInterfaceWrapper) GetPlayerCosmetics(w http.ResponseWriter, r *http.Request) {
 
@@ -804,6 +967,201 @@ func (siw *ServerInterfaceWrapper) GetPlayerDisplayNameV2(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlayerDisplayNameV2(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlayerFriends operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlayerFriends(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFriendRequests operation middleware
+func (siw *ServerInterfaceWrapper) GetFriendRequests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFriendRequestsParams
+
+	// ------------- Required query parameter "direction" -------------
+
+	if paramValue := r.URL.Query().Get("direction"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "direction"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "direction", r.URL.Query(), &params.Direction)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "direction", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFriendRequests(w, r, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendFriendRequest operation middleware
+func (siw *ServerInterfaceWrapper) SendFriendRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendFriendRequest(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteFriendRequest operation middleware
+func (siw *ServerInterfaceWrapper) DeleteFriendRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "targetId" -------------
+	var targetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteFriendRequest(w, r, playerId, targetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcceptFriendRequest operation middleware
+func (siw *ServerInterfaceWrapper) AcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "targetId" -------------
+	var targetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptFriendRequest(w, r, playerId, targetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveFriend operation middleware
+func (siw *ServerInterfaceWrapper) RemoveFriend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "targetId" -------------
+	var targetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveFriend(w, r, playerId, targetId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1374,9 +1732,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/api", wrapper.CyclePlayerApiKey)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GetPlayerBackpack)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GivePlayerItems)
+	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/blocks", wrapper.GetBlockedPlayers)
+	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/blocks", wrapper.BlockPlayer)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/blocks/{targetId}", wrapper.UnblockPlayer)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.GetPlayerCosmetics)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.BuyCosmetic)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/displayname", wrapper.GetPlayerDisplayNameV2)
+	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends", wrapper.GetPlayerFriends)
+	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends/requests", wrapper.GetFriendRequests)
+	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friends/requests", wrapper.SendFriendRequest)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/requests/{targetId}", wrapper.DeleteFriendRequest)
+	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friends/requests/{targetId}/accept", wrapper.AcceptFriendRequest)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/{targetId}", wrapper.RemoveFriend)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/hypercube", wrapper.GetPlayerHypercube)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/totp", wrapper.RemoveTotp)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/totp", wrapper.CheckTotp)
@@ -1768,6 +2135,87 @@ func (response GivePlayerItems404Response) VisitGivePlayerItemsResponse(w http.R
 	return nil
 }
 
+type GetBlockedPlayersRequestObject struct {
+	PlayerId string `json:"playerId"`
+}
+
+type GetBlockedPlayersResponseObject interface {
+	VisitGetBlockedPlayersResponse(w http.ResponseWriter) error
+}
+
+type GetBlockedPlayers200JSONResponse []BlockedPlayer
+
+func (response GetBlockedPlayers200JSONResponse) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetBlockedPlayers404Response = PlayerNotFoundResponse
+
+func (response GetBlockedPlayers404Response) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type BlockPlayerRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Body     *BlockPlayerJSONRequestBody
+}
+
+type BlockPlayerResponseObject interface {
+	VisitBlockPlayerResponse(w http.ResponseWriter) error
+}
+
+type BlockPlayer201Response struct {
+}
+
+func (response BlockPlayer201Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(201)
+	return nil
+}
+
+type BlockPlayer404Response = PlayerNotFoundResponse
+
+func (response BlockPlayer404Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type BlockPlayer409Response struct {
+}
+
+func (response BlockPlayer409Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type UnblockPlayerRequestObject struct {
+	PlayerId string `json:"playerId"`
+	TargetId string `json:"targetId"`
+}
+
+type UnblockPlayerResponseObject interface {
+	VisitUnblockPlayerResponse(w http.ResponseWriter) error
+}
+
+type UnblockPlayer204Response struct {
+}
+
+func (response UnblockPlayer204Response) VisitUnblockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnblockPlayer404Response struct {
+}
+
+func (response UnblockPlayer404Response) VisitUnblockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type GetPlayerCosmeticsRequestObject struct {
 	PlayerId string `json:"playerId"`
 }
@@ -1845,6 +2293,162 @@ func (response GetPlayerDisplayNameV2200JSONResponse) VisitGetPlayerDisplayNameV
 type GetPlayerDisplayNameV2404Response = PlayerNotFoundResponse
 
 func (response GetPlayerDisplayNameV2404Response) VisitGetPlayerDisplayNameV2Response(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetPlayerFriendsRequestObject struct {
+	PlayerId string `json:"playerId"`
+}
+
+type GetPlayerFriendsResponseObject interface {
+	VisitGetPlayerFriendsResponse(w http.ResponseWriter) error
+}
+
+type GetPlayerFriends200JSONResponse []PlayerFriend
+
+func (response GetPlayerFriends200JSONResponse) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlayerFriends404Response = PlayerNotFoundResponse
+
+func (response GetPlayerFriends404Response) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetFriendRequestsRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Params   GetFriendRequestsParams
+}
+
+type GetFriendRequestsResponseObject interface {
+	VisitGetFriendRequestsResponse(w http.ResponseWriter) error
+}
+
+type GetFriendRequests200JSONResponse []FriendRequest
+
+func (response GetFriendRequests200JSONResponse) VisitGetFriendRequestsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetFriendRequests404Response = PlayerNotFoundResponse
+
+func (response GetFriendRequests404Response) VisitGetFriendRequestsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type SendFriendRequestRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Body     *SendFriendRequestJSONRequestBody
+}
+
+type SendFriendRequestResponseObject interface {
+	VisitSendFriendRequestResponse(w http.ResponseWriter) error
+}
+
+type SendFriendRequest201Response struct {
+}
+
+func (response SendFriendRequest201Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(201)
+	return nil
+}
+
+type SendFriendRequest404Response = PlayerNotFoundResponse
+
+func (response SendFriendRequest404Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type SendFriendRequest409Response struct {
+}
+
+func (response SendFriendRequest409Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type DeleteFriendRequestRequestObject struct {
+	PlayerId string `json:"playerId"`
+	TargetId string `json:"targetId"`
+}
+
+type DeleteFriendRequestResponseObject interface {
+	VisitDeleteFriendRequestResponse(w http.ResponseWriter) error
+}
+
+type DeleteFriendRequest204Response struct {
+}
+
+func (response DeleteFriendRequest204Response) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteFriendRequest404Response struct {
+}
+
+func (response DeleteFriendRequest404Response) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type AcceptFriendRequestRequestObject struct {
+	PlayerId string `json:"playerId"`
+	TargetId string `json:"targetId"`
+}
+
+type AcceptFriendRequestResponseObject interface {
+	VisitAcceptFriendRequestResponse(w http.ResponseWriter) error
+}
+
+type AcceptFriendRequest200Response struct {
+}
+
+func (response AcceptFriendRequest200Response) VisitAcceptFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type AcceptFriendRequest404Response struct {
+}
+
+func (response AcceptFriendRequest404Response) VisitAcceptFriendRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type RemoveFriendRequestObject struct {
+	PlayerId string `json:"playerId"`
+	TargetId string `json:"targetId"`
+}
+
+type RemoveFriendResponseObject interface {
+	VisitRemoveFriendResponse(w http.ResponseWriter) error
+}
+
+type RemoveFriend204Response struct {
+}
+
+func (response RemoveFriend204Response) VisitRemoveFriendResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveFriend404Response struct {
+}
+
+func (response RemoveFriend404Response) VisitRemoveFriendResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -2288,6 +2892,15 @@ type StrictServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error)
+	// Get players blocked by this player
+	// (GET /players/{playerId}/blocks)
+	GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error)
+	// Block a player
+	// (POST /players/{playerId}/blocks)
+	BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error)
+	// Unblock a player
+	// (DELETE /players/{playerId}/blocks/{targetId})
+	UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error)
 	// Fetch all unlocked cosmetics for the given player
 	// (GET /players/{playerId}/cosmetics)
 	GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmeticsRequestObject) (GetPlayerCosmeticsResponseObject, error)
@@ -2297,6 +2910,24 @@ type StrictServerInterface interface {
 	// Get the display name for a player
 	// (GET /players/{playerId}/displayname)
 	GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error)
+	// Get a player's friends
+	// (GET /players/{playerId}/friends)
+	GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error)
+	// Get a player's friend requests
+	// (GET /players/{playerId}/friends/requests)
+	GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error)
+	// Send a friend request to another player
+	// (POST /players/{playerId}/friends/requests)
+	SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error)
+	// Delete a friend request (cancel outgoing or decline incoming)
+	// (DELETE /players/{playerId}/friends/requests/{targetId})
+	DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error)
+	// Accept an incoming friend request
+	// (POST /players/{playerId}/friends/requests/{targetId}/accept)
+	AcceptFriendRequest(ctx context.Context, request AcceptFriendRequestRequestObject) (AcceptFriendRequestResponseObject, error)
+	// Remove a friend
+	// (DELETE /players/{playerId}/friends/{targetId})
+	RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error)
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error)
@@ -2747,6 +3378,92 @@ func (sh *strictHandler) GivePlayerItems(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// GetBlockedPlayers operation middleware
+func (sh *strictHandler) GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request GetBlockedPlayersRequestObject
+
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBlockedPlayers(ctx, request.(GetBlockedPlayersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBlockedPlayers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBlockedPlayersResponseObject); ok {
+		if err := validResponse.VisitGetBlockedPlayersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BlockPlayer operation middleware
+func (sh *strictHandler) BlockPlayer(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request BlockPlayerRequestObject
+
+	request.PlayerId = playerId
+
+	var body BlockPlayerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BlockPlayer(ctx, request.(BlockPlayerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BlockPlayer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BlockPlayerResponseObject); ok {
+		if err := validResponse.VisitBlockPlayerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnblockPlayer operation middleware
+func (sh *strictHandler) UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
+	var request UnblockPlayerRequestObject
+
+	request.PlayerId = playerId
+	request.TargetId = targetId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnblockPlayer(ctx, request.(UnblockPlayerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnblockPlayer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnblockPlayerResponseObject); ok {
+		if err := validResponse.VisitUnblockPlayerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPlayerCosmetics operation middleware
 func (sh *strictHandler) GetPlayerCosmetics(w http.ResponseWriter, r *http.Request, playerId string) {
 	var request GetPlayerCosmeticsRequestObject
@@ -2825,6 +3542,173 @@ func (sh *strictHandler) GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlayerDisplayNameV2ResponseObject); ok {
 		if err := validResponse.VisitGetPlayerDisplayNameV2Response(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlayerFriends operation middleware
+func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request GetPlayerFriendsRequestObject
+
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlayerFriends(ctx, request.(GetPlayerFriendsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlayerFriends")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlayerFriendsResponseObject); ok {
+		if err := validResponse.VisitGetPlayerFriendsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFriendRequests operation middleware
+func (sh *strictHandler) GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams) {
+	var request GetFriendRequestsRequestObject
+
+	request.PlayerId = playerId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFriendRequests(ctx, request.(GetFriendRequestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFriendRequests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFriendRequestsResponseObject); ok {
+		if err := validResponse.VisitGetFriendRequestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendFriendRequest operation middleware
+func (sh *strictHandler) SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request SendFriendRequestRequestObject
+
+	request.PlayerId = playerId
+
+	var body SendFriendRequestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendFriendRequest(ctx, request.(SendFriendRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendFriendRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendFriendRequestResponseObject); ok {
+		if err := validResponse.VisitSendFriendRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteFriendRequest operation middleware
+func (sh *strictHandler) DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
+	var request DeleteFriendRequestRequestObject
+
+	request.PlayerId = playerId
+	request.TargetId = targetId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteFriendRequest(ctx, request.(DeleteFriendRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteFriendRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteFriendRequestResponseObject); ok {
+		if err := validResponse.VisitDeleteFriendRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AcceptFriendRequest operation middleware
+func (sh *strictHandler) AcceptFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
+	var request AcceptFriendRequestRequestObject
+
+	request.PlayerId = playerId
+	request.TargetId = targetId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AcceptFriendRequest(ctx, request.(AcceptFriendRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AcceptFriendRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AcceptFriendRequestResponseObject); ok {
+		if err := validResponse.VisitAcceptFriendRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveFriend operation middleware
+func (sh *strictHandler) RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
+	var request RemoveFriendRequestObject
+
+	request.PlayerId = playerId
+	request.TargetId = targetId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveFriend(ctx, request.(RemoveFriendRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveFriend")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveFriendResponseObject); ok {
+		if err := validResponse.VisitRemoveFriendResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
