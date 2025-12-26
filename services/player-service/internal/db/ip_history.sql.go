@@ -34,7 +34,7 @@ func (q *Queries) GetPlayerIPHistory(ctx context.Context, playerID string) ([]st
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	items := []string{}
 	for rows.Next() {
 		var address string
 		if err := rows.Scan(&address); err != nil {
@@ -67,7 +67,7 @@ func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]*Ge
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*GetPlayersByIPsRow
+	items := []*GetPlayersByIPsRow{}
 	for rows.Next() {
 		var i GetPlayersByIPsRow
 		if err := rows.Scan(&i.ID, &i.Username); err != nil {

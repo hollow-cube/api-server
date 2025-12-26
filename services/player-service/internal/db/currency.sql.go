@@ -21,7 +21,7 @@ func (q *Queries) GetUnlockedCosmetics(ctx context.Context, playerID string) ([]
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	items := []string{}
 	for rows.Next() {
 		var cosmetic_path string
 		if err := rows.Scan(&cosmetic_path); err != nil {
@@ -59,7 +59,7 @@ func (q *Queries) Unsafe_AddCoins(ctx context.Context, delta int, iD string) ([]
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int
+	items := []int{}
 	for rows.Next() {
 		var coins int
 		if err := rows.Scan(&coins); err != nil {
@@ -87,7 +87,7 @@ func (q *Queries) Unsafe_AddCubits(ctx context.Context, delta int, iD string) ([
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int
+	items := []int{}
 	for rows.Next() {
 		var cubits int
 		if err := rows.Scan(&cubits); err != nil {

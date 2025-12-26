@@ -152,7 +152,7 @@ func (q *Queries) SearchPunishments(ctx context.Context, arg SearchPunishmentsPa
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*Punishment
+	items := []*Punishment{}
 	for rows.Next() {
 		var i Punishment
 		if err := rows.Scan(

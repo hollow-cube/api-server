@@ -212,7 +212,7 @@ func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]*S
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*SearchPlayersFuzzyRow
+	items := []*SearchPlayersFuzzyRow{}
 	for rows.Next() {
 		var i SearchPlayersFuzzyRow
 		if err := rows.Scan(&i.ID, &i.Username); err != nil {
