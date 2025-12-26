@@ -158,7 +158,7 @@ func (t *Tracker) CreateSession(
 	return s, nil
 }
 
-func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLength int64, err error) {
+func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLength int, err error) {
 	s, err := t.queries.DeletePlayerSession(ctx, playerId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil // Player session did not exist, do nothing for now.
@@ -166,7 +166,7 @@ func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLe
 		return 0, fmt.Errorf("failed to delete session: %w", err)
 	}
 
-	sessionLength = time.Since(s.CreatedAt).Milliseconds()
+	sessionLength = int(time.Since(s.CreatedAt).Milliseconds())
 	go t.sendSessionUpdate(SessionUpdateMessage{
 		Action:   Session_Delete,
 		PlayerId: playerId,
