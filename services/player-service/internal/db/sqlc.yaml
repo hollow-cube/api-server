@@ -13,6 +13,8 @@ sql:
         emit_pointers_for_null_types: true
         omit_unused_structs: true
         query_parameter_limit: 3
+        emit_json_tags: true
+        json_tags_case_style: camel
         rename:
           player_datum: "PlayerData" # SQLC will use PlayerDatum as the struct name by default, as it's the singular of data
         overrides:
@@ -20,21 +22,35 @@ sql:
             go_type: "time.Time"
           - db_type: "timestamptz"
             nullable: true
-            go_type:
-              import: "time"
-              type: "Time"
-              pointer: true
+            go_type: { import: "time", type: "Time", pointer: true }
           - db_type: "uuid"
             go_type: "string"
+          - db_type: "uuid"
+            nullable: true
+            go_type: { type: "string", pointer: true }
           - db_type: "text"
             go_type: "string"
           - db_type: "pg_catalog.varchar"
             go_type: "string"
+          - db_type: "pg_catalog.int8"
+            go_type: "int"
+          - db_type: "pg_catalog.int8"
+            nullable: true
+            go_type: { type: "int", pointer: true }
+          - db_type: "pg_catalog.int4"
+            go_type: "int"
+          - db_type: "pg_catalog.int4"
+            nullable: true
+            go_type: { type: "int", pointer: true }
+          - db_type: "serial"
+            go_type: "int"
+
           - column: "player_data.settings"
             nullable: true
-            go_type:
-              type: "PlayerSettings"
-              pointer: false
+            go_type: { type: "PlayerSettings", pointer: false }
+
+          - { column: "tx_log.meta", go_type: { type: "map[string]any" } }
+          - { column: "player_recaps.data", go_type: { type: "map[string]any" } }
 
     strict_function_checks: true
     strict_order_by: true

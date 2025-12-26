@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -20,24 +19,21 @@ var _ StrictServerInterface = (*server)(nil)
 type ServerParams struct {
 	fx.In
 
-	Log     *zap.SugaredLogger
-	Store   *db.Store
-	Storage storage.Client
+	Log   *zap.SugaredLogger
+	Store *db.Store
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
-		log:           params.Log.With("handler", "public"),
-		store:         params.Store,
-		storageClient: params.Storage,
+		log:   params.Log.With("handler", "public"),
+		store: params.Store,
 	}, nil
 }
 
 type server struct {
 	log *zap.SugaredLogger
 
-	store         *db.Store
-	storageClient storage.Client
+	store *db.Store
 
 	cachedTotalPlayers, cachedTotalPlaytime int
 	cachedTotalsLastUpdated                 *time.Time
@@ -79,17 +75,16 @@ func (response GetPlayerRecapCorsResponse) VisitGetPlayerRecapResponse(w http.Re
 }
 
 func (s *server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error) {
-	recap, err := s.storageClient.GetPlayerRecapById(ctx, request.Id)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetPlayerRecapCorsResponse{Body: GetPlayerRecap404Response{}}, nil
-		}
+	recap, err := s.store.GetRecapById(ctx, request.Id)
+	if errors.Is(err, db.ErrNoRows) {
+		return GetPlayerRecapCorsResponse{Body: GetPlayerRecap404Response{}}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to get player recap: %w", err)
 	}
 
 	return GetPlayerRecapCorsResponse{Body: &GetPlayerRecap200JSONResponse{
 		Data:     recap.Data,
-		PlayerId: recap.PlayerId,
+		PlayerId: recap.PlayerID,
 		Username: recap.Username,
 		Year:     recap.Year,
 	}}, nil

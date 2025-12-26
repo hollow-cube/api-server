@@ -2784,7 +2784,7 @@ type GetPunishmentLadderEntryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Duration int64  `json:"duration"`
+		Duration int    `json:"duration"`
 		Id       string `json:"id"`
 		Name     string `json:"name"`
 	}
@@ -3909,7 +3909,7 @@ func ParseGetPunishmentLadderEntryResponse(rsp *http.Response) (*GetPunishmentLa
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Duration int64  `json:"duration"`
+			Duration int    `json:"duration"`
 			Id       string `json:"id"`
 			Name     string `json:"name"`
 		}

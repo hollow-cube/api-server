@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/tebex-go"
 	"go.uber.org/zap"
 )
@@ -41,7 +41,7 @@ func GetEventTarget(event interface{}) string {
 	}
 }
 
-func CreateBasket(tbHeadless *tebex.HeadlessClient, storageClient storage.Client, checkoutId string, packageId int, username, creatorCode, ip string) {
+func CreateBasket(tbHeadless *tebex.HeadlessClient, store *db.Store, checkoutId string, packageId int, username, creatorCode, ip string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -51,7 +51,7 @@ func CreateBasket(tbHeadless *tebex.HeadlessClient, storageClient storage.Client
 		IPAddress: ip,
 	})
 	if err != nil {
-		recordCheckoutState(storageClient, checkoutId, "", err)
+		recordCheckoutState(store, checkoutId, "", err)
 		return
 	}
 
@@ -61,7 +61,7 @@ func CreateBasket(tbHeadless *tebex.HeadlessClient, storageClient storage.Client
 		Quantity:  1,
 	})
 	if err != nil {
-		recordCheckoutState(storageClient, checkoutId, "", fmt.Errorf("failed to add package to basket: %w", err))
+		recordCheckoutState(store, checkoutId, "", fmt.Errorf("failed to add package to basket: %w", err))
 		return
 	}
 
@@ -71,23 +71,24 @@ func CreateBasket(tbHeadless *tebex.HeadlessClient, storageClient storage.Client
 		if errors.Is(err, tebex.ErrHeadlessCreatorCodeNotFound) {
 			zap.S().Infow("creator code not found", "code", creatorCode)
 		} else if err != nil {
-			recordCheckoutState(storageClient, checkoutId, "", fmt.Errorf("failed to add creator code to basket: %w", err))
+			recordCheckoutState(store, checkoutId, "", fmt.Errorf("failed to add creator code to basket: %w", err))
 		}
 	}
 
 	// Success :)
-	recordCheckoutState(storageClient, checkoutId, basket.Ident, nil)
+	recordCheckoutState(store, checkoutId, basket.Ident, nil)
 	zap.S().Infow("created basket", "checkout_id", checkoutId, "basket_id", basket.Ident)
 }
 
-func recordCheckoutState(storageClient storage.Client, checkoutId, basketId string, err error) {
+func recordCheckoutState(store *db.Store, checkoutId, basketId string, err error) {
 	if err != nil {
 		zap.S().Errorw("failed to create basket", "checkout_id", checkoutId, "err", err)
-		if err = storageClient.ResolvePendingTransaction(context.Background(), checkoutId, ""); err != nil {
+		empty := ""
+		if err = store.ResolvePendingTransaction(context.Background(), checkoutId, &empty); err != nil {
 			zap.S().Errorw("failed to resolve pending transaction", "checkout_id", checkoutId, "err", err)
 		}
 	} else {
-		if err = storageClient.ResolvePendingTransaction(context.Background(), checkoutId, basketId); err != nil {
+		if err = store.ResolvePendingTransaction(context.Background(), checkoutId, &basketId); err != nil {
 			zap.S().Errorw("failed to resolve pending transaction", "checkout_id", checkoutId, "err", err)
 		}
 	}

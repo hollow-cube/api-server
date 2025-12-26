@@ -71,12 +71,12 @@ type PlayerData struct {
 	Coins          int            `json:"coins"`
 	Cubits         int            `json:"cubits"`
 	DisplayNameV2  DisplayNameV2  `json:"displayNameV2"`
-	Experience     int64          `json:"experience"`
+	Experience     int            `json:"experience"`
 	FirstJoin      time.Time      `json:"firstJoin"`
 	HypercubeUntil *time.Time     `json:"hypercubeUntil,omitempty"`
 	Id             string         `json:"id"`
 	LastOnline     time.Time      `json:"lastOnline"`
-	Playtime       int64          `json:"playtime"`
+	Playtime       int            `json:"playtime"`
 	Settings       PlayerSettings `json:"settings"`
 	TotpEnabled    bool           `json:"totpEnabled"`
 	Username       string         `json:"username"`
@@ -96,7 +96,7 @@ type PlayerDataUpdateRequest struct {
 	// IpHistory New IP addresses to add to the history, will be merged.
 	IpHistory       *[]string       `json:"ipHistory,omitempty"`
 	LastOnline      *time.Time      `json:"lastOnline,omitempty"`
-	PlaytimeInc     *int64          `json:"playtimeInc,omitempty"`
+	PlaytimeInc     *int            `json:"playtimeInc,omitempty"`
 	SettingsUpdates *PlayerSettings `json:"settingsUpdates,omitempty"`
 	Username        *string         `json:"username,omitempty"`
 }
@@ -106,7 +106,7 @@ type PlayerInventory struct {
 	Backpack *map[string]interface{} `json:"backpack,omitempty"`
 	Coins    *int                    `json:"coins,omitempty"`
 	Cubits   *int                    `json:"cubits,omitempty"`
-	Exp      *int64                  `json:"exp,omitempty"`
+	Exp      *int                    `json:"exp,omitempty"`
 }
 
 // PlayerSettings defines model for PlayerSettings.
@@ -137,7 +137,7 @@ type PunishmentLadder struct {
 
 // PunishmentLadderEntry defines model for PunishmentLadderEntry.
 type PunishmentLadderEntry struct {
-	Duration int64 `json:"duration"`
+	Duration int `json:"duration"`
 }
 
 // PunishmentLadderReason defines model for PunishmentLadderReason.
@@ -2112,7 +2112,7 @@ type GetPunishmentLadderEntryResponseObject interface {
 }
 
 type GetPunishmentLadderEntry200JSONResponse struct {
-	Duration int64  `json:"duration"`
+	Duration int    `json:"duration"`
 	Id       string `json:"id"`
 	Name     string `json:"name"`
 }

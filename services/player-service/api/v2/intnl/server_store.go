@@ -5,20 +5,18 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 )
 
-var errBalanceTooLow = errors.New("balance too low for transaction")
-
 func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (FaucetResponseObject, error) {
-	var currency model.CurrencyType
+	var currency db.CurrencyType
 	if request.Body.Type == nil || *request.Body.Type == "coins" {
-		currency = model.Coins // Default value also
+		currency = db.Coins // Default value also
 	} else if request.Body.Type != nil && *request.Body.Type == "cubits" {
-		currency = model.Cubits
+		currency = db.Cubits
 	} else if request.Body.Type != nil {
 		return Faucet400JSONResponse{BadRequestJSONResponse{
 			Message: fmt.Sprintf("invalid currency type: %s", *request.Body.Type),
@@ -32,8 +30,8 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 	}
 
 	meta := map[string]interface{}{}
-	newBalance, err := s.storageClient.AddCurrency(ctx, request.Body.PlayerId, currency,
-		request.Body.Amount, model.BalanceChangeReasonFaucet, meta)
+	newBalance, err := s.store.AddCurrency(ctx, request.Body.PlayerId, currency,
+		request.Body.Amount, db.BalanceChangeReasonFaucet, meta)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add currency: %w", err)
 	}
@@ -43,7 +41,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 		Action: model.PlayerDataUpdate_Modify,
 		Id:     request.Body.PlayerId,
 	}
-	if currency == model.Coins {
+	if currency == db.Coins {
 		updateMessage.Coins = &newBalance
 	} else {
 		updateMessage.Cubits = &newBalance
@@ -86,24 +84,20 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 	}
 
 	// Do all the updates as a transaction
-	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
+	err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
 		if request.Body.Coins != nil && *request.Body.Coins > 0 {
-			newCoins, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Coins,
-				-*request.Body.Coins, model.BalanceChangeReasonBuyCosmetic, meta)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
+			newCoins, err := tx.AddCurrency(ctx, request.PlayerId, db.Coins,
+				-*request.Body.Coins, db.BalanceChangeReasonBuyCosmetic, meta)
+			if err != nil {
 				return fmt.Errorf("failed to subtract coins: %w", err)
 			}
 			update.Coins = &newCoins
 		}
 
 		if request.Body.Cubits != nil && *request.Body.Cubits > 0 {
-			newCubits, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Cubits,
-				-*request.Body.Cubits, model.BalanceChangeReasonBuyCosmetic, meta)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
+			newCubits, err := tx.AddCurrency(ctx, request.PlayerId, db.Cubits,
+				-*request.Body.Cubits, db.BalanceChangeReasonBuyCosmetic, meta)
+			if err != nil {
 				return fmt.Errorf("failed to subtract cubits: %w", err)
 			}
 			update.Cubits = &newCubits
@@ -114,14 +108,14 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 		}
 
 		// Finally, actually add the cosmetic
-		err := s.storageClient.UnlockCosmetic(ctx, request.PlayerId, request.Body.CosmeticId)
+		err := tx.UnlockCosmetic(ctx, request.PlayerId, request.Body.CosmeticId)
 		if err != nil {
 			return fmt.Errorf("failed to unlock cosmetic: %w", err)
 		}
 
 		return nil
 	})
-	if errors.Is(err, errBalanceTooLow) {
+	if errors.Is(err, db.ErrBalanceTooLow) {
 		return BuyCosmetic409Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -161,29 +155,25 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 	newState := PlayerInventory{}
 
 	// Do all the updates as a transaction
-	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
+	err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
 		if request.Body.Change.Coins != nil && *request.Body.Change.Coins > 0 {
-			newCoins, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Coins, *request.Body.Change.Coins, model.BalanceChangeReasonGiveItemGeneric, request.Body.TxMeta)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
+			newCoins, err := tx.AddCurrency(ctx, request.PlayerId, db.Coins, *request.Body.Change.Coins, db.BalanceChangeReasonGiveItemGeneric, request.Body.TxMeta)
+			if err != nil {
 				return fmt.Errorf("failed to subtract coins: %w", err)
 			}
 			newState.Coins = &newCoins
 		}
 
 		if request.Body.Change.Cubits != nil && *request.Body.Change.Cubits > 0 {
-			newCubits, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Cubits, -*request.Body.Change.Cubits, model.BalanceChangeReasonGiveItemGeneric, request.Body.TxMeta)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
+			newCubits, err := tx.AddCurrency(ctx, request.PlayerId, db.Cubits, -*request.Body.Change.Cubits, db.BalanceChangeReasonGiveItemGeneric, request.Body.TxMeta)
+			if err != nil {
 				return fmt.Errorf("failed to subtract cubits: %w", err)
 			}
 			newState.Cubits = &newCubits
 		}
 
 		if request.Body.Change.Exp != nil && *request.Body.Change.Exp > 0 {
-			newExp, err := s.store.AddExperience(ctx, request.PlayerId, *request.Body.Change.Exp)
+			newExp, err := tx.AddExperience(ctx, request.PlayerId, *request.Body.Change.Exp)
 			if err != nil {
 				return fmt.Errorf("failed to add experience: %w", err)
 			}
@@ -196,7 +186,7 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 
 		return nil
 	})
-	if errors.Is(err, errBalanceTooLow) {
+	if errors.Is(err, db.ErrBalanceTooLow) {
 		return GivePlayerItems404Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -245,14 +235,12 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 	if err := s.authzClient.UnlockUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); err != nil { // 2pc: Update SpiceDB
 		return nil, fmt.Errorf("failed to unlock upgrade: %w", err)
 	}
-	err := s.storageClient.RunTransaction(ctx, func(ctx context.Context) error { // 2pc: Begin transaction
+	err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error { // 2pc: Begin transaction
 
 		if request.Body.Cubits != nil && *request.Body.Cubits > 0 {
-			newCubits, err := s.storageClient.AddCurrency(ctx, request.PlayerId, model.Cubits, -*request.Body.Cubits,
-				model.BalanceChangeReasonBuyCosmetic, meta)
-			if errors.Is(err, storage.ErrBalanceTooLow) {
-				return errBalanceTooLow
-			} else if err != nil {
+			newCubits, err := tx.AddCurrency(ctx, request.PlayerId, db.Cubits, -*request.Body.Cubits,
+				db.BalanceChangeReasonBuyCosmetic, meta)
+			if err != nil {
 				return fmt.Errorf("failed to subtract cubits: %w", err)
 			}
 			update.Cubits = &newCubits
@@ -260,7 +248,7 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 
 		return nil
 	}) // 2pc: Commit transaction
-	if errors.Is(err, errBalanceTooLow) {
+	if errors.Is(err, db.ErrBalanceTooLow) {
 		return BuyNamedUpgrade409Response{}, nil
 	} else if err != nil {
 		if errRevert := s.authzClient.RemoveUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); errRevert != nil { // 2pc: Revert SpiceDB
@@ -297,13 +285,13 @@ func (s *server) TebexCheckout(ctx context.Context, request TebexCheckoutRequest
 	checkoutId := genVerifySecret()
 	url := fmt.Sprintf("https://hollowcube.net/store?c=%s", checkoutId)
 
-	err = s.storageClient.CreatePendingTransaction(ctx, checkoutId, playerId, request.Body.Username)
+	err = s.store.CreatePendingTransaction(ctx, request.Body.Username, checkoutId, playerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pending transaction: %w", err)
 	}
 
 	// Create the basket on tebex async, it will be fetched by the browser using the related public endpoint.
-	go payments.CreateBasket(s.tbHeadless, s.storageClient, checkoutId, packageId, request.Body.Username, request.Body.CreatorCode, ips[0])
+	go payments.CreateBasket(s.tbHeadless, s.store, checkoutId, packageId, request.Body.Username, request.Body.CreatorCode, ips[0])
 
 	return TebexCheckout200JSONResponse{Url: url}, nil
 }

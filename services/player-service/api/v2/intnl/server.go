@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
@@ -17,11 +16,9 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
-	"github.com/jackc/pgx/v5"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -38,7 +35,6 @@ type ServerParams struct {
 	Producer   wkafka.SyncWriter
 	TBHeadless *tebex.HeadlessClient
 
-	Storage           storage.Client
 	Store             *db.Store
 	Authz             authz.Client
 	PunishmentLadders map[string]*model.PunishmentLadder
@@ -67,7 +63,6 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
-		storageClient:     p.Storage,
 		store:             p.Store,
 		authzClient:       p.Authz,
 		producer:          p.Producer,
@@ -82,11 +77,10 @@ type server struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	storageClient storage.Client
-	store         *db.Store
-	authzClient   authz.Client
-	producer      wkafka.Writer
-	tbHeadless    *tebex.HeadlessClient
+	store       *db.Store
+	authzClient authz.Client
+	producer    wkafka.Writer
+	tbHeadless  *tebex.HeadlessClient
 
 	punishmentLadders map[string]*model.PunishmentLadder
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder
@@ -96,50 +90,46 @@ type server struct {
 }
 
 func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
-	p, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
-	apiPlayer, err := s.dbPlayerDataToAPIWithName(p, err, ctx)
+	pd, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
+	if errors.Is(err, db.ErrNoRows) {
+		return GetPlayerData404Response{}, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	apiPlayer, err := s.hydratePlayerData(ctx, pd)
 	if err != nil {
 		return nil, err
-	} else if apiPlayer == nil {
-		return PlayerNotFoundResponse{}, nil
 	}
 	return GetPlayerData200JSONResponse(*apiPlayer), nil
 }
 
 func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
-	now := time.Now()
-	p, err := s.store.CreatePlayerData(ctx, db.CreatePlayerDataParams{
-		ID:         request.Body.Id,
-		Username:   request.Body.Username,
-		FirstJoin:  now,
-		LastOnline: now,
-	})
+	pd, err := s.store.CreatePlayerData(ctx, request.Body.Id, request.Body.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create player data: %w", err)
 	}
 
-	err = s.store.AddPlayerIP(ctx, p.ID, request.Body.Ip)
+	err = s.store.AddPlayerIP(ctx, pd.ID, request.Body.Ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add player ip: %w", err)
 	}
 
-	displayName2, err := s.dbComputeDisplayNameV2(ctx, p)
+	go s.metrics.Write(&model.NewPlayer{PlayerId: pd.ID})
+
+	apiPlayer, err := s.hydratePlayerData(ctx, pd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compute display name 2: %w", err)
+		return nil, err
 	}
 
-	go s.metrics.Write(&model.NewPlayer{PlayerId: p.ID})
-
-	return CreatePlayerData201JSONResponse(*dbPlayerDataToAPI(p, displayName2, false, nil)), nil
+	return CreatePlayerData201JSONResponse(*apiPlayer), nil
 }
 
 func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
 	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return PlayerNotFoundResponse{}, nil
-		}
-
+	if errors.Is(err, db.ErrNoRows) {
+		return PlayerNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 
@@ -170,7 +160,8 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 			changed = true
 		}
 	}
-	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
+
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
 		if updates.IpHistory != nil && len(*updates.IpHistory) > 0 {
 			for _, ip := range *updates.IpHistory {
 				if ip == "" {
@@ -194,10 +185,10 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 		}
 
 		return nil
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return PlayerNotFoundResponse{}, nil
-		}
+	})
+	if errors.Is(err, db.ErrNoRows) {
+		return PlayerNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to apply transaction: %w", err)
 	}
 
@@ -209,7 +200,7 @@ func (s *server) GetPlayerBackpack(_ context.Context, _ GetPlayerBackpackRequest
 }
 
 func (s *server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmeticsRequestObject) (GetPlayerCosmeticsResponseObject, error) {
-	cosmetics, err := s.storageClient.GetUnlockedCosmetics(ctx, request.PlayerId)
+	cosmetics, err := s.store.GetUnlockedCosmetics(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get unlocked cosmetics: %w", err)
 	}
@@ -227,19 +218,20 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	}
 
 	// Load it from storage
-	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
+	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return GetPlayerDisplayNameV2404Response{}, nil
 		}
 
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 
-	displayName, err := s.dbComputeDisplayNameV2(ctx, p)
+	displayName, err := s.computeDisplayNameV2(ctx, pd.ID, pd.Username)
 	if err != nil {
 		return nil, err
 	}
+
 	return GetPlayerDisplayNameV2200JSONResponse(displayName), nil
 }
 
@@ -304,7 +296,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
 	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return PlayerNotFoundResponse{}, nil
 		}
 
@@ -319,7 +311,7 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 		return PerformTabComplete200JSONResponse{Result: []TabCompleteEntry{}}, nil
 	}
 
-	entries, err := s.storageClient.SearchPlayersFuzzy(ctx, request.Body.Query)
+	entries, err := s.store.SearchPlayersFuzzy(ctx, request.Body.Query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search players: %w", err)
 	}
@@ -327,7 +319,7 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 	result := make([]TabCompleteEntry, len(entries))
 	for i, entry := range entries {
 		result[i] = TabCompleteEntry{
-			Id:       entry.Id,
+			Id:       entry.ID,
 			Username: entry.Username,
 		}
 	}
@@ -351,131 +343,6 @@ func sendPlayerDataUpdateMessage(w wkafka.Writer, _ context.Context, msg *model.
 
 	if err = w.WriteMessages(context.Background(), kafkaRecord); err != nil {
 		log.Errorw("failed to write to kafka", "error", err)
-	}
-}
-
-func (s *server) playerDataToAPIWithName(p *model.PlayerData, err error, ctx context.Context) (*PlayerData, error) { // abstracted to reduce boilerplate
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to get player data: %w", err)
-	}
-
-	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, p.Id)
-	if err != nil {
-		return nil, err
-	}
-
-	var ok bool
-	var displayName2 DisplayNameV2
-	if displayName2, ok = s.nameCache2.Get(p.Id); !ok || true { //todo temporarily disable display name v2 cache
-		displayName2, err = s.computeDisplayNameV2(ctx, p.Id, p.Username)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute display name 2: %w", err)
-		}
-	}
-
-	// Can test empty code to see if TOTP is disabled
-	_, err = s.testTotpCode(ctx, p.Id, "", false)
-	totpEnabled := true
-	if errors.Is(err, errNotConfigured) {
-		totpEnabled = false
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to check totp status: %w", err)
-	}
-
-	// todo: reenable these values when adding back experience and coins
-	return playerDataToAPI(p, displayName2, totpEnabled, hypercubeTime), nil
-}
-
-func (s *server) dbPlayerDataToAPIWithName(p *db.PlayerData, err error, ctx context.Context) (*PlayerData, error) { // abstracted to reduce boilerplate
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to get player data: %w", err)
-	}
-
-	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, p.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	var ok bool
-	var displayName2 DisplayNameV2
-	if displayName2, ok = s.nameCache2.Get(p.ID); !ok || true { //todo temporarily disable display name v2 cache
-		displayName2, err = s.dbComputeDisplayNameV2(ctx, p)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute display name 2: %w", err)
-		}
-	}
-
-	// Can test empty code to see if TOTP is disabled
-	_, err = s.testTotpCode(ctx, p.ID, "", false)
-	totpEnabled := true
-	if errors.Is(err, errNotConfigured) {
-		totpEnabled = false
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to check totp status: %w", err)
-	}
-
-	// todo: reenable these values when adding back experience and coins
-	return dbPlayerDataToAPI(p, displayName2, totpEnabled, hypercubeTime), nil
-}
-
-func playerDataToAPI(p *model.PlayerData, displayName2 DisplayNameV2, totpEnabled bool, hypercubeTime *time.Time) *PlayerData {
-	var settings map[string]interface{}
-	if p.Settings != nil {
-		settings = p.Settings
-	} else {
-		settings = make(map[string]interface{})
-	}
-
-	return &PlayerData{
-		Id:            p.Id,
-		Username:      p.Username,
-		DisplayNameV2: displayName2,
-		FirstJoin:     p.FirstJoin,
-		LastOnline:    p.LastOnline,
-		Playtime:      p.Playtime,
-		Settings:      settings,
-		Experience:    int64(0),
-		BetaEnabled:   p.BetaEnabled,
-
-		Coins:          0,
-		Cubits:         p.Cubits,
-		HypercubeUntil: hypercubeTime,
-
-		TotpEnabled: totpEnabled,
-	}
-}
-
-func dbPlayerDataToAPI(p *db.PlayerData, displayName2 DisplayNameV2, totpEnabled bool, hypercubeTime *time.Time) *PlayerData {
-	var settings map[string]interface{}
-	if p.Settings != nil {
-		settings = p.Settings
-	} else {
-		settings = make(map[string]interface{})
-	}
-
-	return &PlayerData{
-		Id:            p.ID,
-		Username:      p.Username,
-		DisplayNameV2: displayName2,
-		FirstJoin:     p.FirstJoin,
-		LastOnline:    p.LastOnline,
-		Playtime:      p.Playtime,
-		Settings:      settings,
-		BetaEnabled:   *p.BetaEnabled,
-
-		Coins:          0,
-		Cubits:         int(p.Cubits),
-		HypercubeUntil: hypercubeTime,
-
-		TotpEnabled: totpEnabled,
 	}
 }
 
@@ -555,34 +422,6 @@ var (
 		"media": "#cc39e9",
 	}
 )
-
-func dbPlayerToModel(p *db.PlayerData) *model.PlayerData {
-	var settings map[string]interface{}
-	if p.Settings != nil {
-		settings = p.Settings
-	} else {
-		settings = make(map[string]interface{})
-	}
-
-	return &model.PlayerData{
-		Id:             p.ID,
-		Username:       p.Username,
-		FirstJoin:      p.FirstJoin,
-		LastOnline:     p.LastOnline,
-		Playtime:       p.Playtime,
-		Settings:       settings,
-		BetaEnabled:    *p.BetaEnabled,
-		Experience:     int(p.Experience),
-		HypercubeExp:   0, // legit no idea where this comes from - it's also not referenced or used ANYWHERE
-		Coins:          int(p.Coins),
-		Cubits:         int(p.Cubits),
-		LinkedAccounts: nil, // not present, separate req, not needed where this is used - it's also not referenced or used ANYWHERE
-	}
-}
-
-func (s *server) dbComputeDisplayNameV2(ctx context.Context, p *db.PlayerData) (DisplayNameV2, error) {
-	return s.computeDisplayNameV2(ctx, p.ID, p.Username)
-}
 
 func (s *server) computeDisplayNameV2(ctx context.Context, playerId, playerUsername string) (DisplayNameV2, error) {
 	var parts DisplayNameV2

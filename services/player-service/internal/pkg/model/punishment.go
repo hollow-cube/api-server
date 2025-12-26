@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/services/player-service/config"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 )
 
 type PunishmentType string
@@ -63,7 +64,7 @@ const (
 
 type PunishmentUpdateMessage struct {
 	Action     PunishmentUpdateAction `json:"action"`
-	Punishment *Punishment            `json:"punishment"`
+	Punishment *db.Punishment         `json:"punishment"`
 }
 
 func ConvertConfigLadders2Model(ladders []config.PunishmentLadder) (map[string]*PunishmentLadder, error) {

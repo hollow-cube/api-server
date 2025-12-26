@@ -81,11 +81,11 @@ func (s *server) hydratePlayerData(ctx context.Context, pd *db.PlayerData) (*Pla
 		LastOnline:    pd.LastOnline,
 		Playtime:      pd.Playtime,
 		Settings:      settings,
-		Experience:    int64(0),
+		Experience:    0,
 		BetaEnabled:   *pd.BetaEnabled, //todo should make this column notnull
 
 		Coins:          0,
-		Cubits:         int(pd.Cubits),
+		Cubits:         pd.Cubits,
 		HypercubeUntil: hypercubeTime,
 
 		TotpEnabled: totpEnabled,

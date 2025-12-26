@@ -99,10 +99,11 @@ func (c *PostgresClient) Start(ctx context.Context) error {
 	}
 
 	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
+	_ = m
+	//err = m.Up()
+	//if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	//	return fmt.Errorf("failed to apply migrations: %w", err)
+	//}
 
 	return nil
 }

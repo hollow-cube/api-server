@@ -711,7 +711,6 @@ paths:
                     name: { type: string }
                     duration:
                       type: integer
-                      format: int64
         '404':
           description: Punishment ladder entry not found
 
@@ -855,10 +854,8 @@ components:
           format: date-time
         playtime:
           type: integer
-          format: int64
         experience:
           type: integer
-          format: int64
         settings:
           $ref: '#/components/schemas/PlayerSettings'
 
@@ -900,9 +897,7 @@ components:
       properties:
         coins: { type: integer }
         cubits: { type: integer }
-        exp:
-          type: integer
-          format: int64
+        exp: { type: integer }
         backpack:
           type: object
           additionalProperties: true
@@ -975,7 +970,6 @@ components:
       properties:
         duration:
           type: integer
-          format: int64
     PunishmentLadderReason:
       type: object
       required: [ id, aliases ]
@@ -1021,7 +1015,6 @@ components:
           format: date-time
         playtimeInc:
           type: integer
-          format: int64
 
         settingsUpdates:
           $ref: '#/components/schemas/PlayerSettings'

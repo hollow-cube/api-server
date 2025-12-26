@@ -8,9 +8,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
@@ -40,7 +40,7 @@ func (s *server) processStoredEventStream(ctx context.Context, r wkafka.Reader, 
 		case *tebex.PaymentCompletedEvent:
 			err = s.handlePaymentCompletedEvent(ctx, event, sub)
 		case *tebex.PaymentDeclinedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		case *tebex.PaymentRefundedEvent:
 			err = s.handlePaymentRefundedEvent(ctx, event, sub)
 		case *tebex.PaymentDisputeOpenedEvent:
@@ -50,15 +50,15 @@ func (s *server) processStoredEventStream(ctx context.Context, r wkafka.Reader, 
 		case *tebex.PaymentDisputeLostEvent:
 			err = s.handlePaymentDisputeLostEvent(ctx, event, sub)
 		case *tebex.PaymentDisputeClosedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		case *tebex.RecurringPaymentStartedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		case *tebex.RecurringPaymentRenewedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		case *tebex.RecurringPaymentEndedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		case *tebex.RecurringPaymentStatusChangedEvent:
-			err = s.logTebexEvent(ctx, event)
+			err = logTebexEvent(ctx, s.store, event)
 		}
 
 		// If we have an error processing the message for whatever reason, we should put it in the DLQ.
@@ -87,19 +87,6 @@ func (s *server) processStoredEventStream(ctx context.Context, r wkafka.Reader, 
 	}
 
 	s.log.Info("tebex message processing loop ended")
-}
-
-func (s *server) logTebexEvent(ctx context.Context, event *tebex.Event) error {
-	rawSubject, err := json.Marshal(event.Subject)
-	if err != nil {
-		return fmt.Errorf("failed to marshal tebex event subject: %w", err)
-	}
-
-	if err = s.storageClient.LogTebexEvent(ctx, event.Id, event.Date, string(rawSubject)); err != nil {
-		return fmt.Errorf("failed to log tebex event: %w", err)
-	}
-
-	return nil
 }
 
 func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentCompletedEvent) error {
@@ -221,6 +208,8 @@ func (s *server) computeChangeList(ctx context.Context, products []*tebex.Produc
 	return
 }
 
+var errDuplicateProcess = errors.New("duplicate process")
+
 func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txId string, changes []*model.TebexChange) (newBalances map[string]int, err error) {
 	// Apply the changes as a two-phase commit
 	// 1. Update the spicedb relationship for any hypercube purchases
@@ -241,19 +230,24 @@ func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txI
 		return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
 	}
 
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error { // 2pc: Begin transaction
-		if err = s.logTebexEvent(ctx, rawEvent); err != nil {
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error { // 2pc: Begin transaction
+		if err = logTebexEvent(ctx, tx, rawEvent); err != nil {
 			return fmt.Errorf("failed to log tebex event: %w", err)
 		}
 
-		if err = s.storageClient.CreateTebexState(ctx, txId, changes); err != nil {
-			// This call may return ErrDuplicateEntry which will result in reverting everything but still a success.
-			// This is to make the operation idempotent.
+		changesJson, err := json.Marshal(changes)
+		if err != nil {
+			return fmt.Errorf("failed to marshal change list: %w", err)
+		}
+		createdStates, err := tx.CreateTebexState(ctx, txId, changesJson)
+		if err != nil {
 			return fmt.Errorf("failed to create tebex state: %w", err)
+		} else if createdStates == 0 {
+			return errDuplicateProcess
 		}
 
 		meta := map[string]interface{}{"tx": txId}
-		if newBalances, err = s.applyCubitsChanges(ctx, changes, meta, false); err != nil {
+		if newBalances, err = applyCubitsChanges(ctx, tx, changes, meta, false); err != nil {
 			return fmt.Errorf("failed to apply cubits changes: %w", err)
 		}
 
@@ -264,15 +258,15 @@ func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txI
 			s.log.Errorw("failed to revert hypercube changes", "error", errRevert)
 		}
 
-		// ErrDuplicateEntry is fine, it means we already processed this event
-		if !errors.Is(err, storage.ErrDuplicateEntry) {
+		// errDuplicateProcess is fine, it means we already processed this event
+		if !errors.Is(err, errDuplicateProcess) {
 			return nil, fmt.Errorf("db write failed: %w", err)
 		}
 	}
 	return
 }
 
-func (s *server) applyCubitsChanges(ctx context.Context, changes []*model.TebexChange, txMeta map[string]interface{}, invert bool) (newBalances map[string]int, err error) {
+func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.TebexChange, txMeta map[string]interface{}, invert bool) (newBalances map[string]int, err error) {
 	newBalances = map[string]int{}
 	for _, change := range changes {
 		if change.Type != model.TebexChangeCubits {
@@ -284,9 +278,9 @@ func (s *server) applyCubitsChanges(ctx context.Context, changes []*model.TebexC
 			sign = -1
 		}
 
-		newBalances[change.Target], err = s.storageClient.AddCurrency(
-			ctx, change.Target, model.Cubits, sign*change.Amount,
-			model.BalanceChangeReasonTebexOneoff, txMeta,
+		newBalances[change.Target], err = store.AddCurrency(
+			ctx, change.Target, db.Cubits, sign*change.Amount,
+			db.BalanceChangeReasonTebexOneoff, txMeta,
 		)
 		if err != nil {
 			return
@@ -316,7 +310,7 @@ func (s *server) applyHypercubeChanges(ctx context.Context, changes []*model.Teb
 }
 
 func (s *server) handlePaymentDisputeOpenedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentDisputeOpenedEvent) error {
-	if err := s.logTebexEvent(ctx, raw); err != nil {
+	if err := logTebexEvent(ctx, s.store, raw); err != nil {
 		return fmt.Errorf("failed to log tebex event: %w", err)
 	}
 
@@ -342,7 +336,7 @@ func (s *server) handlePaymentDisputeOpenedEvent(ctx context.Context, raw *tebex
 }
 
 func (s *server) handlePaymentDisputeWonEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentDisputeWonEvent) error {
-	if err := s.logTebexEvent(ctx, raw); err != nil {
+	if err := logTebexEvent(ctx, s.store, raw); err != nil {
 		return fmt.Errorf("failed to log tebex event: %w", err)
 	}
 
@@ -352,7 +346,7 @@ func (s *server) handlePaymentDisputeWonEvent(ctx context.Context, raw *tebex.Ev
 }
 
 func (s *server) handlePaymentDisputeLostEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentDisputeLostEvent) error {
-	if err := s.logTebexEvent(ctx, raw); err != nil {
+	if err := logTebexEvent(ctx, s.store, raw); err != nil {
 		return fmt.Errorf("failed to log tebex event: %w", err)
 	}
 
@@ -413,4 +407,17 @@ func sendPlayerDataUpdateMessage(w wkafka.Writer, _ context.Context, msg *model.
 	if err = w.WriteMessages(context.Background(), kafkaRecord); err != nil {
 		log.Errorw("failed to write to kafka", "error", err)
 	}
+}
+
+func logTebexEvent(ctx context.Context, store *db.Store, event *tebex.Event) error {
+	rawSubject, err := json.Marshal(event.Subject)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tebex event subject: %w", err)
+	}
+
+	if err = store.LogTebexEvent(ctx, event.Id, event.Date, rawSubject); err != nil {
+		return fmt.Errorf("failed to log tebex event: %w", err)
+	}
+
+	return nil
 }

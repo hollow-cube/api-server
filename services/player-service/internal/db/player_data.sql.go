@@ -10,26 +10,60 @@ import (
 	"time"
 )
 
-const createPlayerData = `-- name: CreatePlayerData :one
-insert into public.player_data (id, username, first_join, last_online)
-values ($1, $2, $3, $4)
-RETURNING id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
+const activateTOTP = `-- name: ActivateTOTP :one
+update player_totp
+set active = true
+where player_id = $1
+  and key = $2
+  and active = false
+returning 1
 `
 
-type CreatePlayerDataParams struct {
-	ID         string
-	Username   string
-	FirstJoin  time.Time
-	LastOnline time.Time
+func (q *Queries) ActivateTOTP(ctx context.Context, playerID string, key []byte) (int32, error) {
+	row := q.db.QueryRow(ctx, activateTOTP, playerID, key)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
-func (q *Queries) CreatePlayerData(ctx context.Context, arg CreatePlayerDataParams) (*PlayerData, error) {
-	row := q.db.QueryRow(ctx, createPlayerData,
-		arg.ID,
-		arg.Username,
-		arg.FirstJoin,
-		arg.LastOnline,
+const addTOTP = `-- name: AddTOTP :execrows
+insert into player_totp (player_id, active, key, recovery_codes)
+values ($1, $2, $3, $4)
+on conflict (player_id)
+  do update set key            = excluded.key,
+                recovery_codes = excluded.recovery_codes,
+                created_at     = now()
+where player_totp.active = false
+`
+
+type AddTOTPParams struct {
+	PlayerID      string   `json:"playerId"`
+	Active        *bool    `json:"active"`
+	Key           []byte   `json:"key"`
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
+func (q *Queries) AddTOTP(ctx context.Context, arg AddTOTPParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addTOTP,
+		arg.PlayerID,
+		arg.Active,
+		arg.Key,
+		arg.RecoveryCodes,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const createPlayerData = `-- name: CreatePlayerData :one
+insert into player_data (id, username, first_join, last_online)
+values ($1, $2, now(), now())
+returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
+`
+
+func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string) (*PlayerData, error) {
+	row := q.db.QueryRow(ctx, createPlayerData, iD, username)
 	var i PlayerData
 	err := row.Scan(
 		&i.ID,
@@ -46,9 +80,20 @@ func (q *Queries) CreatePlayerData(ctx context.Context, arg CreatePlayerDataPara
 	return &i, err
 }
 
+const deleteTOTP = `-- name: DeleteTOTP :exec
+delete
+from player_totp
+where player_id = $1
+`
+
+func (q *Queries) DeleteTOTP(ctx context.Context, playerID string) error {
+	_, err := q.db.Exec(ctx, deleteTOTP, playerID)
+	return err
+}
+
 const getPlayerData = `-- name: GetPlayerData :one
 select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
-from public.player_data
+from player_data
 where id = $1
 limit 1
 `
@@ -77,14 +122,33 @@ from public.player_data
 `
 
 type GetPlayerStatsRow struct {
-	Count int64
-	Sum   int64
+	Count int64 `json:"count"`
+	Sum   int64 `json:"sum"`
 }
 
 func (q *Queries) GetPlayerStats(ctx context.Context) (*GetPlayerStatsRow, error) {
 	row := q.db.QueryRow(ctx, getPlayerStats)
 	var i GetPlayerStatsRow
 	err := row.Scan(&i.Count, &i.Sum)
+	return &i, err
+}
+
+const getTOTP = `-- name: GetTOTP :one
+select player_id, created_at, active, key, recovery_codes
+from player_totp
+where player_id = $1
+`
+
+func (q *Queries) GetTOTP(ctx context.Context, playerID string) (*PlayerTotp, error) {
+	row := q.db.QueryRow(ctx, getTOTP, playerID)
+	var i PlayerTotp
+	err := row.Scan(
+		&i.PlayerID,
+		&i.CreatedAt,
+		&i.Active,
+		&i.Key,
+		&i.RecoveryCodes,
+	)
 	return &i, err
 }
 
@@ -116,9 +180,9 @@ func (q *Queries) LookupPlayerByUsername(ctx context.Context, lower string) (str
 }
 
 const playerExistsById = `-- name: PlayerExistsById :one
-SELECT exists (SELECT 1
-               FROM public.player_data
-               WHERE id = $1)
+select exists (select 1
+               from public.player_data
+               where id = $1)
 `
 
 func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error) {
@@ -128,23 +192,57 @@ func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error)
 	return exists, err
 }
 
+const searchPlayersFuzzy = `-- name: SearchPlayersFuzzy :many
+
+select id, username
+from player_data
+where username ~* $1
+limit 25
+`
+
+type SearchPlayersFuzzyRow struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
+// SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
+func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]*SearchPlayersFuzzyRow, error) {
+	rows, err := q.db.Query(ctx, searchPlayersFuzzy, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*SearchPlayersFuzzyRow
+	for rows.Next() {
+		var i SearchPlayersFuzzyRow
+		if err := rows.Scan(&i.ID, &i.Username); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updatePlayerData = `-- name: UpdatePlayerData :exec
 update public.player_data
-set username     = COALESCE($2, username),
-    last_online  = COALESCE($3, last_online),
-    playtime     = COALESCE($4, playtime),
-    beta_enabled = COALESCE($5, beta_enabled),
-    settings     = COALESCE($6, settings)
+set username     = coalesce($2, username),
+    last_online  = coalesce($3, last_online),
+    playtime     = coalesce($4, playtime),
+    beta_enabled = coalesce($5, beta_enabled),
+    settings     = coalesce($6, settings)
 where id = $1
 `
 
 type UpdatePlayerDataParams struct {
-	ID          string
-	Username    *string
-	LastOnline  *time.Time
-	Playtime    *int64
-	BetaEnabled *bool
-	Settings    PlayerSettings
+	ID          string         `json:"id"`
+	Username    *string        `json:"username"`
+	LastOnline  *time.Time     `json:"lastOnline"`
+	Playtime    *int           `json:"playtime"`
+	BetaEnabled *bool          `json:"betaEnabled"`
+	Settings    PlayerSettings `json:"settings"`
 }
 
 func (q *Queries) UpdatePlayerData(ctx context.Context, arg UpdatePlayerDataParams) error {
@@ -167,9 +265,9 @@ where id = $1
 returning experience as exp
 `
 
-func (q *Queries) addExperience(ctx context.Context, iD string, experience int64) (int64, error) {
+func (q *Queries) addExperience(ctx context.Context, iD string, experience int) (int, error) {
 	row := q.db.QueryRow(ctx, addExperience, iD, experience)
-	var exp int64
+	var exp int
 	err := row.Scan(&exp)
 	return exp, err
 }

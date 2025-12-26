@@ -6,32 +6,56 @@ package db
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApiKey struct {
-	ID        string
-	KeyHash   string
-	PlayerID  string
-	CreatedAt *time.Time
-	DeletedAt *time.Time
+	ID        string     `json:"id"`
+	KeyHash   string     `json:"keyHash"`
+	PlayerID  string     `json:"playerId"`
+	CreatedAt *time.Time `json:"createdAt"`
+	DeletedAt *time.Time `json:"deletedAt"`
 }
 
 type PendingVerification struct {
-	Type       string
-	UserID     string
-	UserSecret string
-	Expiration time.Time
+	Type       string    `json:"type"`
+	UserID     string    `json:"userId"`
+	UserSecret string    `json:"userSecret"`
+	Expiration time.Time `json:"expiration"`
 }
 
 type PlayerData struct {
-	ID          string
-	Username    string
-	FirstJoin   time.Time
-	LastOnline  time.Time
-	Playtime    int64
-	Experience  int64
-	BetaEnabled *bool
-	Settings    PlayerSettings
-	Coins       int64
-	Cubits      int64
+	ID          string         `json:"id"`
+	Username    string         `json:"username"`
+	FirstJoin   time.Time      `json:"firstJoin"`
+	LastOnline  time.Time      `json:"lastOnline"`
+	Playtime    int            `json:"playtime"`
+	Experience  int            `json:"experience"`
+	BetaEnabled *bool          `json:"betaEnabled"`
+	Settings    PlayerSettings `json:"settings"`
+	Coins       int            `json:"coins"`
+	Cubits      int            `json:"cubits"`
+}
+
+type PlayerTotp struct {
+	PlayerID      string             `json:"playerId"`
+	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
+	Active        *bool              `json:"active"`
+	Key           []byte             `json:"key"`
+	RecoveryCodes []string           `json:"recoveryCodes"`
+}
+
+type Punishment struct {
+	ID            int        `json:"id"`
+	PlayerID      string     `json:"playerId"`
+	ExecutorID    string     `json:"executorId"`
+	Type          string     `json:"type"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	LadderID      *string    `json:"ladderId"`
+	Comment       string     `json:"comment"`
+	ExpiresAt     *time.Time `json:"expiresAt"`
+	RevokedBy     *string    `json:"revokedBy"`
+	RevokedAt     *time.Time `json:"revokedAt"`
+	RevokedReason *string    `json:"revokedReason"`
 }

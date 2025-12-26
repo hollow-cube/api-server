@@ -4,24 +4,6 @@ type NewPlayer struct {
 	PlayerId string `mapstructure:"player_id"`
 }
 
-type CoinBalanceChanged struct {
-	PlayerId string `mapstructure:"player_id"`
-	Delta    int    `mapstructure:"delta"`
-	NewValue int    `mapstructure:"new_value"`
-}
-
-type CubitBalanceChanged struct {
-	PlayerId string `mapstructure:"player_id"`
-	Delta    int    `mapstructure:"delta"`
-	NewValue int    `mapstructure:"new_value"`
-}
-
-type ExpChanged struct {
-	PlayerId string `mapstructure:"player_id"`
-	Delta    int64  `mapstructure:"delta"`
-	NewValue int64  `mapstructure:"new_value"`
-}
-
 type BackpackEntryChanged struct {
 	PlayerId string `mapstructure:"player_id"`
 	Item     string `mapstructure:"item"`
