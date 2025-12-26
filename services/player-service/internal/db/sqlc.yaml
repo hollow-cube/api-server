@@ -45,12 +45,12 @@ sql:
           - db_type: "serial"
             go_type: "int"
 
-          - db_type: "jsonb_object"
-            go_type: { type: "map[string]any" }
-
           - column: "player_data.settings"
             nullable: true
             go_type: { type: "PlayerSettings", pointer: false }
+
+          - { column: "tx_log.meta", go_type: { type: "map[string]any" } }
+          - { column: "player_recaps.data", go_type: { type: "map[string]any" } }
 
     strict_function_checks: true
     strict_order_by: true

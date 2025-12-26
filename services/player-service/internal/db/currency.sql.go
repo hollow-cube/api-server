@@ -107,11 +107,11 @@ values ($1, now(), $2, $3, $4, $5)
 `
 
 type Unsafe_AppendTxLogParams struct {
-	PlayerID string      `json:"playerId"`
-	Reason   string      `json:"reason"`
-	Currency string      `json:"currency"`
-	Amount   int         `json:"amount"`
-	Meta     interface{} `json:"meta"`
+	PlayerID string         `json:"playerId"`
+	Reason   string         `json:"reason"`
+	Currency string         `json:"currency"`
+	Amount   int            `json:"amount"`
+	Meta     map[string]any `json:"meta"`
 }
 
 func (q *Queries) Unsafe_AppendTxLog(ctx context.Context, arg Unsafe_AppendTxLogParams) error {

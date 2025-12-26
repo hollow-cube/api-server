@@ -102,9 +102,6 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current migration version: %w", err)
 	}
-	for i := 0; i < 100; i++ {
-		println(fmt.Sprintf("current = %d, target = %d", version, targetVersion))
-	}
 	if dirty || version < targetVersion {
 		// Apply all migrations up our current version
 		err = m.Up()

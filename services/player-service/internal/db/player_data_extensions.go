@@ -28,6 +28,10 @@ func (s *Store) AddCurrency(
 	currencyType CurrencyType, amount int,
 	reason BalanceChangeReason, meta map[string]interface{},
 ) (newBalance int, err error) {
+	if meta == nil {
+		meta = map[string]interface{}{}
+	}
+
 	newBalances, err := Tx(ctx, s, func(ctx context.Context, tx *Store) (newBalance []int, err error) {
 		err = tx.Unsafe_AppendTxLog(ctx, Unsafe_AppendTxLogParams{
 			PlayerID: playerId,
