@@ -38,7 +38,7 @@ unleash:
 
 map_isolate:
   instances:
-    micro: { memory: 150 }
+    micro: { memory: 200 }
     mini: { memory: 200 }
     medium: { memory: 300 }
     large: { memory: 400 }

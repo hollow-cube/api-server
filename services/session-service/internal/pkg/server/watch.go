@@ -257,7 +257,7 @@ func (t *Tracker) handlePodUpdated(ctx context.Context, pod *coreV1.Pod) error {
 		changed = true
 	}
 	// Note that we allow a server to go from draining back to ready. it can happen if a pod is unresponsive for a moment and comes back.
-	if newStatus == Ready && (state.StatusV2 == string(Starting) || state.StatusV2 == string(Draining)) {
+	if newStatus == Ready && (state.StatusV2 == string(Starting) || (state.Role != "map-isolate" && state.StatusV2 == string(Draining))) {
 		state.StatusV2 = string(Active)
 		state.StatusSince = time.Now()
 		changed = true

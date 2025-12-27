@@ -8,10 +8,12 @@ import (
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
+	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 )
@@ -43,6 +45,9 @@ var (
 )
 
 func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride string) (string, string, error) {
+	ctx, span := otelTracer.Start(ctx, "server.allocMapServerPod")
+	defer span.End()
+
 	imageTag, env, err := findImageTag()
 	if err != nil {
 		return "", "", err
@@ -70,8 +75,12 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 
 	mapResponse, err := t.maps.GetMapWithResponse(ctx, mapId)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
 	} else if mapResponse.JSON200 == nil {
+		span.SetStatus(codes.Error, "non-200 response for map")
+		span.RecordError(fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode))
 		return "", "", fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode)
 	}
 	m := mapResponse.JSON200
@@ -109,7 +118,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 
 	// TODO cpu
 	memoryLimit := resource.MustParse(fmt.Sprintf("%dMi", instanceSize.Memory))
-	jvmMemoryLimit := int(float64(instanceSize.Memory) * 0.7)
+	jvmMemoryLimit := int(float64(instanceSize.Memory) * 0.5)
 
 	podSpec := coreV1.Pod{
 		ObjectMeta: metaV1.ObjectMeta{
@@ -135,7 +144,6 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 					SecurityContext: defaultSecurityContext,
 					Ports:           defaultIsolatePorts,
 					Env:             podEnv,
-					// todo alive/ready
 					Resources: coreV1.ResourceRequirements{
 						Limits: map[coreV1.ResourceName]resource.Quantity{
 							coreV1.ResourceMemory: memoryLimit,
@@ -150,6 +158,17 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 						fmt.Sprintf("-Xmx%dM", jvmMemoryLimit),
 						mapId,
 					},
+					StartupProbe: &coreV1.Probe{
+						ProbeHandler: coreV1.ProbeHandler{
+							HTTPGet: &coreV1.HTTPGetAction{
+								Path: "/ready",
+								Port: intstr.FromInt32(9124),
+							},
+						},
+						InitialDelaySeconds: 0,
+						TimeoutSeconds:      1,
+						PeriodSeconds:       1,
+					},
 				},
 			},
 		},
@@ -158,6 +177,8 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 	pod, err := t.k8s.CoreV1().Pods("mapmaker").Create(ctx, &podSpec, metaV1.CreateOptions{})
 	if err != nil {
 		zap.S().Error("failed to create pod", zap.Error(err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
 	}
 
