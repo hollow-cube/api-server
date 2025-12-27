@@ -7,6 +7,7 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v56/github"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 )
 
@@ -23,7 +24,7 @@ func newGithubClient(conf *config.Config) (*github.Client, error) {
 			return nil, fmt.Errorf("invalid private key (base64): %w", err)
 		}
 
-		itr, err = ghinstallation.New(http.DefaultTransport, GithubAppID, HollowCubeInstallID, privateKey)
+		itr, err = ghinstallation.New(tracefx.DefaultTransport, GithubAppID, HollowCubeInstallID, privateKey)
 		if err != nil {
 			return nil, err
 		}

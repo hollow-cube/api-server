@@ -8,16 +8,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+var DefaultTransport = &clientTransport{
+	rt: otelhttp.NewTransport(http.DefaultTransport),
+	okStatusCodes: map[int]bool{
+		http.StatusNotFound: true,
+		http.StatusConflict: true,
+	},
+}
+
 // DefaultHTTPClient is a tracing-enabled HTTP client for internal uses.
 // It adopts trace headers into the context for requests, and forwards it on via headers for any requests made.
 var DefaultHTTPClient = &http.Client{
-	Transport: &clientTransport{
-		rt: otelhttp.NewTransport(http.DefaultTransport),
-		okStatusCodes: map[int]bool{
-			http.StatusNotFound: true,
-			http.StatusConflict: true,
-		},
-	},
+	Transport: DefaultTransport,
 }
 
 type clientTransport struct {

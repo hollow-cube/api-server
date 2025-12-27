@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
+	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,6 +45,9 @@ var (
 )
 
 func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride string) (string, string, error) {
+	ctx, span := otelTracer.Start(ctx, "server.allocMapServerPod")
+	defer span.End()
+
 	imageTag, env, err := findImageTag()
 	if err != nil {
 		return "", "", err
@@ -71,8 +75,12 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 
 	mapResponse, err := t.maps.GetMapWithResponse(ctx, mapId)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
 	} else if mapResponse.JSON200 == nil {
+		span.SetStatus(codes.Error, "non-200 response for map")
+		span.RecordError(fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode))
 		return "", "", fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode)
 	}
 	m := mapResponse.JSON200
@@ -136,7 +144,6 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 					SecurityContext: defaultSecurityContext,
 					Ports:           defaultIsolatePorts,
 					Env:             podEnv,
-					// todo alive/ready
 					Resources: coreV1.ResourceRequirements{
 						Limits: map[coreV1.ResourceName]resource.Quantity{
 							coreV1.ResourceMemory: memoryLimit,
@@ -170,6 +177,8 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 	pod, err := t.k8s.CoreV1().Pods("mapmaker").Create(ctx, &podSpec, metaV1.CreateOptions{})
 	if err != nil {
 		zap.S().Error("failed to create pod", zap.Error(err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
 	}
 
