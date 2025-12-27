@@ -109,7 +109,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 
 	// TODO cpu
 	memoryLimit := resource.MustParse(fmt.Sprintf("%dMi", instanceSize.Memory))
-	jvmMemoryLimit := int(float64(instanceSize.Memory) * 0.7)
+	jvmMemoryLimit := int(float64(instanceSize.Memory) * 0.5)
 
 	podSpec := coreV1.Pod{
 		ObjectMeta: metaV1.ObjectMeta{
