@@ -157,17 +157,6 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 						fmt.Sprintf("-Xmx%dM", jvmMemoryLimit),
 						mapId,
 					},
-					//StartupProbe: &coreV1.Probe{
-					//	ProbeHandler: coreV1.ProbeHandler{
-					//		HTTPGet: &coreV1.HTTPGetAction{
-					//			Path: "/ready",
-					//			Port: intstr.FromInt32(9124),
-					//		},
-					//	},
-					//	InitialDelaySeconds: 0,
-					//	TimeoutSeconds:      1,
-					//	PeriodSeconds:       1,
-					//},
 				},
 			},
 		},
