@@ -143,13 +143,11 @@ type ClientInterface interface {
 	// GetBlockedPlayers request
 	GetBlockedPlayers(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BlockPlayerWithBody request with any body
-	BlockPlayerWithBody(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	BlockPlayer(ctx context.Context, playerId string, body BlockPlayerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// UnblockPlayer request
 	UnblockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BlockPlayer request
+	BlockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetPlayerCosmetics request
 	GetPlayerCosmetics(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -165,13 +163,11 @@ type ClientInterface interface {
 	// GetFriendRequests request
 	GetFriendRequests(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// SendFriendRequestWithBody request with any body
-	SendFriendRequestWithBody(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	SendFriendRequest(ctx context.Context, playerId string, body SendFriendRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// DeleteFriendRequest request
 	DeleteFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SendFriendRequest request
+	SendFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetPlayerFriends request
 	GetPlayerFriends(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -477,32 +473,20 @@ func (c *Client) GetBlockedPlayers(ctx context.Context, playerId string, reqEdit
 	return c.Client.Do(req)
 }
 
-func (c *Client) BlockPlayerWithBody(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBlockPlayerRequestWithBody(c.Server, playerId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) BlockPlayer(ctx context.Context, playerId string, body BlockPlayerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBlockPlayerRequest(c.Server, playerId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) UnblockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUnblockPlayerRequest(c.Server, playerId, targetId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) BlockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBlockPlayerRequest(c.Server, playerId, targetId)
 	if err != nil {
 		return nil, err
 	}
@@ -573,32 +557,20 @@ func (c *Client) GetFriendRequests(ctx context.Context, playerId string, params 
 	return c.Client.Do(req)
 }
 
-func (c *Client) SendFriendRequestWithBody(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSendFriendRequestRequestWithBody(c.Server, playerId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SendFriendRequest(ctx context.Context, playerId string, body SendFriendRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSendFriendRequestRequest(c.Server, playerId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) DeleteFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteFriendRequestRequest(c.Server, playerId, targetId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendFriendRequestRequest(c.Server, playerId, targetId)
 	if err != nil {
 		return nil, err
 	}
@@ -1425,53 +1397,6 @@ func NewGetBlockedPlayersRequest(server string, playerId string) (*http.Request,
 	return req, nil
 }
 
-// NewBlockPlayerRequest calls the generic BlockPlayer builder with application/json body
-func NewBlockPlayerRequest(server string, playerId string, body BlockPlayerJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewBlockPlayerRequestWithBody(server, playerId, "application/json", bodyReader)
-}
-
-// NewBlockPlayerRequestWithBody generates requests for BlockPlayer with any type of body
-func NewBlockPlayerRequestWithBody(server string, playerId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/players/%s/blocks", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewUnblockPlayerRequest generates requests for UnblockPlayer
 func NewUnblockPlayerRequest(server string, playerId string, targetId string) (*http.Request, error) {
 	var err error
@@ -1506,6 +1431,47 @@ func NewUnblockPlayerRequest(server string, playerId string, targetId string) (*
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBlockPlayerRequest generates requests for BlockPlayer
+func NewBlockPlayerRequest(server string, playerId string, targetId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "targetId", runtime.ParamLocationPath, targetId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/blocks/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1680,53 +1646,6 @@ func NewGetFriendRequestsRequest(server string, playerId string, params *GetFrie
 	return req, nil
 }
 
-// NewSendFriendRequestRequest calls the generic SendFriendRequest builder with application/json body
-func NewSendFriendRequestRequest(server string, playerId string, body SendFriendRequestJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewSendFriendRequestRequestWithBody(server, playerId, "application/json", bodyReader)
-}
-
-// NewSendFriendRequestRequestWithBody generates requests for SendFriendRequest with any type of body
-func NewSendFriendRequestRequestWithBody(server string, playerId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/players/%s/friendRequests", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewDeleteFriendRequestRequest generates requests for DeleteFriendRequest
 func NewDeleteFriendRequestRequest(server string, playerId string, targetId string) (*http.Request, error) {
 	var err error
@@ -1761,6 +1680,47 @@ func NewDeleteFriendRequestRequest(server string, playerId string, targetId stri
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSendFriendRequestRequest generates requests for SendFriendRequest
+func NewSendFriendRequestRequest(server string, playerId string, targetId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "targetId", runtime.ParamLocationPath, targetId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/friendRequests/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2644,13 +2604,11 @@ type ClientWithResponsesInterface interface {
 	// GetBlockedPlayersWithResponse request
 	GetBlockedPlayersWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error)
 
-	// BlockPlayerWithBodyWithResponse request with any body
-	BlockPlayerWithBodyWithResponse(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error)
-
-	BlockPlayerWithResponse(ctx context.Context, playerId string, body BlockPlayerJSONRequestBody, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error)
-
 	// UnblockPlayerWithResponse request
 	UnblockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*UnblockPlayerResponse, error)
+
+	// BlockPlayerWithResponse request
+	BlockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error)
 
 	// GetPlayerCosmeticsWithResponse request
 	GetPlayerCosmeticsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerCosmeticsResponse, error)
@@ -2666,13 +2624,11 @@ type ClientWithResponsesInterface interface {
 	// GetFriendRequestsWithResponse request
 	GetFriendRequestsWithResponse(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*GetFriendRequestsResponse, error)
 
-	// SendFriendRequestWithBodyWithResponse request with any body
-	SendFriendRequestWithBodyWithResponse(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error)
-
-	SendFriendRequestWithResponse(ctx context.Context, playerId string, body SendFriendRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error)
-
 	// DeleteFriendRequestWithResponse request
 	DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error)
+
+	// SendFriendRequestWithResponse request
+	SendFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error)
 
 	// GetPlayerFriendsWithResponse request
 	GetPlayerFriendsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerFriendsResponse, error)
@@ -3056,27 +3012,6 @@ func (r GetBlockedPlayersResponse) StatusCode() int {
 	return 0
 }
 
-type BlockPlayerResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// Status returns HTTPResponse.Status
-func (r BlockPlayerResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r BlockPlayerResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type UnblockPlayerResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3092,6 +3027,27 @@ func (r UnblockPlayerResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UnblockPlayerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type BlockPlayerResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r BlockPlayerResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BlockPlayerResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3185,6 +3141,27 @@ func (r GetFriendRequestsResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteFriendRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteFriendRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteFriendRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SendFriendRequestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3208,27 +3185,6 @@ func (r SendFriendRequestResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SendFriendRequestResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DeleteFriendRequestResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteFriendRequestResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteFriendRequestResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3784,23 +3740,6 @@ func (c *ClientWithResponses) GetBlockedPlayersWithResponse(ctx context.Context,
 	return ParseGetBlockedPlayersResponse(rsp)
 }
 
-// BlockPlayerWithBodyWithResponse request with arbitrary body returning *BlockPlayerResponse
-func (c *ClientWithResponses) BlockPlayerWithBodyWithResponse(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error) {
-	rsp, err := c.BlockPlayerWithBody(ctx, playerId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseBlockPlayerResponse(rsp)
-}
-
-func (c *ClientWithResponses) BlockPlayerWithResponse(ctx context.Context, playerId string, body BlockPlayerJSONRequestBody, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error) {
-	rsp, err := c.BlockPlayer(ctx, playerId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseBlockPlayerResponse(rsp)
-}
-
 // UnblockPlayerWithResponse request returning *UnblockPlayerResponse
 func (c *ClientWithResponses) UnblockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*UnblockPlayerResponse, error) {
 	rsp, err := c.UnblockPlayer(ctx, playerId, targetId, reqEditors...)
@@ -3808,6 +3747,15 @@ func (c *ClientWithResponses) UnblockPlayerWithResponse(ctx context.Context, pla
 		return nil, err
 	}
 	return ParseUnblockPlayerResponse(rsp)
+}
+
+// BlockPlayerWithResponse request returning *BlockPlayerResponse
+func (c *ClientWithResponses) BlockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*BlockPlayerResponse, error) {
+	rsp, err := c.BlockPlayer(ctx, playerId, targetId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBlockPlayerResponse(rsp)
 }
 
 // GetPlayerCosmeticsWithResponse request returning *GetPlayerCosmeticsResponse
@@ -3854,23 +3802,6 @@ func (c *ClientWithResponses) GetFriendRequestsWithResponse(ctx context.Context,
 	return ParseGetFriendRequestsResponse(rsp)
 }
 
-// SendFriendRequestWithBodyWithResponse request with arbitrary body returning *SendFriendRequestResponse
-func (c *ClientWithResponses) SendFriendRequestWithBodyWithResponse(ctx context.Context, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error) {
-	rsp, err := c.SendFriendRequestWithBody(ctx, playerId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSendFriendRequestResponse(rsp)
-}
-
-func (c *ClientWithResponses) SendFriendRequestWithResponse(ctx context.Context, playerId string, body SendFriendRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error) {
-	rsp, err := c.SendFriendRequest(ctx, playerId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSendFriendRequestResponse(rsp)
-}
-
 // DeleteFriendRequestWithResponse request returning *DeleteFriendRequestResponse
 func (c *ClientWithResponses) DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error) {
 	rsp, err := c.DeleteFriendRequest(ctx, playerId, targetId, reqEditors...)
@@ -3878,6 +3809,15 @@ func (c *ClientWithResponses) DeleteFriendRequestWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseDeleteFriendRequestResponse(rsp)
+}
+
+// SendFriendRequestWithResponse request returning *SendFriendRequestResponse
+func (c *ClientWithResponses) SendFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error) {
+	rsp, err := c.SendFriendRequest(ctx, playerId, targetId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendFriendRequestResponse(rsp)
 }
 
 // GetPlayerFriendsWithResponse request returning *GetPlayerFriendsResponse
@@ -4437,22 +4377,6 @@ func ParseGetBlockedPlayersResponse(rsp *http.Response) (*GetBlockedPlayersRespo
 	return response, nil
 }
 
-// ParseBlockPlayerResponse parses an HTTP response from a BlockPlayerWithResponse call
-func ParseBlockPlayerResponse(rsp *http.Response) (*BlockPlayerResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &BlockPlayerResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	return response, nil
-}
-
 // ParseUnblockPlayerResponse parses an HTTP response from a UnblockPlayerWithResponse call
 func ParseUnblockPlayerResponse(rsp *http.Response) (*UnblockPlayerResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4462,6 +4386,22 @@ func ParseUnblockPlayerResponse(rsp *http.Response) (*UnblockPlayerResponse, err
 	}
 
 	response := &UnblockPlayerResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseBlockPlayerResponse parses an HTTP response from a BlockPlayerWithResponse call
+func ParseBlockPlayerResponse(rsp *http.Response) (*BlockPlayerResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BlockPlayerResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -4563,6 +4503,22 @@ func ParseGetFriendRequestsResponse(rsp *http.Response) (*GetFriendRequestsRespo
 	return response, nil
 }
 
+// ParseDeleteFriendRequestResponse parses an HTTP response from a DeleteFriendRequestWithResponse call
+func ParseDeleteFriendRequestResponse(rsp *http.Response) (*DeleteFriendRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteFriendRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseSendFriendRequestResponse parses an HTTP response from a SendFriendRequestWithResponse call
 func ParseSendFriendRequestResponse(rsp *http.Response) (*SendFriendRequestResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4597,22 +4553,6 @@ func ParseSendFriendRequestResponse(rsp *http.Response) (*SendFriendRequestRespo
 		}
 		response.JSON409 = &dest
 
-	}
-
-	return response, nil
-}
-
-// ParseDeleteFriendRequestResponse parses an HTTP response from a DeleteFriendRequestWithResponse call
-func ParseDeleteFriendRequestResponse(rsp *http.Response) (*DeleteFriendRequestResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteFriendRequestResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
 	}
 
 	return response, nil

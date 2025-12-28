@@ -305,8 +305,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PlayerFriend'
-        '404':
-          $ref: '#/components/responses/PlayerNotFound'
 
   /players/{playerId}/friends/{targetId}:
     delete:
@@ -357,8 +355,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/FriendRequest'
-        '404':
-          $ref: '#/components/responses/PlayerNotFound'
+
+  /players/{playerId}/friendRequests/{targetId}:
     post:
       summary: Send a friend request to another player
       operationId: sendFriendRequest
@@ -369,14 +367,12 @@ paths:
           required: true
           schema:
             type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ targetId ]
-              properties:
-                targetId: { type: string }
+        - name: targetId
+          in: path
+          description: The other player in the request
+          required: true
+          schema:
+            type: string
       responses:
         '201':
           description: Friend request sent successfully
@@ -401,8 +397,6 @@ paths:
                 properties:
                   code: { type: string }
                   message: { type: string }
-
-  /players/{playerId}/friendRequests/{targetId}:
     delete:
       summary: Delete a friend request (cancel outgoing or decline incoming)
       operationId: deleteFriendRequest
@@ -445,8 +439,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BlockedPlayer'
-        '404':
-          $ref: '#/components/responses/PlayerNotFound'
+
+  /players/{playerId}/blocks/{targetId}:
     post:
       summary: Block a player
       operationId: blockPlayer
@@ -457,14 +451,12 @@ paths:
           required: true
           schema:
             type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ targetId ]
-              properties:
-                targetId: { type: string }
+        - name: targetId
+          in: path
+          description: The player to block
+          required: true
+          schema:
+            type: string
       responses:
         '201':
           description: Player blocked successfully
@@ -472,8 +464,6 @@ paths:
           $ref: '#/components/responses/PlayerNotFound'
         '409':
           description: Player already blocked
-
-  /players/{playerId}/blocks/{targetId}:
     delete:
       summary: Unblock a player
       operationId: unblockPlayer
