@@ -10,6 +10,60 @@ import (
 	"time"
 )
 
+const countFailSaveStates = `-- name: CountFailSaveStates :one
+select count(*)
+from save_states
+where type = 'playing'
+  and completed = false
+`
+
+func (q *Queries) CountFailSaveStates(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countFailSaveStates)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createSaveState = `-- name: CreateSaveState :one
+insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
+                                state_v2, protocol_version)
+values (gen_random_uuid(), $1, $2, $3, now(), now(), false, 0, 0, 'null', $4)
+returning id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+`
+
+type CreateSaveStateParams struct {
+	MapID           string        `json:"mapId"`
+	PlayerID        string        `json:"playerId"`
+	Type            SaveStateType `json:"type"`
+	ProtocolVersion *int          `json:"protocolVersion"`
+}
+
+func (q *Queries) CreateSaveState(ctx context.Context, arg CreateSaveStateParams) (SaveState, error) {
+	row := q.db.QueryRow(ctx, createSaveState,
+		arg.MapID,
+		arg.PlayerID,
+		arg.Type,
+		arg.ProtocolVersion,
+	)
+	var i SaveState
+	err := row.Scan(
+		&i.ID,
+		&i.MapID,
+		&i.PlayerID,
+		&i.Type,
+		&i.Created,
+		&i.Updated,
+		&i.Deleted,
+		&i.Completed,
+		&i.Playtime,
+		&i.StateV2,
+		&i.DataVersion,
+		&i.ProtocolVersion,
+		&i.Ticks,
+	)
+	return i, err
+}
+
 const getSaveState = `-- name: GetSaveState :one
 select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
 from public.save_states
@@ -19,7 +73,7 @@ where deleted is null
   and player_id = $3
 `
 
-func (q *Queries) GetSaveState(ctx context.Context, iD string, mapID string, playerID string) (*SaveState, error) {
+func (q *Queries) GetSaveState(ctx context.Context, iD string, mapID string, playerID string) (SaveState, error) {
 	row := q.db.QueryRow(ctx, getSaveState, iD, mapID, playerID)
 	var i SaveState
 	err := row.Scan(
@@ -37,7 +91,7 @@ func (q *Queries) GetSaveState(ctx context.Context, iD string, mapID string, pla
 		&i.ProtocolVersion,
 		&i.Ticks,
 	)
-	return &i, err
+	return i, err
 }
 
 const upsertSaveState = `-- name: UpsertSaveState :exec
@@ -55,18 +109,18 @@ on conflict (id, map_id, player_id) do update
 `
 
 type UpsertSaveStateParams struct {
-	ID              string
-	MapID           string
-	PlayerID        string
-	Type            SaveStateType
-	Created         time.Time
-	Updated         time.Time
-	Completed       bool
-	Playtime        int
-	Ticks           int
-	StateV2         []byte
-	DataVersion     int
-	ProtocolVersion *int
+	ID              string        `json:"id"`
+	MapID           string        `json:"mapId"`
+	PlayerID        string        `json:"playerId"`
+	Type            SaveStateType `json:"type"`
+	Created         time.Time     `json:"created"`
+	Updated         time.Time     `json:"updated"`
+	Completed       bool          `json:"completed"`
+	Playtime        int           `json:"playtime"`
+	Ticks           int           `json:"ticks"`
+	StateV2         []byte        `json:"stateV2"`
+	DataVersion     int           `json:"dataVersion"`
+	ProtocolVersion *int          `json:"protocolVersion"`
 }
 
 func (q *Queries) UpsertSaveState(ctx context.Context, arg UpsertSaveStateParams) error {

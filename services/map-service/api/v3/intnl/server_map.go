@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/discord"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
@@ -34,11 +35,11 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 	}
 
 	var contestId *string
-	var pd *model.PlayerData
+	var savePlayer *db.MapPlayerData
 	if request.Body.IsOrg {
 		m.Type = model.TypeOrg
 	} else if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
-		pd, err = s.storageClient.GetPlayerData2(ctx, request.Body.Owner)
+		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch player data: %w", err)
 		}
@@ -56,15 +57,15 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		contestId = &mapContestId
 
 		pd.ContestSlot = &m.Id
-
+		savePlayer = &pd
 	} else {
-		pd, err = s.storageClient.GetPlayerData(ctx, request.Body.Owner)
+		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch player data: %w", err)
 		}
 
 		// Ensure they have permission for the size map they are creating
-		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.Id, size)
+		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.ID, size)
 		if err != nil {
 			return nil, err
 		} else if !allowedForSize {
@@ -95,9 +96,10 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 				}}, nil
 			}
 		}
+		savePlayer = &pd
 	}
 
-	if err = s.safeWriteMapToDatabase(ctx, m, pd); err != nil {
+	if err = s.safeWriteMapToDatabase(ctx, m, savePlayer); err != nil {
 		return nil, fmt.Errorf("failed to write map to database: %w", err)
 	}
 
@@ -701,11 +703,7 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 	s.log.Infow("created map report #"+strconv.Itoa(reportId), "report", report)
 
 	// Submitting a report always results in disliking the map
-	err = s.storageClient.UpsertMapRating(ctx, &model.MapRating{
-		MapId:    report.MapId,
-		PlayerId: report.PlayerId,
-		Rating:   model.RatingStateDisliked,
-	})
+	err = s.store.UpsertMapRating(ctx, report.MapId, report.PlayerId, int(model.RatingStateDisliked))
 	if err != nil {
 		// This is non fatal, just log it
 		s.log.Errorw("failed to dislike map during report", "error", err)
@@ -754,13 +752,11 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 }
 
 func (s *server) GetMapRating(ctx context.Context, request GetMapRatingRequestObject) (GetMapRatingResponseObject, error) {
-	rating, err := s.storageClient.GetMapRating(ctx, request.MapId, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		rating = &model.MapRating{
-			MapId:    request.MapId,
-			PlayerId: request.PlayerId,
-			Rating:   model.RatingStateUnrated,
-		}
+	rating, err := s.store.GetMapRatingForMapBy(ctx, request.MapId, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
+		rating.MapID = request.MapId
+		rating.PlayerID = request.PlayerId
+		rating.Rating = int(model.RatingStateUnrated)
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map rating: %w", err)
 	}
@@ -776,12 +772,7 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 		}}, nil
 	}
 
-	err := s.storageClient.UpsertMapRating(ctx, &model.MapRating{
-		MapId:    request.MapId,
-		PlayerId: request.PlayerId,
-		Rating:   rating,
-		Comment:  request.Body.Comment,
-	})
+	err := s.store.UpsertMapRating(ctx, request.MapId, request.PlayerId, int(rating))
 	if err != nil {
 		return nil, fmt.Errorf("failed to set map rating: %w", err)
 	}
@@ -1100,18 +1091,18 @@ func posFromAPI(pos Pos) model.Pos {
 	}
 }
 
-func mapRatingToAPI(rating *model.MapRating) GetMapRatingJSONResponse {
+func mapRatingToAPI(rating db.MapRating) GetMapRatingJSONResponse {
 	return GetMapRatingJSONResponse{
 		State:   mapRatingStateToAPI(rating.Rating),
 		Comment: rating.Comment,
 	}
 }
 
-func mapRatingStateToAPI(state model.RatingState) MapRatingState {
+func mapRatingStateToAPI(state int) MapRatingState {
 	switch state {
-	case model.RatingStateLiked:
+	case int(model.RatingStateLiked):
 		return MapRatingStateLiked
-	case model.RatingStateDisliked:
+	case int(model.RatingStateDisliked):
 		return MapRatingStateDisliked
 	default:
 		return MapRatingStateUnrated

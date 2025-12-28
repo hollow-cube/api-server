@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
@@ -34,7 +35,7 @@ func (s *server) ensurePermForMapSize(ctx context.Context, playerId string, size
 	return true, nil
 }
 
-func (s *server) hasFreeMapSlot(ctx context.Context, pd *model.PlayerData) (bool, error) {
+func (s *server) hasFreeMapSlot(ctx context.Context, pd db.MapPlayerData) (bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
@@ -54,7 +55,7 @@ func (s *server) hasFreeMapSlot(ctx context.Context, pd *model.PlayerData) (bool
 	return false, nil
 }
 
-func (s *server) addMapToSlot(ctx context.Context, pd *model.PlayerData, mapId string, slot int) (bool, error) {
+func (s *server) addMapToSlot(ctx context.Context, pd db.MapPlayerData, mapId string, slot int) (bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
@@ -77,7 +78,7 @@ func (s *server) addMapToSlot(ctx context.Context, pd *model.PlayerData, mapId s
 	return true, nil
 }
 
-func (s *server) addMapToFreeSlot(ctx context.Context, pd *model.PlayerData, mapId string) (int, bool, error) {
+func (s *server) addMapToFreeSlot(ctx context.Context, pd db.MapPlayerData, mapId string) (int, bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return -1, false, err
@@ -99,7 +100,7 @@ func (s *server) addMapToFreeSlot(ctx context.Context, pd *model.PlayerData, map
 }
 
 func (s *server) revokeMapFromSlots(ctx context.Context, id string) error {
-	updatedUsers, err := s.storageClient.RemoveMapFromSlots(ctx, id)
+	updatedUsers, err := s.store.RemoveMapFromSlots(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to remove map from slots: %w", err)
 	}
@@ -113,22 +114,17 @@ func (s *server) revokeMapFromSlots(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *server) getUnlockedSlots(ctx context.Context, pd *model.PlayerData) (int, error) {
-	if pd.Cached.TotalUnlockedSlots != nil {
-		return *pd.Cached.TotalUnlockedSlots, nil
-	}
-
+func (s *server) getUnlockedSlots(ctx context.Context, pd db.MapPlayerData) (int, error) {
 	slots, err := s.getTotalSlotsFromPerm(ctx, pd)
 	if err != nil {
 		return 0, err
 	}
-	pd.Cached.TotalUnlockedSlots = &slots
 	return slots, nil
 }
 
-func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData) (int, error) {
+func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd db.MapPlayerData) (int, error) {
 	// This is pretty dumb logic, but uh... oh well.
-	state, err := s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot3)
+	state, err := s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot3)
 	if err != nil {
 		return 0, err
 	}
@@ -136,7 +132,7 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 		return 2, nil
 	}
 
-	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot4)
+	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot4)
 	if err != nil {
 		return 0, err
 	}
@@ -144,7 +140,7 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 		return 3, nil
 	}
 
-	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot5)
+	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot5)
 	if err != nil {
 		return 0, err
 	}
@@ -155,10 +151,10 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 	return 5, nil
 }
 
-func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optionalPlayerData *model.PlayerData) (err error) {
+func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optionalPlayerData *db.MapPlayerData) (err error) {
 
 	// Write to DB and permission manager at the same time (2 phase commit)
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
 		tok, err := s.authzClient.SetMapOwner(ctx, m.Id, m.Owner)
 		if err != nil {
 			return fmt.Errorf("authz write failed: %w", err)
@@ -170,7 +166,14 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optio
 		}
 
 		if optionalPlayerData != nil {
-			err = s.storageClient.UpdatePlayerData(ctx, optionalPlayerData)
+			err = tx.UpsertPlayerData(ctx, db.UpsertPlayerDataParams{
+				ID:            optionalPlayerData.ID,
+				UnlockedSlots: optionalPlayerData.UnlockedSlots,
+				Maps:          optionalPlayerData.Maps,
+				LastPlayedMap: optionalPlayerData.LastPlayedMap,
+				LastEditedMap: optionalPlayerData.LastEditedMap,
+				ContestSlot:   optionalPlayerData.ContestSlot,
+			})
 			if err != nil {
 				return fmt.Errorf("failed to update player data: %w", err)
 			}
@@ -189,7 +192,7 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optio
 
 	// Send update to kafka if we updated the player data
 	if optionalPlayerData != nil {
-		if err = s.writePlayerDataUpdateMessage(optionalPlayerData); err != nil {
+		if err = s.writePlayerDataUpdateMessage(*optionalPlayerData); err != nil {
 			return fmt.Errorf("failed to send player data update message: %w", err)
 		}
 	}
@@ -197,7 +200,7 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optio
 	return
 }
 
-func (s *server) writePlayerDataUpdateMessage(pd *model.PlayerData) error {
+func (s *server) writePlayerDataUpdateMessage(pd db.MapPlayerData) error {
 	updateMessageData, err := json.Marshal(&model.PlayerDataUpdateMessage{
 		Action: model.PlayerDataUpdate_Update,
 		Data:   pd,
@@ -207,7 +210,7 @@ func (s *server) writePlayerDataUpdateMessage(pd *model.PlayerData) error {
 	}
 	go s.producer.WriteMessages(context.Background(), kafka.Message{
 		Topic: model.PlayerDataUpdateTopic,
-		Key:   []byte(pd.Id),
+		Key:   []byte(pd.ID),
 		Value: updateMessageData,
 	})
 

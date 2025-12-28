@@ -9,6 +9,20 @@ import (
 	"context"
 )
 
+const countMaps = `-- name: CountMaps :one
+select count(*)
+from maps
+where deleted_at is null
+  and published_at is not null
+`
+
+func (q *Queries) CountMaps(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countMaps)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getMapsById = `-- name: GetMapsById :many
 select m.id, m.owner, m.m_type, m.created_at, m.updated_at, m.verification, m.authz_key, m.file_id, m.legacy_map_id, m.published_id, m.published_at, m.quality_override, m.opt_name, m.opt_icon, m.size, m.opt_variant, m.opt_subvariant, m.opt_spawn_point, m.opt_only_sprint, m.opt_no_sprint, m.opt_no_jump, m.opt_no_sneak, m.opt_boat, m.opt_extra, m.opt_tags, m.ext, m.deleted_at, m.deleted_by, m.deleted_reason, m.protocol_version, m.contest, m.listed,
        coalesce(stats.play_count, 0) as play_count,
@@ -26,19 +40,19 @@ where m.deleted_at is null
 `
 
 type GetMapsByIdRow struct {
-	Map        Map
-	PlayCount  int
-	WinCount   int
-	TotalLikes int64
+	Map        Map   `json:"map"`
+	PlayCount  int   `json:"playCount"`
+	WinCount   int   `json:"winCount"`
+	TotalLikes int64 `json:"totalLikes"`
 }
 
-func (q *Queries) GetMapsById(ctx context.Context, id string) ([]*GetMapsByIdRow, error) {
+func (q *Queries) GetMapsById(ctx context.Context, id string) ([]GetMapsByIdRow, error) {
 	rows, err := q.db.Query(ctx, getMapsById, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*GetMapsByIdRow
+	items := []GetMapsByIdRow{}
 	for rows.Next() {
 		var i GetMapsByIdRow
 		if err := rows.Scan(
@@ -80,10 +94,27 @@ func (q *Queries) GetMapsById(ctx context.Context, id string) ([]*GetMapsByIdRow
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMapStats = `-- name: UpdateMapStats :exec
+insert into map_stats (map_id, play_count, win_count)
+select $1 as map_id,
+       count(distinct player_id) as play_count,
+       count(distinct case when completed then player_id end) as win_count
+from save_states
+where map_id = $1
+on conflict (map_id) do update
+  set play_count=excluded.play_count,
+      win_count=excluded.win_count
+`
+
+func (q *Queries) UpdateMapStats(ctx context.Context, mapID string) error {
+	_, err := q.db.Exec(ctx, updateMapStats, mapID)
+	return err
 }

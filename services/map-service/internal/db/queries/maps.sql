@@ -1,3 +1,9 @@
+-- name: CountMaps :one
+select count(*)
+from maps
+where deleted_at is null
+  and published_at is not null;
+
 -- name: GetMapsById :many
 select sqlc.embed(m),
        coalesce(stats.play_count, 0) as play_count,
@@ -12,3 +18,14 @@ from public.maps as m
              group by map_id) likes on m.id = likes.map_id
 where m.deleted_at is null
   and id = any ($1);
+
+-- name: UpdateMapStats :exec
+insert into map_stats (map_id, play_count, win_count)
+select $1 as map_id,
+       count(distinct player_id) as play_count,
+       count(distinct case when completed then player_id end) as win_count
+from save_states
+where map_id = $1
+on conflict (map_id) do update
+  set play_count=excluded.play_count,
+      win_count=excluded.win_count;

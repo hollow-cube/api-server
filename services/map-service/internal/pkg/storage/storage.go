@@ -55,7 +55,6 @@ type Client interface {
 
 	// Maps
 
-	CountMaps(ctx context.Context) (int, error)
 	CreateMap(ctx context.Context, m *model.Map) error
 	GetMapById(ctx context.Context, id string) (*model.Map, error)
 	GetMapsByIds(ctx context.Context, ids []string) ([]*model.Map, error)
@@ -81,8 +80,6 @@ type Client interface {
 
 	// Save states
 
-	CountFailSaveStates(ctx context.Context) (int, error)
-	CreateSaveState(ctx context.Context, ss *model.SaveState) error
 	GetSaveStateById(ctx context.Context, mapId, playerId, saveStateId string) (*model.SaveState, error)
 	GetLatestSaveState(ctx context.Context, mapId, playerId string, ssType model.SaveStateType) (*model.SaveState, error)
 	GetBestSaveState(ctx context.Context, mapId, playerId string) (*model.SaveState, error)
@@ -97,23 +94,6 @@ type Client interface {
 	GetCompletedMaps(ctx context.Context, playerId string) ([]string, error)
 
 	UpdateMapStats(ctx context.Context, mapId string)
-
-	// Ratings
-
-	GetMapRating(ctx context.Context, mapId, playerId string) (*model.MapRating, error)
-	UpsertMapRating(ctx context.Context, mr *model.MapRating) error
-
-	// Players
-
-	// GetPlayerData fetches a player data from the database, or returns the default player data otherwise.
-	// A not found error will _never_ be returned.
-	// Deprecated
-	GetPlayerData(ctx context.Context, playerId string) (*model.PlayerData, error)
-	GetPlayerData2(ctx context.Context, playerId string) (*model.PlayerData, error)
-	// UpdatePlayerData writes a player data to the database, creating the record if it does not exist.
-	// A not found error will _never_ be returned.
-	UpdatePlayerData(ctx context.Context, pd *model.PlayerData) error
-	RemoveMapFromSlots(ctx context.Context, mapId string) ([]*model.PlayerData, error)
 
 	// Organizations
 

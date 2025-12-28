@@ -28,26 +28,22 @@ func (s *server) CreateSaveState(ctx context.Context, request CreateSaveStateReq
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
-	var ss model.SaveState
-	ss.Id = common.NewUUID()
-	ss.PlayerId = request.PlayerId
-	ss.MapId = request.MapId
+	var stateType db.SaveStateType
 	if m.PublishedAt != nil {
-		ss.Type = model.SaveStateTypePlaying
+		stateType = db.SaveStateTypePlaying
 	} else if m.Verification == model.VerificationPending {
-		ss.Type = model.SaveStateTypeVerifying
+		stateType = db.SaveStateTypeVerifying
 	} else {
-		ss.Type = model.SaveStateTypeEditing
+		stateType = db.SaveStateTypeEditing
 	}
-	now := util.CurrentTime()
-	ss.Created = now
-	ss.LastModified = now
-	ss.ProtocolVersion = request.Body.ProtocolVersion
-	ss.Completed = false
-	ss.PlayTime = 0
-	ss.Ticks = 0
 
-	if err = s.storageClient.CreateSaveState(ctx, &ss); err != nil {
+	ss, err := s.store.CreateSaveState(ctx, db.CreateSaveStateParams{
+		MapID:           request.PlayerId,
+		PlayerID:        request.MapId,
+		Type:            stateType,
+		ProtocolVersion: &request.Body.ProtocolVersion,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to create save state: %w", err)
 	}
 	return CreateSaveState201JSONResponse{saveStateToAPI(ss)}, nil
@@ -100,7 +96,7 @@ func (s *server) GetBestSaveState(ctx context.Context, request GetBestSaveStateR
 }
 
 func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateRequestObject) (UpdateSaveStateResponseObject, error) {
-	ss, err := s.queries.GetSaveState(ctx, request.MapId, request.PlayerId, request.SaveStateId)
+	ss, err := s.store.GetSaveState(ctx, request.MapId, request.PlayerId, request.SaveStateId)
 	if errors.Is(err, db.ErrNoRows) {
 		if request.Body.Type == nil {
 			return SaveStateNotFoundResponse{}, nil
@@ -110,7 +106,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		if request.Body.Playtime != nil {
 			createdTime = createdTime.Add(-time.Duration(*request.Body.Playtime) * time.Millisecond)
 		}
-		ss = &db.SaveState{
+		ss = db.SaveState{
 			ID:              request.SaveStateId,
 			MapID:           request.MapId,
 			PlayerID:        request.PlayerId,
@@ -200,7 +196,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		return nil, fmt.Errorf("failed to fetch best save state: %w", err)
 	}
 
-	if err = s.queries.UpsertSaveState(ctx, update); err != nil {
+	if err = s.store.UpsertSaveState(ctx, update); err != nil {
 		if errors.Is(err, db.ErrNoRows) {
 			return SaveStateNotFoundResponse{}, nil
 		}
@@ -209,7 +205,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	}
 
 	// Async update the map stats, if it fails it doesnt really matter much
-	go s.storageClient.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
+	go s.store.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	s.log.Infow("updated save state", "mapId", request.MapId, "playerId", request.PlayerId,
 		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type)

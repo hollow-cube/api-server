@@ -12,6 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	postgresUtil "github.com/hollow-cube/hc-services/libraries/common/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +23,22 @@ var ErrNoRows = pgx.ErrNoRows
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-func NewQuerySet(ctx context.Context, databaseUri string) (*Queries, *pgxpool.Pool, error) {
+// Store is a wrapper around the generated Queries type that includes metrics writing.
+// Some query methods are private with public overrides for this (e.g., addPlayerExperience and AddPlayerExperience)
+type Store struct {
+	*Queries
+
+	metrics metric.Writer
+}
+
+func (s *Store) WithTx(tx pgx.Tx) *Store {
+	return &Store{
+		Queries: s.Queries.WithTx(tx),
+		metrics: s.metrics,
+	}
+}
+
+func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string) (*Store, *pgxpool.Pool, error) {
 	// Config options
 	config, err := pgxpool.ParseConfig(databaseUri)
 	if err != nil {
@@ -69,28 +85,62 @@ func NewQuerySet(ctx context.Context, databaseUri string) (*Queries, *pgxpool.Po
 		return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	return New(pool), pool, nil
+	return &Store{Queries: New(pool), metrics: metrics}, pool, nil
 }
 
-func Tx[T any](ctx context.Context, q *Queries, fn func(ctx context.Context, queries *Queries) (*T, error)) (*T, error) {
-	pool, ok := q.db.(*pgxpool.Pool)
+func Tx[T any](ctx context.Context, s *Store, fn func(ctx context.Context, txStore *Store) (T, error)) (T, error) {
+	if _, ok := s.db.(pgx.Tx); ok {
+		return fn(ctx, s) // Already in a transaction, just proxy
+	}
+
+	pool, ok := s.db.(*pgxpool.Pool)
 	if !ok {
-		return nil, fmt.Errorf("failed to acquire connection to postgres")
+		var z T
+		return z, fmt.Errorf("failed to acquire connection to postgres")
 	}
 
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	ret, err := fn(ctx, q.WithTx(tx))
+	ret, err := fn(ctx, s.WithTx(tx))
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to apply transaction: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		var z T
+		return z, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return ret, nil
+}
+
+func TxNoReturn(ctx context.Context, s *Store, fn func(ctx context.Context, txStore *Store) error) error {
+	if _, ok := s.db.(pgx.Tx); ok {
+		return fn(ctx, s) // Already in a transaction, just proxy
+	}
+
+	pool, ok := s.db.(*pgxpool.Pool)
+	if !ok {
+		return fmt.Errorf("failed to acquire connection to postgres")
+	}
+
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(ctx, s.WithTx(tx)); err != nil {
+		return fmt.Errorf("failed to apply transaction: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

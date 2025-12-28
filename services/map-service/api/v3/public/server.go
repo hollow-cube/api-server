@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/handler"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
@@ -28,6 +29,7 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Storage storage.Client
+	Store   *db.Store
 	Authz   authz.Client
 	Object  object.Client `name:"object-mapmaker"`
 }
@@ -36,6 +38,7 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:           params.Log.With("handler", "obungus"),
 		storageClient: params.Storage,
+		store:         params.Store,
 		authzClient:   params.Authz,
 		objectClient:  params.Object,
 	}, nil
@@ -45,6 +48,7 @@ type server struct {
 	log *zap.SugaredLogger
 
 	storageClient storage.Client
+	store         *db.Store
 	authzClient   authz.Client
 	objectClient  object.Client
 
@@ -134,12 +138,13 @@ func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldReque
 
 func (s *server) GetMapStats(ctx context.Context, _ GetMapStatsRequestObject) (GetMapStatsResponseObject, error) {
 	if s.cachedTotalsLastUpdate == nil || time.Since(*s.cachedTotalsLastUpdate) > 5*time.Minute {
-		var err error
-		s.cachedTotalMaps, err = s.storageClient.CountMaps(ctx)
+		i, err := s.store.CountMaps(ctx)
+		s.cachedTotalMaps = int(i)
 		if err != nil {
 			return nil, err
 		}
-		s.cachedTotalFails, err = s.storageClient.CountFailSaveStates(ctx)
+		i, err = s.store.CountFailSaveStates(ctx)
+		s.cachedTotalFails = int(i)
 		if err != nil {
 			return nil, err
 		}

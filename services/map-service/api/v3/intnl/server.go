@@ -23,7 +23,7 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Storage  storage.Client
-	Queries  *db.Queries
+	Store    *db.Store
 	Authz    authz.Client
 	Redis    rueidis.Client
 	Producer wkafka.SyncWriter
@@ -36,7 +36,7 @@ type server struct {
 	log *zap.SugaredLogger
 
 	storageClient storage.Client
-	queries       *db.Queries
+	store         *db.Store
 	authzClient   authz.Client
 	redis         rueidis.Client
 	producer      wkafka.SyncWriter
@@ -49,7 +49,7 @@ func NewServer(params ServerParams) StrictServerInterface {
 	return &server{
 		log:           params.Log,
 		storageClient: params.Storage,
-		queries:       params.Queries,
+		store:         params.Store,
 		authzClient:   params.Authz,
 		redis:         params.Redis,
 		producer:      params.Producer,

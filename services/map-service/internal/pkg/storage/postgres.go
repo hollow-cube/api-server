@@ -91,15 +91,6 @@ func (c *PostgresClient) RunTransaction(ctx context.Context, f func(ctx context.
 	return nil
 }
 
-func (c *PostgresClient) CountMaps(ctx context.Context) (int, error) {
-	const query = `select count(*) from public.maps where deleted_at is null and published_at is not null;`
-	var count int
-	if err := c.pool.QueryRow(ctx, query).Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count maps: %w", err)
-	}
-	return count, nil
-}
-
 func (c *PostgresClient) CreateMap(ctx context.Context, m *model.Map) error {
 	const query = `
 		insert into public.maps (
@@ -698,40 +689,6 @@ func (c *PostgresClient) readLeaderboard(ctx context.Context, query string) ([]*
 	return result, nil
 }
 
-func (c *PostgresClient) CountFailSaveStates(ctx context.Context) (int, error) {
-	const query = `
-		select count(*) from save_states where type = 'playing' and completed = false;
-	`
-	var count int
-	err := c.pool.QueryRow(ctx, query).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count save states: %w", err)
-	}
-
-	return count, nil
-}
-
-func (c *PostgresClient) CreateSaveState(ctx context.Context, ss *model.SaveState) error {
-	const query = `
-		insert into public.save_states (
-			id, map_id, player_id, type, created, updated, completed, playtime, data_version, state_v2, protocol_version
-		) values (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-		);
-	`
-
-	state, err := c.encodeSaveStateState(ss)
-	if err != nil {
-		return fmt.Errorf("failed to encode save state state: %w", err)
-	}
-
-	return c.safeExec(ctx, query,
-		ss.Id, ss.MapId, ss.PlayerId, ss.Type, ss.Created,
-		ss.LastModified, ss.Completed, ss.PlayTime, ss.DataVersion,
-		state, ss.ProtocolVersion,
-	)
-}
-
 func (c *PostgresClient) GetSaveStateById(ctx context.Context, mapId, playerId, saveStateId string) (*model.SaveState, error) {
 	const query = `
 		select
@@ -910,137 +867,6 @@ func (c *PostgresClient) GetCompletedMaps(ctx context.Context, playerId string) 
 		}
 
 		result = append(result, mapId)
-	}
-
-	return result, nil
-}
-
-func (c *PostgresClient) GetMapRating(ctx context.Context, mapId, playerId string) (*model.MapRating, error) {
-	const query = `
-		select map_id, player_id, rating, comment
-		from public.map_ratings
-		where map_id = $1 and player_id = $2;
-	`
-
-	var mr model.MapRating
-	r := c.pool.QueryRow(ctx, query, mapId, playerId)
-	err := r.Scan(&mr.MapId, &mr.PlayerId, &mr.Rating, &mr.Comment)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-
-		return nil, fmt.Errorf("failed to fetch map rating: %w", err)
-	}
-
-	return &mr, nil
-}
-
-func (c *PostgresClient) UpsertMapRating(ctx context.Context, mr *model.MapRating) error {
-	const query = `
-		insert into public.map_ratings (map_id, player_id, rating, comment)
-		values ($1, $2, $3, $4)
-		on conflict (map_id, player_id) do update
-		set rating = excluded.rating, comment = excluded.comment;
-	`
-
-	return c.safeExec(ctx, query, mr.MapId, mr.PlayerId, mr.Rating, mr.Comment)
-}
-
-func (c *PostgresClient) GetPlayerData(ctx context.Context, playerId string) (*model.PlayerData, error) {
-	const query = `
-        select 
-            id, maps, contest_slot
-    	from public.map_player_data 
-    	where id=$1;
-    `
-
-	var pd model.PlayerData
-	r := c.pool.QueryRow(ctx, query, playerId)
-	err := r.Scan(
-		&pd.Id, &pd.Maps, &pd.ContestSlot,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			pd.Id = playerId
-			pd.Maps = make([]string, 2)
-			pd.LastPlayedMap = ""
-			pd.LastEditedMap = ""
-		} else {
-			return nil, fmt.Errorf("failed to fetch map: %w", err)
-		}
-	}
-
-	// TODO: Do not ignore these two.
-	pd.LastPlayedMap = ""
-	pd.LastEditedMap = ""
-
-	return &pd, nil
-}
-
-func (c *PostgresClient) GetPlayerData2(ctx context.Context, playerId string) (*model.PlayerData, error) {
-	query := psql.Select("id", "maps", "contest_slot").From("public.map_player_data").Where("id = ?", playerId)
-
-	var pd model.PlayerData
-	_, err := c.do(ctx, query, &pd.Id, &pd.Maps, &pd.ContestSlot)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pd, nil
-}
-
-func (c *PostgresClient) UpdatePlayerData(ctx context.Context, pd *model.PlayerData) error {
-	const query = `
-		insert into public.map_player_data (
-		    id, unlocked_slots, maps, last_played_map, last_edited_map, contest_slot
-		) values ($1, $2, $3, $4, $5, $6)
-		on conflict (id) do update 
-		set maps=excluded.maps, 
-		    last_played_map=excluded.last_played_map,
-		    last_edited_map=excluded.last_edited_map,
-		    contest_slot=excluded.contest_slot;
-	`
-
-	// the 2 is required for historical purposes, but is not relevant.
-	return c.safeExec(ctx, query,
-		pd.Id, 2, pd.Maps, pd.LastPlayedMap, pd.LastEditedMap, pd.ContestSlot,
-	)
-}
-
-func (c *PostgresClient) RemoveMapFromSlots(ctx context.Context, mapId string) ([]*model.PlayerData, error) {
-	const query = `
-		update map_player_data
-		set maps = s.agg
-		from (
-			select m.id, array_agg(CASE when val = $1 then '' else val end order by rn) as agg
-			from (
-			  select m.id, val, row_number() over(partition by m.id) as rn
-			  from map_player_data m
-					   cross join lateral unnest(m.maps) val
-			  where $1 = any(m.maps)
-			) m
-			group by m.id
-		) s
-		where map_player_data.id = s.id
-		returning map_player_data.id, maps, last_played_map, last_edited_map;
-	`
-
-	//todo this does not respect a transaction fix this soon
-	r, err := c.pool.Query(ctx, query, mapId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query maps: %w", err)
-	}
-	defer r.Close()
-
-	var result []*model.PlayerData
-	for r.Next() {
-		pd, err := c.readPlayerData(r)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read row: %w", err)
-		}
-
-		result = append(result, pd)
 	}
 
 	return result, nil

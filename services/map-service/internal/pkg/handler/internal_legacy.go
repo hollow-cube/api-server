@@ -57,10 +57,11 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 
 	//todo permissions
 
-	playerData, err := h.storageClient.GetPlayerData(ctx, userId)
+	playerData, err := h.store.GetPlayerData(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
+
 	hasFreeSlot, err := h.HasFreeMapSlot(ctx, playerData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check free slots: %w", err)
@@ -120,12 +121,12 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 		return nil, err
 	}
 
-	err = h.safeWriteMapToDatabase(ctx, m, playerData)
+	err = h.safeWriteMapToDatabase(ctx, m, &playerData)
 	if err != nil {
 		return nil, err
 	}
 
-	go h.metrics.Write(model.MapImportedEvent{PlayerId: playerData.Id, Format: "legacy"})
+	go h.metrics.Write(model.MapImportedEvent{PlayerId: playerData.ID, Format: "legacy"})
 
 	return &v1.MapWithSlot{
 		MapData: *transform.Map2API(m),

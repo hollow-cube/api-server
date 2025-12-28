@@ -8,8 +8,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type SaveStateType string
@@ -33,8 +31,8 @@ func (e *SaveStateType) Scan(src interface{}) error {
 }
 
 type NullSaveStateType struct {
-	SaveStateType SaveStateType
-	Valid         bool // Valid is true if SaveStateType is not NULL
+	SaveStateType SaveStateType `json:"saveStateType"`
+	Valid         bool          `json:"valid"` // Valid is true if SaveStateType is not NULL
 }
 
 // Scan implements the Scanner interface.
@@ -56,52 +54,68 @@ func (ns NullSaveStateType) Value() (driver.Value, error) {
 }
 
 type Map struct {
-	ID              string
-	Owner           string
-	MType           string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	Verification    *int64
-	AuthzKey        *string
-	FileID          string
-	LegacyMapID     *string
-	PublishedID     *int
-	PublishedAt     *time.Time
-	QualityOverride *int64
-	OptName         *string
-	OptIcon         *string
-	Size            int64
-	OptVariant      string
-	OptSubvariant   *string
-	OptSpawnPoint   string
-	OptOnlySprint   *bool
-	OptNoSprint     *bool
-	OptNoJump       *bool
-	OptNoSneak      *bool
-	OptBoat         *bool
-	OptExtra        []byte
-	OptTags         []string
-	Ext             []byte
-	DeletedAt       *time.Time
-	DeletedBy       pgtype.UUID
-	DeletedReason   *string
-	ProtocolVersion *int
-	Contest         pgtype.UUID
-	Listed          bool
+	ID              string     `json:"id"`
+	Owner           string     `json:"owner"`
+	MType           string     `json:"mType"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	Verification    *int64     `json:"verification"`
+	AuthzKey        *string    `json:"authzKey"`
+	FileID          string     `json:"fileId"`
+	LegacyMapID     *string    `json:"legacyMapId"`
+	PublishedID     *int       `json:"publishedId"`
+	PublishedAt     *time.Time `json:"publishedAt"`
+	QualityOverride *int64     `json:"qualityOverride"`
+	OptName         *string    `json:"optName"`
+	OptIcon         *string    `json:"optIcon"`
+	Size            int64      `json:"size"`
+	OptVariant      string     `json:"optVariant"`
+	OptSubvariant   *string    `json:"optSubvariant"`
+	OptSpawnPoint   string     `json:"optSpawnPoint"`
+	OptOnlySprint   *bool      `json:"optOnlySprint"`
+	OptNoSprint     *bool      `json:"optNoSprint"`
+	OptNoJump       *bool      `json:"optNoJump"`
+	OptNoSneak      *bool      `json:"optNoSneak"`
+	OptBoat         *bool      `json:"optBoat"`
+	OptExtra        []byte     `json:"optExtra"`
+	OptTags         []string   `json:"optTags"`
+	Ext             []byte     `json:"ext"`
+	DeletedAt       *time.Time `json:"deletedAt"`
+	DeletedBy       *string    `json:"deletedBy"`
+	DeletedReason   *string    `json:"deletedReason"`
+	ProtocolVersion *int       `json:"protocolVersion"`
+	Contest         *string    `json:"contest"`
+	Listed          bool       `json:"listed"`
+}
+
+type MapPlayerData struct {
+	ID            string   `json:"id"`
+	UnlockedSlots int      `json:"unlockedSlots"`
+	Maps          []string `json:"maps"`
+	LastPlayedMap *string  `json:"lastPlayedMap"`
+	LastEditedMap *string  `json:"lastEditedMap"`
+	ContestSlot   *string  `json:"contestSlot"`
+}
+
+type MapRating struct {
+	MapID    string  `json:"mapId"`
+	PlayerID string  `json:"playerId"`
+	Rating   int     `json:"rating"`
+	Comment  *string `json:"comment"`
 }
 
 type SaveState struct {
-	ID              string
-	MapID           string
-	PlayerID        string
-	Type            SaveStateType
-	Created         time.Time
-	Updated         time.Time
-	Deleted         *time.Time
-	Completed       bool
-	Playtime        int
-	StateV2         []byte
-	DataVersion     int
-	ProtocolVersion *int
-	Ticks           int
+	ID              string        `json:"id"`
+	MapID           string        `json:"mapId"`
+	PlayerID        string        `json:"playerId"`
+	Type            SaveStateType `json:"type"`
+	Created         time.Time     `json:"created"`
+	Updated         time.Time     `json:"updated"`
+	Deleted         *time.Time    `json:"deleted"`
+	Completed       bool          `json:"completed"`
+	Playtime        int           `json:"playtime"`
+	StateV2         []byte        `json:"stateV2"`
+	DataVersion     int           `json:"dataVersion"`
+	ProtocolVersion *int          `json:"protocolVersion"`
+	Ticks           int           `json:"ticks"`
 }

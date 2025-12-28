@@ -2,25 +2,18 @@ package intnl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"github.com/redis/rueidis"
 )
 
 func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error) {
-	pd, err := s.storageClient.GetPlayerData2(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		// Always return empty player data even if not found
-		pd = &model.PlayerData{
-			Id:   request.PlayerId,
-			Maps: make([]string, 2),
-		}
-	} else if err != nil {
+	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+	if err != nil {
 		return nil, fmt.Errorf("failed to fetch player data: %w", err)
 	}
 
@@ -81,9 +74,9 @@ func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPla
 	return DeleteMapPlayerStates200Response{}, nil
 }
 
-func playerDataToAPI(pd *model.PlayerData) GetMapPlayerDataJSONResponse {
+func playerDataToAPI(pd db.MapPlayerData) GetMapPlayerDataJSONResponse {
 	return GetMapPlayerDataJSONResponse{
-		Id:          pd.Id,
+		Id:          pd.ID,
 		MapSlots:    pd.Maps,
 		ContestSlot: pd.ContestSlot,
 	}

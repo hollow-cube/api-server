@@ -1,3 +1,9 @@
+-- name: CountFailSaveStates :one
+select count(*)
+from save_states
+where type = 'playing'
+  and completed = false;
+
 -- name: GetSaveState :one
 select *
 from public.save_states
@@ -5,6 +11,12 @@ where deleted is null
   and id = $1
   and map_id = $2
   and player_id = $3;
+
+-- name: CreateSaveState :one
+insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
+                                state_v2, protocol_version)
+values (gen_random_uuid(), $1, $2, $3, now(), now(), false, 0, 0, 'null', $4)
+returning *;
 
 -- name: UpsertSaveState :exec
 insert into public.save_states
