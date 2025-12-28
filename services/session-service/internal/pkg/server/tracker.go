@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	mapService "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
@@ -228,5 +230,32 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		}
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	for {
+		if getReadyEndpoint(ctx, server.ClusterIp) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
 	return server, nil
+}
+
+func getReadyEndpoint(ctx context.Context, ip string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s:9124/ready", ip), nil)
+	if err != nil {
+		return false
+	}
+
+	res, err := tracefx.DefaultHTTPClient.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = res.Body.Close()
+	return res.StatusCode == http.StatusOK
+
 }
