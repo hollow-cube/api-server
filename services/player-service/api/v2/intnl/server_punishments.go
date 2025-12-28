@@ -151,7 +151,7 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 		return nil, fmt.Errorf("failed to create punishment: %w", err)
 	}
 
-	err = s.sendPunishmentUpdateMessage(ctx, model.PunishmentUpdateAction_Create, punishment)
+	err = s.sendPunishmentUpdateMessage(ctx, model.PunishmentUpdateAction_Create, &punishment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send kick punishment target message: %w", err)
 	}
@@ -243,8 +243,11 @@ func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentR
 		RevokedBy:     &request.Body.RevokedBy,
 		RevokedReason: &request.Body.RevokedReason,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to revoke punishment: %w", err)
+	}
 
-	err = s.sendPunishmentUpdateMessage(ctx, model.PunishmentUpdateAction_Revoke, p)
+	err = s.sendPunishmentUpdateMessage(ctx, model.PunishmentUpdateAction_Revoke, &p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send update message: %w", err)
 	}
@@ -283,7 +286,7 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 	})
 }
 
-func punishmentToAPI(p *db.Punishment) Punishment {
+func punishmentToAPI(p db.Punishment) Punishment {
 	return Punishment{
 		PlayerId:   p.PlayerID,
 		ExecutorId: p.ExecutorID,

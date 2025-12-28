@@ -24,7 +24,7 @@ const getApiKeyByHash = `-- name: GetApiKeyByHash :one
 select id, key_hash, player_id, created_at, deleted_at from api_keys where deleted_at is null and key_hash = $1 limit 1
 `
 
-func (q *Queries) GetApiKeyByHash(ctx context.Context, keyHash string) (*ApiKey, error) {
+func (q *Queries) GetApiKeyByHash(ctx context.Context, keyHash string) (ApiKey, error) {
 	row := q.db.QueryRow(ctx, getApiKeyByHash, keyHash)
 	var i ApiKey
 	err := row.Scan(
@@ -34,7 +34,7 @@ func (q *Queries) GetApiKeyByHash(ctx context.Context, keyHash string) (*ApiKey,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
-	return &i, err
+	return i, err
 }
 
 const insertApiKey = `-- name: InsertApiKey :exec

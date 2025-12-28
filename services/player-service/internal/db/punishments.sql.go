@@ -25,7 +25,7 @@ type CreatePunishmentParams struct {
 	ExpiresAt  *time.Time `json:"expiresAt"`
 }
 
-func (q *Queries) CreatePunishment(ctx context.Context, arg CreatePunishmentParams) (*Punishment, error) {
+func (q *Queries) CreatePunishment(ctx context.Context, arg CreatePunishmentParams) (Punishment, error) {
 	row := q.db.QueryRow(ctx, createPunishment,
 		arg.PlayerID,
 		arg.ExecutorID,
@@ -48,7 +48,7 @@ func (q *Queries) CreatePunishment(ctx context.Context, arg CreatePunishmentPara
 		&i.RevokedAt,
 		&i.RevokedReason,
 	)
-	return &i, err
+	return i, err
 }
 
 const getActivePunishment = `-- name: GetActivePunishment :one
@@ -63,7 +63,7 @@ order by created_at desc
 limit 1
 `
 
-func (q *Queries) GetActivePunishment(ctx context.Context, type_ string, playerID string) (*Punishment, error) {
+func (q *Queries) GetActivePunishment(ctx context.Context, type_ string, playerID string) (Punishment, error) {
 	row := q.db.QueryRow(ctx, getActivePunishment, type_, playerID)
 	var i Punishment
 	err := row.Scan(
@@ -79,7 +79,7 @@ func (q *Queries) GetActivePunishment(ctx context.Context, type_ string, playerI
 		&i.RevokedAt,
 		&i.RevokedReason,
 	)
-	return &i, err
+	return i, err
 }
 
 const revokePunishment = `-- name: RevokePunishment :one
@@ -101,7 +101,7 @@ type RevokePunishmentParams struct {
 	RevokedReason *string `json:"revokedReason"`
 }
 
-func (q *Queries) RevokePunishment(ctx context.Context, arg RevokePunishmentParams) (*Punishment, error) {
+func (q *Queries) RevokePunishment(ctx context.Context, arg RevokePunishmentParams) (Punishment, error) {
 	row := q.db.QueryRow(ctx, revokePunishment,
 		arg.Type,
 		arg.PlayerID,
@@ -122,7 +122,7 @@ func (q *Queries) RevokePunishment(ctx context.Context, arg RevokePunishmentPara
 		&i.RevokedAt,
 		&i.RevokedReason,
 	)
-	return &i, err
+	return i, err
 }
 
 const searchPunishments = `-- name: SearchPunishments :many
@@ -141,7 +141,7 @@ type SearchPunishmentsParams struct {
 	LadderID   *string `json:"ladderId"`
 }
 
-func (q *Queries) SearchPunishments(ctx context.Context, arg SearchPunishmentsParams) ([]*Punishment, error) {
+func (q *Queries) SearchPunishments(ctx context.Context, arg SearchPunishmentsParams) ([]Punishment, error) {
 	rows, err := q.db.Query(ctx, searchPunishments,
 		arg.Type,
 		arg.PlayerID,
@@ -152,7 +152,7 @@ func (q *Queries) SearchPunishments(ctx context.Context, arg SearchPunishmentsPa
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Punishment{}
+	items := []Punishment{}
 	for rows.Next() {
 		var i Punishment
 		if err := rows.Scan(
@@ -170,7 +170,7 @@ func (q *Queries) SearchPunishments(ctx context.Context, arg SearchPunishmentsPa
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

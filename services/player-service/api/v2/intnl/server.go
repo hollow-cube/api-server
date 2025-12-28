@@ -295,11 +295,9 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
 	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
-	if err != nil {
-		if errors.Is(err, db.ErrNoRows) {
-			return PlayerNotFoundResponse{}, nil
-		}
-
+	if errors.Is(err, db.ErrNoRows) {
+		return PlayerNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	}
 

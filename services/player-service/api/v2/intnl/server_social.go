@@ -45,10 +45,9 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 
 	// Fetch the existing verification, handling a case where it's expired.
 	pending, err := s.store.GetPendingVerificationBySecret(ctx, string(verificationType), request.Body.UserSecret)
-	if err != nil {
-		if errors.Is(err, db.ErrNoRows) {
-			return AttemptVerification404Response{}, nil
-		}
+	if errors.Is(err, db.ErrNoRows) {
+		return AttemptVerification404Response{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch pending verification: %w", err)
 	}
 	if pending.Expiration.UnixNano() <= time.Now().UnixNano() {
