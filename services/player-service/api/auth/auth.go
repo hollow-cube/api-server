@@ -60,15 +60,17 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 
 	apiKeyStr := request.Attributes.Request.Http.Headers["x-api-key"]
 
-	var apiKey *db.ApiKey
+	var apiKey db.ApiKey
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
 		apiKey, err = s.store.GetApiKeyByHash(ctx, apiKeyStr[len(ApiKeyPrefix):])
-		if err != nil && !errors.Is(err, db.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
+			apiKey.ID = ""
+		} else if err != nil {
 			return nil, err
 		}
 	}
 
-	if apiKey == nil {
+	if apiKey.ID == "" {
 		return &auth.CheckResponse{
 			Status: &status.Status{Code: /*PERMISSION_DENIED*/ 7},
 			HttpResponse: &auth.CheckResponse_DeniedResponse{

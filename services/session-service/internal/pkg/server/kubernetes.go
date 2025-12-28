@@ -13,7 +13,6 @@ import (
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 )
@@ -128,13 +127,14 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 			},
 		},
 		Spec: coreV1.PodSpec{
+			NodeSelector: map[string]string{
+				"kubernetes.io/hostname": "ovh-02",
+			},
 			ServiceAccountName:           "mapmaker-map-isolate",
 			AutomountServiceAccountToken: util.Pointer(false),
 			RestartPolicy:                coreV1.RestartPolicyNever,
 			ImagePullSecrets: []coreV1.LocalObjectReference{
-				{
-					Name: "dockerio",
-				},
+				{Name: "dockerio"},
 			},
 			Containers: []coreV1.Container{
 				{
@@ -157,17 +157,6 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 						fmt.Sprintf("-Xms%dM", jvmMemoryLimit),
 						fmt.Sprintf("-Xmx%dM", jvmMemoryLimit),
 						mapId,
-					},
-					StartupProbe: &coreV1.Probe{
-						ProbeHandler: coreV1.ProbeHandler{
-							HTTPGet: &coreV1.HTTPGetAction{
-								Path: "/ready",
-								Port: intstr.FromInt32(9124),
-							},
-						},
-						InitialDelaySeconds: 0,
-						TimeoutSeconds:      1,
-						PeriodSeconds:       1,
 					},
 				},
 			},

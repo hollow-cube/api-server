@@ -40,7 +40,7 @@ func (s *server) getPlayerHypercubeTime(ctx context.Context, playerId string) (*
 	return nil, fmt.Errorf("failed to check hypercube time: %w", err)
 }
 
-func (s *server) hydratePlayerData(ctx context.Context, pd *db.PlayerData) (*PlayerData, error) {
+func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*PlayerData, error) {
 	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, pd.ID)
 	if err != nil {
 		return nil, err

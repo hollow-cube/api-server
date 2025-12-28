@@ -45,11 +45,11 @@ type GetPendingTransactionByCheckoutIdRow struct {
 	Username string  `json:"username"`
 }
 
-func (q *Queries) GetPendingTransactionByCheckoutId(ctx context.Context, checkoutID string) (*GetPendingTransactionByCheckoutIdRow, error) {
+func (q *Queries) GetPendingTransactionByCheckoutId(ctx context.Context, checkoutID string) (GetPendingTransactionByCheckoutIdRow, error) {
 	row := q.db.QueryRow(ctx, getPendingTransactionByCheckoutId, checkoutID)
 	var i GetPendingTransactionByCheckoutIdRow
 	err := row.Scan(&i.BasketID, &i.Username)
-	return &i, err
+	return i, err
 }
 
 const logTebexEvent = `-- name: LogTebexEvent :exec

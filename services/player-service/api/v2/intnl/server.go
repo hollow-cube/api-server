@@ -295,11 +295,9 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 
 func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
 	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
-	if err != nil {
-		if errors.Is(err, db.ErrNoRows) {
-			return PlayerNotFoundResponse{}, nil
-		}
-
+	if errors.Is(err, db.ErrNoRows) {
+		return PlayerNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	}
 
@@ -384,7 +382,6 @@ var (
 		/* meoworawr */ "e90ea9ec-080a-401b-8d10-6a53c407ac53": "dev_2",
 		/* Devilsta */ "e7b2bef3-7c97-4446-9657-fdbf4f09a0fd": "mod_2",
 		/* kimoi_ */ "8df33c65-09a3-4d89-8096-d220ec97a416": "mod_2",
-		/* xLaurenRose */ "090c4e2a-37ff-4fae-88bb-c4de51c37776": "mod_2",
 		/* TuxedoLemon */ "e7a98851-920a-49cc-a644-a880f638d14e": "mod_2",
 		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56": "ct_1",
 		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",

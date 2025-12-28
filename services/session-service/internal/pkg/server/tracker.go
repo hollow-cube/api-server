@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -203,6 +204,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 	}
 	defer watchInterface.Stop()
 
+	// Wait to get the IP
 	for event := range watchInterface.ResultChan() {
 		pod, ok := event.Object.(*coreV1.Pod)
 		if !ok || pod.Name != podName {
@@ -214,19 +216,49 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 			newStatus := getPodStatus(pod)
 
 			server.ClusterIp = pod.Status.PodIP
-			if newStatus == Ready {
-				server.StatusV2 = string(Active)
-				server.StatusSince = time.Now()
-			}
-
 			zap.S().Infow("pod update", "name", podName, "status", newStatus, "ip", pod.Status.PodIP)
 		}
 
 		// Check if we have the required server fields
-		if server.StatusV2 == string(Active) && server.ClusterIp != "" {
+		if server.ClusterIp != "" {
 			break
 		}
 	}
 
+	// Wait for the ready endpoint to respond
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	ctx, span := otelTracer.Start(ctx, "AllocServerForMap.waitForReadyEndpoint")
+	for {
+		if getReadyEndpoint(ctx, server.ClusterIp) {
+			server.StatusV2 = string(Active)
+			server.StatusSince = time.Now()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	span.End()
+
+	if server.StatusV2 != string(Active) {
+		return nil, fmt.Errorf("server failed to become ready")
+	}
+
 	return server, nil
+}
+
+func getReadyEndpoint(ctx context.Context, ip string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s:9124/ready", ip), nil)
+	if err != nil {
+		return false
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = res.Body.Close()
+	return res.StatusCode == http.StatusOK
+
 }

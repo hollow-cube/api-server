@@ -62,7 +62,7 @@ values ($1, $2, now(), now())
 returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits
 `
 
-func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string) (*PlayerData, error) {
+func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string) (PlayerData, error) {
 	row := q.db.QueryRow(ctx, createPlayerData, iD, username)
 	var i PlayerData
 	err := row.Scan(
@@ -77,7 +77,7 @@ func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username stri
 		&i.Coins,
 		&i.Cubits,
 	)
-	return &i, err
+	return i, err
 }
 
 const deleteTOTP = `-- name: DeleteTOTP :exec
@@ -98,7 +98,7 @@ where id = $1
 limit 1
 `
 
-func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerData, error) {
+func (q *Queries) GetPlayerData(ctx context.Context, id string) (PlayerData, error) {
 	row := q.db.QueryRow(ctx, getPlayerData, id)
 	var i PlayerData
 	err := row.Scan(
@@ -113,7 +113,7 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (*PlayerData, er
 		&i.Coins,
 		&i.Cubits,
 	)
-	return &i, err
+	return i, err
 }
 
 const getPlayerStats = `-- name: GetPlayerStats :one
@@ -126,11 +126,11 @@ type GetPlayerStatsRow struct {
 	Sum   int64 `json:"sum"`
 }
 
-func (q *Queries) GetPlayerStats(ctx context.Context) (*GetPlayerStatsRow, error) {
+func (q *Queries) GetPlayerStats(ctx context.Context) (GetPlayerStatsRow, error) {
 	row := q.db.QueryRow(ctx, getPlayerStats)
 	var i GetPlayerStatsRow
 	err := row.Scan(&i.Count, &i.Sum)
-	return &i, err
+	return i, err
 }
 
 const getTOTP = `-- name: GetTOTP :one
@@ -139,7 +139,7 @@ from player_totp
 where player_id = $1
 `
 
-func (q *Queries) GetTOTP(ctx context.Context, playerID string) (*PlayerTotp, error) {
+func (q *Queries) GetTOTP(ctx context.Context, playerID string) (PlayerTotp, error) {
 	row := q.db.QueryRow(ctx, getTOTP, playerID)
 	var i PlayerTotp
 	err := row.Scan(
@@ -149,7 +149,7 @@ func (q *Queries) GetTOTP(ctx context.Context, playerID string) (*PlayerTotp, er
 		&i.Key,
 		&i.RecoveryCodes,
 	)
-	return &i, err
+	return i, err
 }
 
 const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
@@ -206,19 +206,19 @@ type SearchPlayersFuzzyRow struct {
 }
 
 // SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
-func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]*SearchPlayersFuzzyRow, error) {
+func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]SearchPlayersFuzzyRow, error) {
 	rows, err := q.db.Query(ctx, searchPlayersFuzzy, username)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*SearchPlayersFuzzyRow{}
+	items := []SearchPlayersFuzzyRow{}
 	for rows.Next() {
 		var i SearchPlayersFuzzyRow
 		if err := rows.Scan(&i.ID, &i.Username); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

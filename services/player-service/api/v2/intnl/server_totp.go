@@ -152,5 +152,5 @@ func (s *server) testTotpCode(ctx context.Context, playerId, code string, unsafe
 		return nil, nil
 	}
 
-	return config, nil
+	return &config, nil
 }

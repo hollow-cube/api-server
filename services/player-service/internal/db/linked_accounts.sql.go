@@ -39,7 +39,7 @@ where type = $1
   and user_secret = $2
 `
 
-func (q *Queries) GetPendingVerificationBySecret(ctx context.Context, type_ string, userSecret string) (*PendingVerification, error) {
+func (q *Queries) GetPendingVerificationBySecret(ctx context.Context, type_ string, userSecret string) (PendingVerification, error) {
 	row := q.db.QueryRow(ctx, getPendingVerificationBySecret, type_, userSecret)
 	var i PendingVerification
 	err := row.Scan(
@@ -48,7 +48,7 @@ func (q *Queries) GetPendingVerificationBySecret(ctx context.Context, type_ stri
 		&i.UserSecret,
 		&i.Expiration,
 	)
-	return &i, err
+	return i, err
 }
 
 const lookupPlayerDataBySocialId = `-- name: LookupPlayerDataBySocialId :one
@@ -59,7 +59,7 @@ where linked.type = $1
   and linked.social_id = $2
 `
 
-func (q *Queries) LookupPlayerDataBySocialId(ctx context.Context, type_ string, socialID string) (*PlayerData, error) {
+func (q *Queries) LookupPlayerDataBySocialId(ctx context.Context, type_ string, socialID string) (PlayerData, error) {
 	row := q.db.QueryRow(ctx, lookupPlayerDataBySocialId, type_, socialID)
 	var i PlayerData
 	err := row.Scan(
@@ -74,7 +74,7 @@ func (q *Queries) LookupPlayerDataBySocialId(ctx context.Context, type_ string, 
 		&i.Coins,
 		&i.Cubits,
 	)
-	return &i, err
+	return i, err
 }
 
 const lookupSocialIdByPlayerId = `-- name: LookupSocialIdByPlayerId :one

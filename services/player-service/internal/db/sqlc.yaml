@@ -9,7 +9,6 @@ sql:
         sql_package: "pgx/v5"
         package: "db"
         out: "."
-        emit_result_struct_pointers: true
         emit_pointers_for_null_types: true
         omit_unused_structs: true
         query_parameter_limit: 3

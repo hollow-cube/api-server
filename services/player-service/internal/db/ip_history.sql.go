@@ -61,19 +61,19 @@ type GetPlayersByIPsRow struct {
 	Username string `json:"username"`
 }
 
-func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]*GetPlayersByIPsRow, error) {
+func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]GetPlayersByIPsRow, error) {
 	rows, err := q.db.Query(ctx, getPlayersByIPs, dollar_1)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetPlayersByIPsRow{}
+	items := []GetPlayersByIPsRow{}
 	for rows.Next() {
 		var i GetPlayersByIPsRow
 		if err := rows.Scan(&i.ID, &i.Username); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

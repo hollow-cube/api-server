@@ -24,7 +24,7 @@ type GetRecapByIdRow struct {
 	Data     map[string]any `json:"data"`
 }
 
-func (q *Queries) GetRecapById(ctx context.Context, id string) (*GetRecapByIdRow, error) {
+func (q *Queries) GetRecapById(ctx context.Context, id string) (GetRecapByIdRow, error) {
 	row := q.db.QueryRow(ctx, getRecapById, id)
 	var i GetRecapByIdRow
 	err := row.Scan(
@@ -34,7 +34,7 @@ func (q *Queries) GetRecapById(ctx context.Context, id string) (*GetRecapByIdRow
 		&i.Year,
 		&i.Data,
 	)
-	return &i, err
+	return i, err
 }
 
 const getRecapByPlayerId = `-- name: GetRecapByPlayerId :one
@@ -52,7 +52,7 @@ type GetRecapByPlayerIdRow struct {
 	Data     map[string]any `json:"data"`
 }
 
-func (q *Queries) GetRecapByPlayerId(ctx context.Context, iD string, year int) (*GetRecapByPlayerIdRow, error) {
+func (q *Queries) GetRecapByPlayerId(ctx context.Context, iD string, year int) (GetRecapByPlayerIdRow, error) {
 	row := q.db.QueryRow(ctx, getRecapByPlayerId, iD, year)
 	var i GetRecapByPlayerIdRow
 	err := row.Scan(
@@ -62,5 +62,5 @@ func (q *Queries) GetRecapByPlayerId(ctx context.Context, iD string, year int) (
 		&i.Year,
 		&i.Data,
 	)
-	return &i, err
+	return i, err
 }
