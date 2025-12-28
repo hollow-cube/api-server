@@ -30,34 +30,64 @@ func (q *Queries) CreatePlayerFriend(ctx context.Context, playerID string, targe
 	return err
 }
 
-const deleteFriendRequest = `-- name: DeleteFriendRequest :execrows
-delete
-from player_friend_requests
-where player_id = $1
-  and target_id = $2
+const deleteFriendRequest = `-- name: DeleteFriendRequest :one
+WITH deleted AS (
+    DELETE FROM player_friend_requests
+        WHERE player_id = $1
+            AND target_id = $2
+        RETURNING player_id, target_id, created_at)
+SELECT d.player_id, d.target_id, d.created_at, pd.username
+FROM deleted d
+         JOIN player_data pd ON pd.id = d.player_id
 `
 
-func (q *Queries) DeleteFriendRequest(ctx context.Context, playerID string, targetID string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFriendRequest, playerID, targetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type DeleteFriendRequestRow struct {
+	PlayerID  string    `json:"playerId"`
+	TargetID  string    `json:"targetId"`
+	CreatedAt time.Time `json:"createdAt"`
+	Username  string    `json:"username"`
 }
 
-const deleteFriendRequestBidirectional = `-- name: DeleteFriendRequestBidirectional :execrows
-delete
-from player_friend_requests
-where (player_id = $1 and target_id = $2)
-   or (player_id = $2 and target_id = $1)
+func (q *Queries) DeleteFriendRequest(ctx context.Context, playerID string, targetID string) (DeleteFriendRequestRow, error) {
+	row := q.db.QueryRow(ctx, deleteFriendRequest, playerID, targetID)
+	var i DeleteFriendRequestRow
+	err := row.Scan(
+		&i.PlayerID,
+		&i.TargetID,
+		&i.CreatedAt,
+		&i.Username,
+	)
+	return i, err
+}
+
+const deleteFriendRequestBidirectional = `-- name: DeleteFriendRequestBidirectional :one
+WITH deleted AS (
+    DELETE FROM player_friend_requests
+        WHERE (player_id = $1 AND target_id = $2)
+            OR (player_id = $2 AND target_id = $1)
+        RETURNING player_id, target_id, created_at)
+SELECT d.player_id, d.target_id, d.created_at, pd.username
+FROM deleted d
+         JOIN player_data pd ON pd.id = d.player_id
 `
 
-func (q *Queries) DeleteFriendRequestBidirectional(ctx context.Context, playerID string, targetID string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFriendRequestBidirectional, playerID, targetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type DeleteFriendRequestBidirectionalRow struct {
+	PlayerID  string    `json:"playerId"`
+	TargetID  string    `json:"targetId"`
+	CreatedAt time.Time `json:"createdAt"`
+	Username  string    `json:"username"`
+}
+
+func (q *Queries) DeleteFriendRequestBidirectional(ctx context.Context, playerID string, targetID string) (DeleteFriendRequestBidirectionalRow, error) {
+	row := q.db.QueryRow(ctx, deleteFriendRequestBidirectional, playerID, targetID)
+	var i DeleteFriendRequestBidirectionalRow
+	err := row.Scan(
+		&i.PlayerID,
+		&i.TargetID,
+		&i.CreatedAt,
+		&i.Username,
+	)
+	return i, err
 }
 
 const deletePlayerFriend = `-- name: DeletePlayerFriend :execrows
@@ -133,19 +163,19 @@ type GetIncomingFriendRequestsRow struct {
 }
 
 // Friend Requests
-func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string) ([]*GetIncomingFriendRequestsRow, error) {
+func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string) ([]GetIncomingFriendRequestsRow, error) {
 	rows, err := q.db.Query(ctx, getIncomingFriendRequests, targetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetIncomingFriendRequestsRow{}
+	items := []GetIncomingFriendRequestsRow{}
 	for rows.Next() {
 		var i GetIncomingFriendRequestsRow
 		if err := rows.Scan(&i.PlayerID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -166,19 +196,19 @@ type GetOutgoingFriendRequestsRow struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string) ([]*GetOutgoingFriendRequestsRow, error) {
+func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string) ([]GetOutgoingFriendRequestsRow, error) {
 	rows, err := q.db.Query(ctx, getOutgoingFriendRequests, playerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetOutgoingFriendRequestsRow{}
+	items := []GetOutgoingFriendRequestsRow{}
 	for rows.Next() {
 		var i GetOutgoingFriendRequestsRow
 		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -201,19 +231,19 @@ type GetPlayerFriendsRow struct {
 }
 
 // Friends
-func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string) ([]*GetPlayerFriendsRow, error) {
+func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string) ([]GetPlayerFriendsRow, error) {
 	rows, err := q.db.Query(ctx, getPlayerFriends, playerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetPlayerFriendsRow{}
+	items := []GetPlayerFriendsRow{}
 	for rows.Next() {
 		var i GetPlayerFriendsRow
 		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

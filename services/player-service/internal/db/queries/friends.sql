@@ -46,17 +46,25 @@ where pfr.player_id = $1;
 insert into player_friend_requests (player_id, target_id)
 values ($1, $2);
 
--- name: DeleteFriendRequest :execrows
-delete
-from player_friend_requests
-where player_id = $1
-  and target_id = $2;
+-- name: DeleteFriendRequest :one
+WITH deleted AS (
+    DELETE FROM player_friend_requests
+        WHERE player_id = $1
+            AND target_id = $2
+        RETURNING *)
+SELECT d.*, pd.username
+FROM deleted d
+         JOIN player_data pd ON pd.id = d.player_id;
 
--- name: DeleteFriendRequestBidirectional :execrows
-delete
-from player_friend_requests
-where (player_id = $1 and target_id = $2)
-   or (player_id = $2 and target_id = $1);
+-- name: DeleteFriendRequestBidirectional :one
+WITH deleted AS (
+    DELETE FROM player_friend_requests
+        WHERE (player_id = $1 AND target_id = $2)
+            OR (player_id = $2 AND target_id = $1)
+        RETURNING *)
+SELECT d.*, pd.username
+FROM deleted d
+         JOIN player_data pd ON pd.id = d.player_id;
 
 -- name: FriendRequestExists :one
 select exists (select 1

@@ -48,19 +48,19 @@ type GetBlockedPlayersRow struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string) ([]*GetBlockedPlayersRow, error) {
+func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string) ([]GetBlockedPlayersRow, error) {
 	rows, err := q.db.Query(ctx, getBlockedPlayers, playerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetBlockedPlayersRow{}
+	items := []GetBlockedPlayersRow{}
 	for rows.Next() {
 		var i GetBlockedPlayersRow
 		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

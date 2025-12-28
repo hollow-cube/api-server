@@ -2,9 +2,11 @@ package intnl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
@@ -195,16 +197,37 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 }
 
 func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error) {
-	modified, err := s.store.DeleteFriendRequest(ctx, request.PlayerId, request.TargetId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete friend request: %w", err)
+	var deletedReq FriendRequest
+	if request.Params.Bidirectional {
+		row, err := s.store.DeleteFriendRequestBidirectional(ctx, request.PlayerId, request.TargetId)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return DeleteFriendRequest404Response{}, nil
+			}
+			return nil, fmt.Errorf("failed to delete friend request: %w", err)
+		}
+		deletedReq = FriendRequest{
+			PlayerId: row.PlayerID,
+			SentAt:   row.CreatedAt,
+			Username: row.Username,
+		}
+
+	} else {
+		row, err := s.store.DeleteFriendRequest(ctx, request.PlayerId, request.TargetId)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return DeleteFriendRequest404Response{}, nil
+			}
+			return nil, fmt.Errorf("failed to delete friend request: %w", err)
+		}
+		deletedReq = FriendRequest{
+			PlayerId: row.TargetID,
+			SentAt:   row.CreatedAt,
+			Username: row.Username,
+		}
 	}
 
-	if modified == 0 {
-		return DeleteFriendRequest404Response{}, nil
-	}
-
-	return DeleteFriendRequest204Response{}, nil
+	return DeleteFriendRequest200JSONResponse(deletedReq), nil
 }
 
 func (s *server) RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error) {

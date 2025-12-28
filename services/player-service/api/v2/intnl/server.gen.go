@@ -239,6 +239,12 @@ type GetFriendRequestsParams struct {
 	Direction FriendRequestDirection `form:"direction" json:"direction"`
 }
 
+// DeleteFriendRequestParams defines parameters for DeleteFriendRequest.
+type DeleteFriendRequestParams struct {
+	// Bidirectional Whether to delete either direction of the request
+	Bidirectional bool `form:"bidirectional" json:"bidirectional"`
+}
+
 // CheckTotpParams defines parameters for CheckTotp.
 type CheckTotpParams struct {
 	// Code The TOTP code to check
@@ -433,7 +439,7 @@ type ServerInterface interface {
 	GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams)
 	// Delete a friend request (cancel outgoing or decline incoming)
 	// (DELETE /players/{playerId}/friendRequests/{targetId})
-	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
+	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params DeleteFriendRequestParams)
 	// Send a friend request to another player
 	// (POST /players/{playerId}/friendRequests/{targetId})
 	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
@@ -1032,8 +1038,26 @@ func (siw *ServerInterfaceWrapper) DeleteFriendRequest(w http.ResponseWriter, r 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteFriendRequestParams
+
+	// ------------- Required query parameter "bidirectional" -------------
+
+	if paramValue := r.URL.Query().Get("bidirectional"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "bidirectional"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "bidirectional", r.URL.Query(), &params.Bidirectional)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bidirectional", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteFriendRequest(w, r, playerId, targetId)
+		siw.Handler.DeleteFriendRequest(w, r, playerId, targetId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2116,13 +2140,6 @@ func (response GetBlockedPlayers200JSONResponse) VisitGetBlockedPlayersResponse(
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetBlockedPlayers404Response = PlayerNotFoundResponse
-
-func (response GetBlockedPlayers404Response) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 type UnblockPlayerRequestObject struct {
 	PlayerId string `json:"playerId"`
 	TargetId string `json:"targetId"`
@@ -2282,18 +2299,20 @@ func (response GetFriendRequests200JSONResponse) VisitGetFriendRequestsResponse(
 type DeleteFriendRequestRequestObject struct {
 	PlayerId string `json:"playerId"`
 	TargetId string `json:"targetId"`
+	Params   DeleteFriendRequestParams
 }
 
 type DeleteFriendRequestResponseObject interface {
 	VisitDeleteFriendRequestResponse(w http.ResponseWriter) error
 }
 
-type DeleteFriendRequest204Response struct {
-}
+type DeleteFriendRequest200JSONResponse FriendRequest
 
-func (response DeleteFriendRequest204Response) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
+func (response DeleteFriendRequest200JSONResponse) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type DeleteFriendRequest404Response struct {
@@ -3501,11 +3520,12 @@ func (sh *strictHandler) GetFriendRequests(w http.ResponseWriter, r *http.Reques
 }
 
 // DeleteFriendRequest operation middleware
-func (sh *strictHandler) DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
+func (sh *strictHandler) DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params DeleteFriendRequestParams) {
 	var request DeleteFriendRequestRequestObject
 
 	request.PlayerId = playerId
 	request.TargetId = targetId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteFriendRequest(ctx, request.(DeleteFriendRequestRequestObject))

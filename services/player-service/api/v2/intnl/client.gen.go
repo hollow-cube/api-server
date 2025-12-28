@@ -164,7 +164,7 @@ type ClientInterface interface {
 	GetFriendRequests(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteFriendRequest request
-	DeleteFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteFriendRequest(ctx context.Context, playerId string, targetId string, params *DeleteFriendRequestParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SendFriendRequest request
 	SendFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -557,8 +557,8 @@ func (c *Client) GetFriendRequests(ctx context.Context, playerId string, params 
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteFriendRequestRequest(c.Server, playerId, targetId)
+func (c *Client) DeleteFriendRequest(ctx context.Context, playerId string, targetId string, params *DeleteFriendRequestParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteFriendRequestRequest(c.Server, playerId, targetId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1647,7 +1647,7 @@ func NewGetFriendRequestsRequest(server string, playerId string, params *GetFrie
 }
 
 // NewDeleteFriendRequestRequest generates requests for DeleteFriendRequest
-func NewDeleteFriendRequestRequest(server string, playerId string, targetId string) (*http.Request, error) {
+func NewDeleteFriendRequestRequest(server string, playerId string, targetId string, params *DeleteFriendRequestParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1677,6 +1677,24 @@ func NewDeleteFriendRequestRequest(server string, playerId string, targetId stri
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "bidirectional", runtime.ParamLocationQuery, params.Bidirectional); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
@@ -2625,7 +2643,7 @@ type ClientWithResponsesInterface interface {
 	GetFriendRequestsWithResponse(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*GetFriendRequestsResponse, error)
 
 	// DeleteFriendRequestWithResponse request
-	DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error)
+	DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, params *DeleteFriendRequestParams, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error)
 
 	// SendFriendRequestWithResponse request
 	SendFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*SendFriendRequestResponse, error)
@@ -3144,6 +3162,7 @@ func (r GetFriendRequestsResponse) StatusCode() int {
 type DeleteFriendRequestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *FriendRequest
 }
 
 // Status returns HTTPResponse.Status
@@ -3803,8 +3822,8 @@ func (c *ClientWithResponses) GetFriendRequestsWithResponse(ctx context.Context,
 }
 
 // DeleteFriendRequestWithResponse request returning *DeleteFriendRequestResponse
-func (c *ClientWithResponses) DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error) {
-	rsp, err := c.DeleteFriendRequest(ctx, playerId, targetId, reqEditors...)
+func (c *ClientWithResponses) DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, params *DeleteFriendRequestParams, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error) {
+	rsp, err := c.DeleteFriendRequest(ctx, playerId, targetId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -4514,6 +4533,16 @@ func ParseDeleteFriendRequestResponse(rsp *http.Response) (*DeleteFriendRequestR
 	response := &DeleteFriendRequestResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FriendRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

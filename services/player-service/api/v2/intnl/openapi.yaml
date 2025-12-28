@@ -413,9 +413,19 @@ paths:
           required: true
           schema:
             type: string
+        - name: bidirectional
+          in: query
+          description: Whether to delete either direction of the request
+          required: true
+          schema:
+            type: boolean
       responses:
-        '204':
+        '200':
           description: Friend request deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FriendRequest'
         '404':
           description: Friend request not found
 
