@@ -199,8 +199,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 	}
 
 	t.log.Infow("Pod created, starting watch", "resourceVersion", resourceVersion)
-	// TODO: should use a more specific selector here (ie only the specific pod we care about)
-	watchOptions := metaV1.ListOptions{ResourceVersion: resourceVersion, LabelSelector: anyServerLabelSelector}
+	watchOptions := metaV1.ListOptions{ResourceVersion: resourceVersion, FieldSelector: fmt.Sprintf("metadata.name=%s", podName)}
 	watchInterface, err := t.k8s.CoreV1().Pods(t.K8sNamespace).Watch(ctx, watchOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to watch pods: %w", err)
