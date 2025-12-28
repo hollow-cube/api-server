@@ -44,7 +44,7 @@ paths:
           content:
             application/json:
               schema:
-                  $ref: '#/components/schemas/PlayerData'
+                $ref: '#/components/schemas/PlayerData'
         '404':
           $ref: '#/components/responses/PlayerNotFound'
     patch:
@@ -200,7 +200,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [change, txMeta]
+              required: [ change, txMeta ]
               properties:
                 txMeta:
                   type: object
@@ -280,11 +280,212 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [apiKey]
+                required: [ apiKey ]
                 properties:
                   apiKey: { type: string }
         '404':
           $ref: '#/components/responses/PlayerNotFound'
+  /players/{playerId}/friends:
+    get:
+      summary: Get a player's friends
+      operationId: getPlayerFriends
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get friends for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Friends successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlayerFriend'
+
+  /players/{playerId}/friends/{targetId}:
+    delete:
+      summary: Remove a friend
+      operationId: removeFriend
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID removing the friend
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The friend to remove
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Friend removed
+        '404':
+          description: Friendship not found
+
+  /players/{playerId}/friendRequests:
+    get:
+      summary: Get a player's friend requests
+      operationId: getFriendRequests
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get friend requests for
+          required: true
+          schema:
+            type: string
+        - name: direction
+          in: query
+          description: The direction of requests to get
+          required: true
+          schema:
+            $ref: '#/components/schemas/FriendRequestDirection'
+      responses:
+        '200':
+          description: Friend requests successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FriendRequest'
+
+  /players/{playerId}/friendRequests/{targetId}:
+    post:
+      summary: Send a friend request to another player
+      operationId: sendFriendRequest
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID sending the request
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The other player in the request
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Friend request sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ isRequest ]
+                properties:
+                  isRequest:
+                    description: Indicates whether it created a request (true), or accepted a friendship (false).
+                    type: boolean
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+        '409':
+          description: Cannot send friend request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ code, message ]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+    delete:
+      summary: Delete a friend request (cancel outgoing or decline incoming)
+      operationId: deleteFriendRequest
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID deleting the request
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The other player in the request
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Friend request deleted
+        '404':
+          description: Friend request not found
+
+  /players/{playerId}/blocks:
+    get:
+      summary: Get players blocked by this player
+      operationId: getBlockedPlayers
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get blocks for
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Blocked players successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockedPlayer'
+
+  /players/{playerId}/blocks/{targetId}:
+    post:
+      summary: Block a player
+      operationId: blockPlayer
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID blocking
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The player to block
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Player blocked successfully
+        '404':
+          $ref: '#/components/responses/PlayerNotFound'
+        '409':
+          description: Player already blocked
+    delete:
+      summary: Unblock a player
+      operationId: unblockPlayer
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID unblocking
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The player to unblock
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Player unblocked
+        '404':
+          description: Block not found
+
   /players/{idOrUsername}/id:
     get:
       summary: Get the player ID for a player
@@ -383,7 +584,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [userSecret]
+                required: [ userSecret ]
                 properties:
                   userSecret:
                     type: string
@@ -568,7 +769,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: ['ban', 'mute', 'kick']
+            enum: [ 'ban', 'mute', 'kick' ]
       responses:
         '200':
           description: Punishments successfully retrieved
@@ -587,7 +788,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [playerId, executorId, punishmentType]
+              required: [ playerId, executorId, punishmentType ]
               properties:
                 playerId: { type: string }
                 executorId: { type: string }
@@ -670,7 +871,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: ['ban', 'mute', 'kick']
+            enum: [ 'ban', 'mute', 'kick' ]
       responses:
         '200':
           description: Punishment ladders successfully retrieved
@@ -700,17 +901,17 @@ paths:
             type: string
       responses:
         '200':
-            description: Punishment ladder entry successfully retrieved
-            content:
-              application/json:
-                schema:
-                  type: object
-                  required: [ id, name, duration ]
-                  properties:
-                    id: { type: string }
-                    name: { type: string }
-                    duration:
-                      type: integer
+          description: Punishment ladder entry successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ id, name, duration ]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  duration:
+                    type: integer
         '404':
           description: Punishment ladder entry not found
 
@@ -780,7 +981,7 @@ paths:
           description: The year of the recap
           required: true
           schema:
-              type: integer
+            type: integer
       responses:
         '200':
           description: Returns the recap data
@@ -801,7 +1002,7 @@ components:
         application/json:
           schema:
             type: object
-            required: [message]
+            required: [ message ]
             properties:
               message:
                 type: string
@@ -946,7 +1147,7 @@ components:
           type: string
           format: date-time
         revokedReason: { type: string }
-      required: [playerId, executorId, type, createdAt, comment]
+      required: [ playerId, executorId, type, createdAt, comment ]
 
     PunishmentLadder:
       type: object
@@ -981,7 +1182,41 @@ components:
 
     PunishmentType:
       type: string
-      enum: ['ban', 'mute', 'kick']
+      enum: [ 'ban', 'mute', 'kick' ]
+
+    FriendRequestDirection:
+      type: string
+      enum: [ 'incoming', 'outgoing' ]
+
+    PlayerFriend:
+      type: object
+      required: [ playerId, username, friendsSince ]
+      properties:
+        playerId: { type: string }
+        username: { type: string }
+        friendsSince:
+          type: string
+          format: date-time
+
+    FriendRequest:
+      type: object
+      required: [ playerId, username, sentAt ]
+      properties:
+        playerId: { type: string }
+        username: { type: string }
+        sentAt:
+          type: string
+          format: date-time
+
+    BlockedPlayer:
+      type: object
+      required: [ playerId, username, blockedAt ]
+      properties:
+        playerId: { type: string }
+        username: { type: string }
+        blockedAt:
+          type: string
+          format: date-time
 
     PlayerDataCreateRequest:
       type: object
