@@ -155,6 +155,9 @@ func (t *Tracker) findServerForMap(ctx context.Context, mapId string) (*db.Serve
 }
 
 func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride string) (*db.ServerState, error) {
+	ctx, span := otelTracer.Start(ctx, "tracker.AllocServerForMap")
+	defer span.End()
+
 	existing, err := t.findServerForMap(ctx, mapId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find server for map: %w", err)
@@ -228,16 +231,18 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 	// Wait for the ready endpoint to respond
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	ctx, span := otelTracer.Start(ctx, "AllocServerForMap.waitForReadyEndpoint")
-	for {
-		if getReadyEndpoint(ctx, server.ClusterIp) {
-			server.StatusV2 = string(Active)
-			server.StatusSince = time.Now()
-			break
+	func() {
+		ctx, span := otelTracer.Start(ctx, "tracker.AllocServerForMap.waitForReadyEndpoint")
+		for {
+			if getReadyEndpoint(ctx, server.ClusterIp) {
+				server.StatusV2 = string(Active)
+				server.StatusSince = time.Now()
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	span.End()
+		span.End()
+	}()
 
 	if server.StatusV2 != string(Active) {
 		return nil, fmt.Errorf("server failed to become ready")
