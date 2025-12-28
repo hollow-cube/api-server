@@ -5,55 +5,10 @@
 package db
 
 import (
-	"database/sql/driver"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type RelationshipStatus string
-
-const (
-	RelationshipStatusPending RelationshipStatus = "pending"
-	RelationshipStatusFriend  RelationshipStatus = "friend"
-	RelationshipStatusBlocked RelationshipStatus = "blocked"
-)
-
-func (e *RelationshipStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = RelationshipStatus(s)
-	case string:
-		*e = RelationshipStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for RelationshipStatus: %T", src)
-	}
-	return nil
-}
-
-type NullRelationshipStatus struct {
-	RelationshipStatus RelationshipStatus `json:"relationshipStatus"`
-	Valid              bool               `json:"valid"` // Valid is true if RelationshipStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullRelationshipStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.RelationshipStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.RelationshipStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullRelationshipStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.RelationshipStatus), nil
-}
 
 type ApiKey struct {
 	ID        string     `json:"id"`
@@ -81,14 +36,6 @@ type PlayerData struct {
 	Settings    PlayerSettings `json:"settings"`
 	Coins       int            `json:"coins"`
 	Cubits      int            `json:"cubits"`
-}
-
-type PlayerRelationship struct {
-	PlayerID  string             `json:"playerId"`
-	TargetID  string             `json:"targetId"`
-	Status    RelationshipStatus `json:"status"`
-	CreatedAt time.Time          `json:"createdAt"`
-	UpdatedAt time.Time          `json:"updatedAt"`
 }
 
 type PlayerTotp struct {

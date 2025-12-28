@@ -162,9 +162,6 @@ type ClientInterface interface {
 	// GetPlayerDisplayNameV2 request
 	GetPlayerDisplayNameV2(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetPlayerFriends request
-	GetPlayerFriends(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetFriendRequests request
 	GetFriendRequests(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -176,8 +173,8 @@ type ClientInterface interface {
 	// DeleteFriendRequest request
 	DeleteFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AcceptFriendRequest request
-	AcceptFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetPlayerFriends request
+	GetPlayerFriends(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RemoveFriend request
 	RemoveFriend(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -564,18 +561,6 @@ func (c *Client) GetPlayerDisplayNameV2(ctx context.Context, playerId string, re
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetPlayerFriends(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPlayerFriendsRequest(c.Server, playerId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetFriendRequests(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFriendRequestsRequest(c.Server, playerId, params)
 	if err != nil {
@@ -624,8 +609,8 @@ func (c *Client) DeleteFriendRequest(ctx context.Context, playerId string, targe
 	return c.Client.Do(req)
 }
 
-func (c *Client) AcceptFriendRequest(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAcceptFriendRequestRequest(c.Server, playerId, targetId)
+func (c *Client) GetPlayerFriends(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlayerFriendsRequest(c.Server, playerId)
 	if err != nil {
 		return nil, err
 	}
@@ -1643,40 +1628,6 @@ func NewGetPlayerDisplayNameV2Request(server string, playerId string) (*http.Req
 	return req, nil
 }
 
-// NewGetPlayerFriendsRequest generates requests for GetPlayerFriends
-func NewGetPlayerFriendsRequest(server string, playerId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/players/%s/friends", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetFriendRequestsRequest generates requests for GetFriendRequests
 func NewGetFriendRequestsRequest(server string, playerId string, params *GetFriendRequestsParams) (*http.Request, error) {
 	var err error
@@ -1693,7 +1644,7 @@ func NewGetFriendRequestsRequest(server string, playerId string, params *GetFrie
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/players/%s/friends/requests", pathParam0)
+	operationPath := fmt.Sprintf("/players/%s/friendRequests", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1756,7 +1707,7 @@ func NewSendFriendRequestRequestWithBody(server string, playerId string, content
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/players/%s/friends/requests", pathParam0)
+	operationPath := fmt.Sprintf("/players/%s/friendRequests", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1799,7 +1750,7 @@ func NewDeleteFriendRequestRequest(server string, playerId string, targetId stri
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/players/%s/friends/requests/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/players/%s/friendRequests/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1817,8 +1768,8 @@ func NewDeleteFriendRequestRequest(server string, playerId string, targetId stri
 	return req, nil
 }
 
-// NewAcceptFriendRequestRequest generates requests for AcceptFriendRequest
-func NewAcceptFriendRequestRequest(server string, playerId string, targetId string) (*http.Request, error) {
+// NewGetPlayerFriendsRequest generates requests for GetPlayerFriends
+func NewGetPlayerFriendsRequest(server string, playerId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1828,19 +1779,12 @@ func NewAcceptFriendRequestRequest(server string, playerId string, targetId stri
 		return nil, err
 	}
 
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "targetId", runtime.ParamLocationPath, targetId)
-	if err != nil {
-		return nil, err
-	}
-
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/players/%s/friends/requests/%s/accept", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/players/%s/friends", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1850,7 +1794,7 @@ func NewAcceptFriendRequestRequest(server string, playerId string, targetId stri
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2719,9 +2663,6 @@ type ClientWithResponsesInterface interface {
 	// GetPlayerDisplayNameV2WithResponse request
 	GetPlayerDisplayNameV2WithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerDisplayNameV2Response, error)
 
-	// GetPlayerFriendsWithResponse request
-	GetPlayerFriendsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerFriendsResponse, error)
-
 	// GetFriendRequestsWithResponse request
 	GetFriendRequestsWithResponse(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*GetFriendRequestsResponse, error)
 
@@ -2733,8 +2674,8 @@ type ClientWithResponsesInterface interface {
 	// DeleteFriendRequestWithResponse request
 	DeleteFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*DeleteFriendRequestResponse, error)
 
-	// AcceptFriendRequestWithResponse request
-	AcceptFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*AcceptFriendRequestResponse, error)
+	// GetPlayerFriendsWithResponse request
+	GetPlayerFriendsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerFriendsResponse, error)
 
 	// RemoveFriendWithResponse request
 	RemoveFriendWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*RemoveFriendResponse, error)
@@ -3222,28 +3163,6 @@ func (r GetPlayerDisplayNameV2Response) StatusCode() int {
 	return 0
 }
 
-type GetPlayerFriendsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *[]PlayerFriend
-}
-
-// Status returns HTTPResponse.Status
-func (r GetPlayerFriendsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetPlayerFriendsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetFriendRequestsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3269,6 +3188,14 @@ func (r GetFriendRequestsResponse) StatusCode() int {
 type SendFriendRequestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON201      *struct {
+		// IsRequest Indicates whether it created a request (true), or accepted a friendship (false).
+		IsRequest bool `json:"isRequest"`
+	}
+	JSON409 *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
 }
 
 // Status returns HTTPResponse.Status
@@ -3308,13 +3235,14 @@ func (r DeleteFriendRequestResponse) StatusCode() int {
 	return 0
 }
 
-type AcceptFriendRequestResponse struct {
+type GetPlayerFriendsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *[]PlayerFriend
 }
 
 // Status returns HTTPResponse.Status
-func (r AcceptFriendRequestResponse) Status() string {
+func (r GetPlayerFriendsResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3322,7 +3250,7 @@ func (r AcceptFriendRequestResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r AcceptFriendRequestResponse) StatusCode() int {
+func (r GetPlayerFriendsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3917,15 +3845,6 @@ func (c *ClientWithResponses) GetPlayerDisplayNameV2WithResponse(ctx context.Con
 	return ParseGetPlayerDisplayNameV2Response(rsp)
 }
 
-// GetPlayerFriendsWithResponse request returning *GetPlayerFriendsResponse
-func (c *ClientWithResponses) GetPlayerFriendsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerFriendsResponse, error) {
-	rsp, err := c.GetPlayerFriends(ctx, playerId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetPlayerFriendsResponse(rsp)
-}
-
 // GetFriendRequestsWithResponse request returning *GetFriendRequestsResponse
 func (c *ClientWithResponses) GetFriendRequestsWithResponse(ctx context.Context, playerId string, params *GetFriendRequestsParams, reqEditors ...RequestEditorFn) (*GetFriendRequestsResponse, error) {
 	rsp, err := c.GetFriendRequests(ctx, playerId, params, reqEditors...)
@@ -3961,13 +3880,13 @@ func (c *ClientWithResponses) DeleteFriendRequestWithResponse(ctx context.Contex
 	return ParseDeleteFriendRequestResponse(rsp)
 }
 
-// AcceptFriendRequestWithResponse request returning *AcceptFriendRequestResponse
-func (c *ClientWithResponses) AcceptFriendRequestWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*AcceptFriendRequestResponse, error) {
-	rsp, err := c.AcceptFriendRequest(ctx, playerId, targetId, reqEditors...)
+// GetPlayerFriendsWithResponse request returning *GetPlayerFriendsResponse
+func (c *ClientWithResponses) GetPlayerFriendsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerFriendsResponse, error) {
+	rsp, err := c.GetPlayerFriends(ctx, playerId, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAcceptFriendRequestResponse(rsp)
+	return ParseGetPlayerFriendsResponse(rsp)
 }
 
 // RemoveFriendWithResponse request returning *RemoveFriendResponse
@@ -4618,32 +4537,6 @@ func ParseGetPlayerDisplayNameV2Response(rsp *http.Response) (*GetPlayerDisplayN
 	return response, nil
 }
 
-// ParseGetPlayerFriendsResponse parses an HTTP response from a GetPlayerFriendsWithResponse call
-func ParseGetPlayerFriendsResponse(rsp *http.Response) (*GetPlayerFriendsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetPlayerFriendsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []PlayerFriend
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetFriendRequestsResponse parses an HTTP response from a GetFriendRequestsWithResponse call
 func ParseGetFriendRequestsResponse(rsp *http.Response) (*GetFriendRequestsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4683,6 +4576,29 @@ func ParseSendFriendRequestResponse(rsp *http.Response) (*SendFriendRequestRespo
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			// IsRequest Indicates whether it created a request (true), or accepted a friendship (false).
+			IsRequest bool `json:"isRequest"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -4702,17 +4618,27 @@ func ParseDeleteFriendRequestResponse(rsp *http.Response) (*DeleteFriendRequestR
 	return response, nil
 }
 
-// ParseAcceptFriendRequestResponse parses an HTTP response from a AcceptFriendRequestWithResponse call
-func ParseAcceptFriendRequestResponse(rsp *http.Response) (*AcceptFriendRequestResponse, error) {
+// ParseGetPlayerFriendsResponse parses an HTTP response from a GetPlayerFriendsWithResponse call
+func ParseGetPlayerFriendsResponse(rsp *http.Response) (*GetPlayerFriendsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &AcceptFriendRequestResponse{
+	response := &GetPlayerFriendsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PlayerFriend
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

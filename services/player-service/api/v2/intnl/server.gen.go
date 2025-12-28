@@ -444,21 +444,18 @@ type ServerInterface interface {
 	// Get the display name for a player
 	// (GET /players/{playerId}/displayname)
 	GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get a player's friend requests
+	// (GET /players/{playerId}/friendRequests)
+	GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams)
+	// Send a friend request to another player
+	// (POST /players/{playerId}/friendRequests)
+	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string)
+	// Delete a friend request (cancel outgoing or decline incoming)
+	// (DELETE /players/{playerId}/friendRequests/{targetId})
+	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Get a player's friends
 	// (GET /players/{playerId}/friends)
 	GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get a player's friend requests
-	// (GET /players/{playerId}/friends/requests)
-	GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams)
-	// Send a friend request to another player
-	// (POST /players/{playerId}/friends/requests)
-	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string)
-	// Delete a friend request (cancel outgoing or decline incoming)
-	// (DELETE /players/{playerId}/friends/requests/{targetId})
-	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
-	// Accept an incoming friend request
-	// (POST /players/{playerId}/friends/requests/{targetId}/accept)
-	AcceptFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Remove a friend
 	// (DELETE /players/{playerId}/friends/{targetId})
 	RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
@@ -976,31 +973,6 @@ func (siw *ServerInterfaceWrapper) GetPlayerDisplayNameV2(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// GetPlayerFriends operation middleware
-func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPlayerFriends(w, r, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetFriendRequests operation middleware
 func (siw *ServerInterfaceWrapper) GetFriendRequests(w http.ResponseWriter, r *http.Request) {
 
@@ -1103,8 +1075,8 @@ func (siw *ServerInterfaceWrapper) DeleteFriendRequest(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// AcceptFriendRequest operation middleware
-func (siw *ServerInterfaceWrapper) AcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
+// GetPlayerFriends operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -1117,17 +1089,8 @@ func (siw *ServerInterfaceWrapper) AcceptFriendRequest(w http.ResponseWriter, r 
 		return
 	}
 
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AcceptFriendRequest(w, r, playerId, targetId)
+		siw.Handler.GetPlayerFriends(w, r, playerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1738,11 +1701,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.GetPlayerCosmetics)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.BuyCosmetic)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/displayname", wrapper.GetPlayerDisplayNameV2)
+	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friendRequests", wrapper.GetFriendRequests)
+	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friendRequests", wrapper.SendFriendRequest)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friendRequests/{targetId}", wrapper.DeleteFriendRequest)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends", wrapper.GetPlayerFriends)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends/requests", wrapper.GetFriendRequests)
-	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friends/requests", wrapper.SendFriendRequest)
-	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/requests/{targetId}", wrapper.DeleteFriendRequest)
-	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friends/requests/{targetId}/accept", wrapper.AcceptFriendRequest)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/{targetId}", wrapper.RemoveFriend)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/hypercube", wrapper.GetPlayerHypercube)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/totp", wrapper.RemoveTotp)
@@ -2297,30 +2259,6 @@ func (response GetPlayerDisplayNameV2404Response) VisitGetPlayerDisplayNameV2Res
 	return nil
 }
 
-type GetPlayerFriendsRequestObject struct {
-	PlayerId string `json:"playerId"`
-}
-
-type GetPlayerFriendsResponseObject interface {
-	VisitGetPlayerFriendsResponse(w http.ResponseWriter) error
-}
-
-type GetPlayerFriends200JSONResponse []PlayerFriend
-
-func (response GetPlayerFriends200JSONResponse) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetPlayerFriends404Response = PlayerNotFoundResponse
-
-func (response GetPlayerFriends404Response) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 type GetFriendRequestsRequestObject struct {
 	PlayerId string `json:"playerId"`
 	Params   GetFriendRequestsParams
@@ -2355,12 +2293,16 @@ type SendFriendRequestResponseObject interface {
 	VisitSendFriendRequestResponse(w http.ResponseWriter) error
 }
 
-type SendFriendRequest201Response struct {
+type SendFriendRequest201JSONResponse struct {
+	// IsRequest Indicates whether it created a request (true), or accepted a friendship (false).
+	IsRequest bool `json:"isRequest"`
 }
 
-func (response SendFriendRequest201Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+func (response SendFriendRequest201JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
-	return nil
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type SendFriendRequest404Response = PlayerNotFoundResponse
@@ -2370,12 +2312,16 @@ func (response SendFriendRequest404Response) VisitSendFriendRequestResponse(w ht
 	return nil
 }
 
-type SendFriendRequest409Response struct {
+type SendFriendRequest409JSONResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
-func (response SendFriendRequest409Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+func (response SendFriendRequest409JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
-	return nil
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type DeleteFriendRequestRequestObject struct {
@@ -2403,27 +2349,26 @@ func (response DeleteFriendRequest404Response) VisitDeleteFriendRequestResponse(
 	return nil
 }
 
-type AcceptFriendRequestRequestObject struct {
+type GetPlayerFriendsRequestObject struct {
 	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
 }
 
-type AcceptFriendRequestResponseObject interface {
-	VisitAcceptFriendRequestResponse(w http.ResponseWriter) error
+type GetPlayerFriendsResponseObject interface {
+	VisitGetPlayerFriendsResponse(w http.ResponseWriter) error
 }
 
-type AcceptFriendRequest200Response struct {
-}
+type GetPlayerFriends200JSONResponse []PlayerFriend
 
-func (response AcceptFriendRequest200Response) VisitAcceptFriendRequestResponse(w http.ResponseWriter) error {
+func (response GetPlayerFriends200JSONResponse) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	return nil
+
+	return json.NewEncoder(w).Encode(response)
 }
 
-type AcceptFriendRequest404Response struct {
-}
+type GetPlayerFriends404Response = PlayerNotFoundResponse
 
-func (response AcceptFriendRequest404Response) VisitAcceptFriendRequestResponse(w http.ResponseWriter) error {
+func (response GetPlayerFriends404Response) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -2910,21 +2855,18 @@ type StrictServerInterface interface {
 	// Get the display name for a player
 	// (GET /players/{playerId}/displayname)
 	GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error)
+	// Get a player's friend requests
+	// (GET /players/{playerId}/friendRequests)
+	GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error)
+	// Send a friend request to another player
+	// (POST /players/{playerId}/friendRequests)
+	SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error)
+	// Delete a friend request (cancel outgoing or decline incoming)
+	// (DELETE /players/{playerId}/friendRequests/{targetId})
+	DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error)
 	// Get a player's friends
 	// (GET /players/{playerId}/friends)
 	GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error)
-	// Get a player's friend requests
-	// (GET /players/{playerId}/friends/requests)
-	GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error)
-	// Send a friend request to another player
-	// (POST /players/{playerId}/friends/requests)
-	SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error)
-	// Delete a friend request (cancel outgoing or decline incoming)
-	// (DELETE /players/{playerId}/friends/requests/{targetId})
-	DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error)
-	// Accept an incoming friend request
-	// (POST /players/{playerId}/friends/requests/{targetId}/accept)
-	AcceptFriendRequest(ctx context.Context, request AcceptFriendRequestRequestObject) (AcceptFriendRequestResponseObject, error)
 	// Remove a friend
 	// (DELETE /players/{playerId}/friends/{targetId})
 	RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error)
@@ -3549,32 +3491,6 @@ func (sh *strictHandler) GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.R
 	}
 }
 
-// GetPlayerFriends operation middleware
-func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string) {
-	var request GetPlayerFriendsRequestObject
-
-	request.PlayerId = playerId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPlayerFriends(ctx, request.(GetPlayerFriendsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPlayerFriends")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPlayerFriendsResponseObject); ok {
-		if err := validResponse.VisitGetPlayerFriendsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetFriendRequests operation middleware
 func (sh *strictHandler) GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams) {
 	var request GetFriendRequestsRequestObject
@@ -3662,26 +3578,25 @@ func (sh *strictHandler) DeleteFriendRequest(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// AcceptFriendRequest operation middleware
-func (sh *strictHandler) AcceptFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
-	var request AcceptFriendRequestRequestObject
+// GetPlayerFriends operation middleware
+func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request GetPlayerFriendsRequestObject
 
 	request.PlayerId = playerId
-	request.TargetId = targetId
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AcceptFriendRequest(ctx, request.(AcceptFriendRequestRequestObject))
+		return sh.ssi.GetPlayerFriends(ctx, request.(GetPlayerFriendsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AcceptFriendRequest")
+		handler = middleware(handler, "GetPlayerFriends")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AcceptFriendRequestResponseObject); ok {
-		if err := validResponse.VisitAcceptFriendRequestResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetPlayerFriendsResponseObject); ok {
+		if err := validResponse.VisitGetPlayerFriendsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

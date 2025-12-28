@@ -1,3 +1,3 @@
-DROP TABLE IF EXISTS player_relationships;
-
-DROP TYPE IF EXISTS relationship_status;
+drop table if exists player_friends;
+drop table if exists player_blocks;
+drop table if exists player_friend_requests;

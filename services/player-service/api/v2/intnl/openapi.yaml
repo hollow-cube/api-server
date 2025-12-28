@@ -331,7 +331,7 @@ paths:
         '404':
           description: Friendship not found
 
-  /players/{playerId}/friends/requests:
+  /players/{playerId}/friendRequests:
     get:
       summary: Get a player's friend requests
       operationId: getFriendRequests
@@ -380,35 +380,29 @@ paths:
       responses:
         '201':
           description: Friend request sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ isRequest ]
+                properties:
+                  isRequest:
+                    description: Indicates whether it created a request (true), or accepted a friendship (false).
+                    type: boolean
         '404':
           $ref: '#/components/responses/PlayerNotFound'
         '409':
-          description: Request already exists, players are already friends, or target has blocked requester
+          description: Cannot send friend request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ code, message ]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
 
-  /players/{playerId}/friends/requests/{targetId}/accept:
-    post:
-      summary: Accept an incoming friend request
-      operationId: acceptFriendRequest
-      parameters:
-        - name: playerId
-          in: path
-          description: The player ID accepting the request
-          required: true
-          schema:
-            type: string
-        - name: targetId
-          in: path
-          description: The player ID who sent the request
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Friend request accepted
-        '404':
-          description: Friend request not found
-
-  /players/{playerId}/friends/requests/{targetId}:
+  /players/{playerId}/friendRequests/{targetId}:
     delete:
       summary: Delete a friend request (cancel outgoing or decline incoming)
       operationId: deleteFriendRequest

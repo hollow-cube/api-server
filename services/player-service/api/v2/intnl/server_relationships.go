@@ -8,7 +8,7 @@ import (
 )
 
 func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
-	rows, err := s.store.GetRelationships(ctx, request.PlayerId, db.RelationshipStatusBlocked)
+	rows, err := s.store.GetBlockedPlayers(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocked players: %w", err)
 	}
@@ -17,7 +17,7 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 	for i, row := range rows {
 		blocks[i] = BlockedPlayer{
 			BlockedAt: row.CreatedAt,
-			PlayerId:  row.PlayerID,
+			PlayerId:  row.TargetID,
 			Username:  row.Username,
 		}
 	}
@@ -26,12 +26,36 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 }
 
 func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error) {
-	//TODO implement me
-	panic("implement me")
+	alreadyBlocked, err := s.store.IsBlocked(ctx, request.PlayerId, request.Body.TargetId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if player is blocked: %w", err)
+	}
+
+	if alreadyBlocked {
+		return BlockPlayer409Response{}, nil
+	}
+
+	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
+		// Delete existing friendships and friend requests before making the block
+		if _, err := txStore.DeletePlayerFriendBidirectional(ctx, request.PlayerId, request.Body.TargetId); err != nil {
+			return fmt.Errorf("failed to delete friendships: %w", err)
+		}
+		if _, err := txStore.DeleteFriendRequestBidirectional(ctx, request.PlayerId, request.Body.TargetId); err != nil {
+			return fmt.Errorf("failed to delete friend requests: %w", err)
+		}
+		if err := txStore.CreatePlayerBlock(ctx, request.PlayerId, request.Body.TargetId); err != nil {
+			return fmt.Errorf("failed to create block: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to block player: %w", err)
+	}
+	return BlockPlayer201Response{}, nil
 }
 
 func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error) {
-	modified, err := s.store.DeleteRelationship(ctx, request.PlayerId, request.TargetId, false)
+	modified, err := s.store.DeletePlayerBlock(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unblock player: %w", err)
 	}
@@ -44,7 +68,7 @@ func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequest
 }
 
 func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {
-	rows, err := s.store.GetRelationships(ctx, request.PlayerId, db.RelationshipStatusFriend)
+	rows, err := s.store.GetPlayerFriends(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get friends: %w", err)
 	}
@@ -53,7 +77,7 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 	for i, row := range rows {
 		friends[i] = PlayerFriend{
 			FriendsSince: row.CreatedAt,
-			PlayerId:     row.PlayerID,
+			PlayerId:     row.TargetID,
 			Username:     row.Username,
 		}
 	}
@@ -66,7 +90,7 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 
 	var friendRequests []FriendRequest
 	if outgoing {
-		rows, err := s.store.GetRelationships(ctx, request.PlayerId, db.RelationshipStatusPending)
+		rows, err := s.store.GetOutgoingFriendRequests(ctx, request.PlayerId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get friend requests: %w", err)
 		}
@@ -74,7 +98,7 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 		friendRequests = make([]FriendRequest, len(rows))
 		for i, row := range rows {
 			friendRequests[i] = FriendRequest{
-				PlayerId: row.PlayerID,
+				PlayerId: row.TargetID,
 				SentAt:   row.CreatedAt,
 				Username: row.Username,
 			}
@@ -99,21 +123,79 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 }
 
 func (s *server) SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error) {
-	// todo check if the other player has already requested, if so, just make them friends
-	// todo check if they are blocked and if so, deny it. Need a specific error code for this.
-	_, err := s.store.CreateRelationship(ctx, request.PlayerId, request.Body.TargetId, db.RelationshipStatusPending)
-	// todo check for err being a conflict, if so, return a 409
+	// Check if they are already friends
+	alreadyFriends, err := s.store.FriendshipExists(ctx, request.PlayerId, request.Body.TargetId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send friend request: %w", err)
+		return nil, fmt.Errorf("failed to check if friends: %w", err)
 	}
 
-	// todo we need some kind of Kafka/Redis broadcast to notify the other player if they are online
+	if alreadyFriends {
+		return SendFriendRequest409JSONResponse{Code: "already_friends", Message: "you are already friends with this player"}, nil
+	}
 
-	return SendFriendRequest201Response{}, nil
+	// Check if an opposite existing friend request already exists, if so they just become friends.
+	reqAlreadyExists, err := s.store.FriendRequestExists(ctx, request.Body.TargetId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if opposite friend request exists: %w", err)
+	}
+
+	if reqAlreadyExists {
+		if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
+			if err := txStore.CreatePlayerFriend(ctx, request.PlayerId, request.Body.TargetId); err != nil {
+				return fmt.Errorf("failed to create friendship: %w", err)
+			}
+			if err := txStore.CreatePlayerFriend(ctx, request.Body.TargetId, request.PlayerId); err != nil {
+				return fmt.Errorf("failed to create friendship: %w", err)
+			}
+			if _, err := txStore.DeleteFriendRequest(ctx, request.Body.TargetId, request.PlayerId); err != nil {
+				return fmt.Errorf("failed to delete friend request: %w", err)
+			}
+
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("failed to create friendship: %w", err)
+		}
+
+		// todo use new Notification service once implemented to notify of friendship
+		return SendFriendRequest201JSONResponse{IsRequest: false}, nil
+	}
+
+	// Check for blocks in both directions
+
+	hasTargetBlocked, err := s.store.IsBlocked(ctx, request.PlayerId, request.Body.TargetId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if target is blocked: %w", err)
+	}
+
+	if hasTargetBlocked {
+		return SendFriendRequest409JSONResponse{Code: "invalid_player_blocked", Message: "cannot perform this action as you have blocked the target"}, nil
+	}
+
+	isBlockedByTarget, err := s.store.IsBlocked(ctx, request.Body.TargetId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if target is blocked: %w", err)
+	}
+
+	if isBlockedByTarget {
+		return SendFriendRequest409JSONResponse{Code: "invalid_blocked_by_player", Message: "cannot perform this action as you are blocked by the target"}, nil
+	}
+
+	// Create a friend request as all previous checks passed
+
+	if err := s.store.CreateFriendRequest(ctx, request.PlayerId, request.Body.TargetId); err != nil {
+		if db.ErrIsUniqueViolationWithConstr(err, "player_friend_requests_pkey") {
+			return SendFriendRequest409JSONResponse{Code: "friend_request_already_exists", Message: "friend request already sent to this player"}, nil
+		}
+		return nil, fmt.Errorf("failed to create friend request: %w", err)
+	}
+
+	// todo use new Notification service once implemented to notify of request
+
+	return SendFriendRequest201JSONResponse{IsRequest: true}, nil
 }
 
 func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error) {
-	modified, err := s.store.DeleteRelationship(ctx, request.PlayerId, request.TargetId, false)
+	modified, err := s.store.DeleteFriendRequest(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete friend request: %w", err)
 	}
@@ -125,13 +207,8 @@ func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRe
 	return DeleteFriendRequest204Response{}, nil
 }
 
-func (s *server) AcceptFriendRequest(ctx context.Context, request AcceptFriendRequestRequestObject) (AcceptFriendRequestResponseObject, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (s *server) RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error) {
-	modified, err := s.store.DeleteRelationship(ctx, request.PlayerId, request.TargetId, true)
+	modified, err := s.store.DeletePlayerFriendBidirectional(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove friend: %w", err)
 	}
