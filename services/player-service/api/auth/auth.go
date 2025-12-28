@@ -63,8 +63,12 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 	var apiKey *db.ApiKey
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
 		apiKey, err = s.store.GetApiKeyByHash(ctx, apiKeyStr[len(ApiKeyPrefix):])
-		if err != nil && !errors.Is(err, db.ErrNoRows) {
-			return nil, err
+		if err != nil {
+			if errors.Is(err, db.ErrNoRows) {
+				apiKey = nil
+			} else {
+				return nil, err
+			}
 		}
 	}
 
