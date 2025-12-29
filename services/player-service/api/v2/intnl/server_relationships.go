@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -15,13 +17,32 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 		return nil, fmt.Errorf("failed to get blocked players: %w", err)
 	}
 
-	blocks := make([]BlockedPlayer, len(rows))
+	targetIds := make([]string, len(rows))
 	for i, row := range rows {
-		blocks[i] = BlockedPlayer{
+		targetIds[i] = row.TargetID
+	}
+	staffStates, err := s.authzClient.MultiCheckPlatformPermission(ctx, targetIds, authz.NoKey, authz.PlatformBanPlayer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if blocked players are staff members: %w", err)
+	}
+
+	blocks := make([]BlockedPlayer, 0, len(rows))
+	for _, row := range rows {
+		// Ignore blocked players that are staff members (they became staff after they were already blocked)
+		staffState, ok := staffStates[row.TargetID]
+		if !ok {
+			s.log.Warnw("staff state not found in SpiceDB for player %s", "targetId", row.TargetID)
+		}
+		log.Printf("staffState: %v", staffState)
+		if staffState == authz.Allow || staffState == authz.Conditional { // we must accept conditional due to the audit log hack applied
+			continue
+		}
+
+		blocks = append(blocks, BlockedPlayer{
 			BlockedAt: row.CreatedAt,
 			PlayerId:  row.TargetID,
 			Username:  row.Username,
-		}
+		})
 	}
 
 	return GetBlockedPlayers200JSONResponse(blocks), nil
@@ -37,12 +58,22 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 		return BlockPlayer409Response{}, nil
 	}
 
+	// Check if the target is a staff member - players cannot block staff members
+	staffState, err := s.authzClient.CheckPlatformPermission(ctx, request.TargetId, authz.NoKey, authz.PlatformBanPlayer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if target is staff member: %w", err)
+	}
+	log.Printf("staff state: %v", staffState)
+	//if staffState == authz.Allow || staffState == authz.Conditional { // We must accept conditional due to the audit log hack applied
+	//	return BlockPlayer400Response{}, nil
+	//}
+
 	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
 		// Delete existing friendships and friend requests before making the block
 		if _, err := txStore.DeletePlayerFriendBidirectional(ctx, request.PlayerId, request.TargetId); err != nil {
 			return fmt.Errorf("failed to delete friendships: %w", err)
 		}
-		if _, err := txStore.DeleteFriendRequestBidirectional(ctx, request.PlayerId, request.TargetId); err != nil {
+		if _, err := txStore.DeleteFriendRequestBidirectional(ctx, request.PlayerId, request.TargetId); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("failed to delete friend requests: %w", err)
 		}
 		if err := txStore.CreatePlayerBlock(ctx, request.PlayerId, request.TargetId); err != nil {

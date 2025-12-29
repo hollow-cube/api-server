@@ -431,7 +431,7 @@ paths:
 
   /players/{playerId}/blocks:
     get:
-      summary: Get players blocked by this player
+      summary: Get players blocked by this player - automatically filters out staff members
       operationId: getBlockedPlayers
       parameters:
         - name: playerId
@@ -470,6 +470,8 @@ paths:
       responses:
         '201':
           description: Player blocked successfully
+        '400':
+          description: Target player is a staff member and cannot be blocked
         '404':
           $ref: '#/components/responses/PlayerNotFound'
         '409':

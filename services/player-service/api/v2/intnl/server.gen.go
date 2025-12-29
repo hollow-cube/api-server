@@ -416,7 +416,7 @@ type ServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get players blocked by this player
+	// Get players blocked by this player - automatically filters out staff members
 	// (GET /players/{playerId}/blocks)
 	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string)
 	// Unblock a player
@@ -2182,6 +2182,14 @@ func (response BlockPlayer201Response) VisitBlockPlayerResponse(w http.ResponseW
 	return nil
 }
 
+type BlockPlayer400Response struct {
+}
+
+func (response BlockPlayer400Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
 type BlockPlayer404Response = PlayerNotFoundResponse
 
 func (response BlockPlayer404Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
@@ -2844,7 +2852,7 @@ type StrictServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error)
-	// Get players blocked by this player
+	// Get players blocked by this player - automatically filters out staff members
 	// (GET /players/{playerId}/blocks)
 	GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error)
 	// Unblock a player

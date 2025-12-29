@@ -25,6 +25,7 @@ var (
 )
 
 type Client interface {
+	MultiCheckPlatformPermission(ctx context.Context, userIds []string, cacheKey string, perm PlatformPermission) (map[string]State, error)
 	CheckPlatformPermission(ctx context.Context, userId, cacheKey string, perm PlatformPermission) (State, error)
 
 	// Hypercube
@@ -41,6 +42,10 @@ type Client interface {
 type PlatformPermission string
 
 const (
+	// PlatformBanPlayer is regularly used throughout the codebase to check if a player has a level of staff permissions,
+	// outside just being able to ban a player.
+	PlatformBanPlayer PlatformPermission = "ban_player"
+
 	PlatformPrefixHollowcube PlatformPermission = "prefix_hollowcube"
 	PlatformPrefixAdmin      PlatformPermission = "prefix_admin"
 	PlatformPrefixDev        PlatformPermission = "prefix_dev"
@@ -49,6 +54,8 @@ const (
 )
 
 var PlatformPermissionValidationMap = map[PlatformPermission]bool{
+	PlatformBanPlayer: true,
+
 	PlatformPrefixHollowcube: true,
 	PlatformPrefixAdmin:      true,
 	PlatformPrefixDev:        true,
