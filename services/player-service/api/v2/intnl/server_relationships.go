@@ -64,9 +64,9 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 		return nil, fmt.Errorf("failed to check if target is staff member: %w", err)
 	}
 	log.Printf("staff state: %v", staffState)
-	//if staffState == authz.Allow || staffState == authz.Conditional { // We must accept conditional due to the audit log hack applied
-	//	return BlockPlayer400Response{}, nil
-	//}
+	if staffState == authz.Allow || staffState == authz.Conditional { // We must accept conditional due to the audit log hack applied
+		return BlockPlayer400Response{}, nil
+	}
 
 	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
 		// Delete existing friendships and friend requests before making the block
