@@ -67,11 +67,7 @@ type Client interface {
 	SearchMapsV3(ctx context.Context, query SearchQueryV3) (m []*model.Map, err error)
 	SearchMapsCountV3(ctx context.Context, query SearchQueryV3) (count int, err error)
 	GetMapProgress(ctx context.Context, playerId string, mapIds []string) ([]*model.MapIdAndProgress, error)
-	FindNextPublishedId(ctx context.Context) (int64, error)
 	GetRecentMaps(ctx context.Context, page, pageSize int, playerId string, saveStateType model.SaveStateType) ([]*model.Map, bool, error)
-
-	// WriteReport writes a report to the database, returning its numeric ID.
-	WriteReport(ctx context.Context, report *model.MapReport) (int, error)
 
 	GetMapsBeatenLeaderboard(ctx context.Context) ([]*model.LeaderboardEntry, error)
 	GetMapsBeatenLeaderboardForPlayer(ctx context.Context, playerId string) (int, error)
@@ -86,7 +82,6 @@ type Client interface {
 	GetBestSaveStateSinceBeta(ctx context.Context, mapId, playerId string) (*model.SaveState, error)
 	GetAllSaveStates(ctx context.Context, mapId string) ([]*model.SaveState, error)
 	DeleteSaveState(ctx context.Context, mapId, playerId, saveStateId string) error
-	DeleteVerifyingStates(ctx context.Context, mapId string) error
 	// Marks save states as deleted. They should not be returned by any other queries.
 	SoftDeleteMapPlayerSaveStates(ctx context.Context, mapId, playerId string) error
 	SoftDeleteMapSaveStates(ctx context.Context, mapId string, onlyIncomplete bool) error

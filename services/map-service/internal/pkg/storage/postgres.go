@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"math/rand"
 	"regexp"
 	"strings"
 	"text/template"
@@ -502,25 +501,6 @@ func (c *PostgresClient) GetMapProgress(ctx context.Context, playerId string, ma
 	return queryFunc[model.MapIdAndProgress](ctx, c.pool, scanFunc, queryString, mapIds, playerId)
 }
 
-func (c *PostgresClient) FindNextPublishedId(ctx context.Context) (int64, error) {
-	const query = `select from public.maps where published_id=$1 limit 1;`
-
-	var id int64
-	for i := 0; i < 10; i++ {
-		id = rand.Int63n(MaxPublishedMapId-1) + 1 // We do not want zero as an Id
-		err := c.pool.QueryRow(ctx, query, id).Scan()
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Found a free Id, return it.
-			return id, nil
-		}
-		if err != nil {
-			return 0, fmt.Errorf("failed to check published id: %w", err)
-		}
-	}
-
-	return 0, fmt.Errorf("failed to create new published id in 10 attempts")
-}
-
 func (c *PostgresClient) GetRecentMaps(ctx context.Context, page, pageSize int, playerId string, saveStateType model.SaveStateType) ([]*model.Map, bool, error) {
 	query := psql.Select("map_id").From("public.save_states").
 		Where(sq.Eq{"player_id": playerId, "type": saveStateType, "deleted": nil}).
@@ -545,24 +525,6 @@ func (c *PostgresClient) GetRecentMaps(ctx context.Context, page, pageSize int, 
 		return maps[0:pageSize], true, nil
 	}
 	return maps, false, nil
-}
-
-func (c *PostgresClient) WriteReport(ctx context.Context, report *model.MapReport) (int, error) {
-	const query = `
-		insert into public.map_reports (
-			map_id, player_id, time, categories, comment
-		) values (
-			$1, $2, $3, $4, $5
-		) returning id;
-	`
-
-	var id int
-	err := c.pool.QueryRow(ctx, query, report.MapId, report.PlayerId, report.Timestamp, report.Categories, report.Comment).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("failed to insert report: %w", err)
-	}
-
-	return id, nil
 }
 
 func (c *PostgresClient) GetMapsBeatenLeaderboard(ctx context.Context) ([]*model.LeaderboardEntry, error) {
@@ -817,11 +779,6 @@ func (c *PostgresClient) DeleteSaveState(ctx context.Context, mapId, playerId, s
 	}
 
 	return nil
-}
-
-func (c *PostgresClient) DeleteVerifyingStates(ctx context.Context, mapId string) error {
-	const query = `delete from public.save_states where map_id = $1 and type = $2;`
-	return c.safeExec(ctx, query, mapId, model.SaveStateTypeVerifying)
 }
 
 func (c *PostgresClient) SoftDeleteMapPlayerSaveStates(ctx context.Context, mapId, playerId string) error {

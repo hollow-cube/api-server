@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 )
 
@@ -275,22 +275,19 @@ type MapIdAndProgress struct {
 	Playtime int
 }
 
-func CreateDefaultMap(owner string, size int) (*Map, error) {
-	var m Map
-	m.Id = common.NewUUID()
+func CreateDefaultMap(owner string, size int) (*db.CreateMapParams, error) {
+	var m db.CreateMapParams
 	m.Owner = owner
-	m.Type = TypeDefault
+	m.MType = string(TypeDefault)
 	now := util.CurrentTime()
-	m.CreatedAt = now
-	m.UpdatedAt = now
-	m.ProtocolVersion = 769 // Default to 1.21.4
+	m.ProtocolVersion = util.Ptr(769) // Default to 1.21.4
 
 	if size > MapSize__Max {
 		return nil, fmt.Errorf("invalid map size: %d", size)
 	}
-	m.Settings.Size = size
-	m.Settings.Variant = Parkour
-	m.Settings.SpawnPoint = Pos{0, 40, 0, 90, 0}
+	m.Size = int64(size)
+	m.OptVariant = string(Parkour)
+	m.OptSpawnPoint = db.Pos{0, 40, 0, 90, 0}
 
 	return &m, nil
 }

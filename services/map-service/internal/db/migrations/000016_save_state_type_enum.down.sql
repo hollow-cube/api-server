@@ -1,1 +1,0 @@
-drop type save_state_type;

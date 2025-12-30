@@ -17,6 +17,7 @@ sql:
         json_tags_case_style: camel
         rename:
           map_player_datum: MapPlayerData
+          maps_published: PublishedMap
         overrides:
           - db_type: "timestamptz"
             go_type: "time.Time"
@@ -44,6 +45,11 @@ sql:
             go_type: { type: "int", pointer: true }
           - db_type: "serial"
             go_type: "int"
+
+          - column: "maps.opt_spawn_point"
+            go_type: { type: "Pos" }
+          - column: "maps_published.opt_spawn_point"
+            go_type: { type: "Pos" }
 
     strict_function_checks: true
     strict_order_by: true

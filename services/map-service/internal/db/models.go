@@ -71,7 +71,7 @@ type Map struct {
 	Size            int64      `json:"size"`
 	OptVariant      string     `json:"optVariant"`
 	OptSubvariant   *string    `json:"optSubvariant"`
-	OptSpawnPoint   string     `json:"optSpawnPoint"`
+	OptSpawnPoint   Pos        `json:"optSpawnPoint"`
 	OptOnlySprint   *bool      `json:"optOnlySprint"`
 	OptNoSprint     *bool      `json:"optNoSprint"`
 	OptNoJump       *bool      `json:"optNoJump"`
@@ -102,6 +102,52 @@ type MapRating struct {
 	PlayerID string  `json:"playerId"`
 	Rating   int     `json:"rating"`
 	Comment  *string `json:"comment"`
+}
+
+type MapReport struct {
+	ID         int       `json:"id"`
+	MapID      string    `json:"mapId"`
+	PlayerID   string    `json:"playerId"`
+	Time       time.Time `json:"time"`
+	Categories []int     `json:"categories"`
+	Comment    *string   `json:"comment"`
+}
+
+type PublishedMap struct {
+	ID              string     `json:"id"`
+	Owner           string     `json:"owner"`
+	MType           string     `json:"mType"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	AuthzKey        *string    `json:"authzKey"`
+	Verification    *int64     `json:"verification"`
+	FileID          string     `json:"fileId"`
+	LegacyMapID     *string    `json:"legacyMapId"`
+	PublishedID     *int       `json:"publishedId"`
+	PublishedAt     *time.Time `json:"publishedAt"`
+	QualityOverride *int64     `json:"qualityOverride"`
+	OptName         *string    `json:"optName"`
+	OptIcon         *string    `json:"optIcon"`
+	Size            int64      `json:"size"`
+	OptVariant      string     `json:"optVariant"`
+	OptSubvariant   *string    `json:"optSubvariant"`
+	OptSpawnPoint   Pos        `json:"optSpawnPoint"`
+	OptOnlySprint   *bool      `json:"optOnlySprint"`
+	OptNoSprint     *bool      `json:"optNoSprint"`
+	OptNoJump       *bool      `json:"optNoJump"`
+	OptNoSneak      *bool      `json:"optNoSneak"`
+	OptBoat         *bool      `json:"optBoat"`
+	OptExtra        []byte     `json:"optExtra"`
+	OptTags         []string   `json:"optTags"`
+	ProtocolVersion *int       `json:"protocolVersion"`
+	Contest         *string    `json:"contest"`
+	Listed          bool       `json:"listed"`
+	Ext             []byte     `json:"ext"`
+	PlayCount       int        `json:"playCount"`
+	WinCount        int        `json:"winCount"`
+	TotalLikes      int64      `json:"totalLikes"`
+	ClearRate       int        `json:"clearRate"`
+	Difficulty      int32      `json:"difficulty"`
 }
 
 type SaveState struct {

@@ -151,18 +151,18 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd db.MapPlayerData)
 	return 5, nil
 }
 
-func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optionalPlayerData *db.MapPlayerData) (err error) {
+func (s *server) safeWriteMapToDatabase(ctx context.Context, mapParams db.CreateMapParams, optionalPlayerData *db.MapPlayerData) (*db.Map, error) {
 
 	// Write to DB and permission manager at the same time (2 phase commit)
-	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
-		tok, err := s.authzClient.SetMapOwner(ctx, m.Id, m.Owner)
+	m, err := db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (*db.Map, error) {
+		_, err := s.authzClient.SetMapOwner(ctx, mapParams.ID, mapParams.Owner)
 		if err != nil {
-			return fmt.Errorf("authz write failed: %w", err)
+			return nil, fmt.Errorf("authz write failed: %w", err)
 		}
 
-		m.AuthzKey = tok
-		if err := s.storageClient.CreateMap(ctx, m); err != nil {
-			return fmt.Errorf("db write failed: %w", err)
+		m, err := tx.CreateMap(ctx, mapParams)
+		if err != nil {
+			return nil, fmt.Errorf("db write failed: %w", err)
 		}
 
 		if optionalPlayerData != nil {
@@ -175,11 +175,11 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optio
 				ContestSlot:   optionalPlayerData.ContestSlot,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to update player data: %w", err)
+				return nil, fmt.Errorf("failed to update player data: %w", err)
 			}
 		}
 
-		return nil
+		return m, nil
 	})
 	if err != nil {
 		// Rollback authz update

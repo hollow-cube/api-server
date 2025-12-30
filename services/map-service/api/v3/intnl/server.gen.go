@@ -125,7 +125,7 @@ type MapData struct {
 	Owner           string          `json:"owner"`
 	ProtocolVersion int             `json:"protocolVersion"`
 	PublishedAt     *time.Time      `json:"publishedAt,omitempty"`
-	PublishedId     *int64          `json:"publishedId,omitempty"`
+	PublishedId     *int            `json:"publishedId,omitempty"`
 	Quality         MapQuality      `json:"quality"`
 	Settings        MapSettings     `json:"settings"`
 	UniquePlays     int             `json:"uniquePlays"`

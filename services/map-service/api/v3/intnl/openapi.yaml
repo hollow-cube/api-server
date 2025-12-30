@@ -606,7 +606,7 @@ components:
           items: { $ref: '#/components/schemas/ObjectData' }
 
         # The following is only present for published maps
-        publishedId: { type: integer, format: int64 }
+        publishedId: { type: integer }
         publishedAt: { type: string, format: date-time }
         listed: { type: boolean }
 

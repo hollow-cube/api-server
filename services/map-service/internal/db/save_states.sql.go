@@ -26,7 +26,7 @@ func (q *Queries) CountFailSaveStates(ctx context.Context) (int64, error) {
 
 const createSaveState = `-- name: CreateSaveState :one
 insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
-                                state_v2, protocol_version)
+                         state_v2, protocol_version)
 values (gen_random_uuid(), $1, $2, $3, now(), now(), false, 0, 0, 'null', $4)
 returning id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
 `
@@ -64,6 +64,18 @@ func (q *Queries) CreateSaveState(ctx context.Context, arg CreateSaveStateParams
 	return i, err
 }
 
+const deleteVerifyingStates = `-- name: DeleteVerifyingStates :exec
+delete
+from save_states
+where map_id = $1
+  and type = 'verifying'
+`
+
+func (q *Queries) DeleteVerifyingStates(ctx context.Context, mapID string) error {
+	_, err := q.db.Exec(ctx, deleteVerifyingStates, mapID)
+	return err
+}
+
 const getSaveState = `-- name: GetSaveState :one
 select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
 from public.save_states
@@ -92,6 +104,17 @@ func (q *Queries) GetSaveState(ctx context.Context, iD string, mapID string, pla
 		&i.Ticks,
 	)
 	return i, err
+}
+
+const unsafe_DeleteMapSaveStates = `-- name: Unsafe_DeleteMapSaveStates :exec
+update save_states
+set deleted = now()
+where map_id = $1
+`
+
+func (q *Queries) Unsafe_DeleteMapSaveStates(ctx context.Context, mapID string) error {
+	_, err := q.db.Exec(ctx, unsafe_DeleteMapSaveStates, mapID)
+	return err
 }
 
 const upsertSaveState = `-- name: UpsertSaveState :exec

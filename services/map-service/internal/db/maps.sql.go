@@ -23,75 +23,168 @@ func (q *Queries) CountMaps(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-const getMapsById = `-- name: GetMapsById :many
-select m.id, m.owner, m.m_type, m.created_at, m.updated_at, m.verification, m.authz_key, m.file_id, m.legacy_map_id, m.published_id, m.published_at, m.quality_override, m.opt_name, m.opt_icon, m.size, m.opt_variant, m.opt_subvariant, m.opt_spawn_point, m.opt_only_sprint, m.opt_no_sprint, m.opt_no_jump, m.opt_no_sneak, m.opt_boat, m.opt_extra, m.opt_tags, m.ext, m.deleted_at, m.deleted_by, m.deleted_reason, m.protocol_version, m.contest, m.listed,
-       coalesce(stats.play_count, 0) as play_count,
-       coalesce(stats.win_count, 0) as win_count,
-       coalesce(likes.total_likes, 0) as total_likes
-from public.maps as m
-  left join (select map_id, play_count, win_count
-             from map_stats
-             group by map_id) stats on m.id = stats.map_id
-  left join (select map_id, sum(case when rating = 1 then 1 when rating = 2 then -1 else 0 end) as total_likes
-             from map_ratings
-             group by map_id) likes on m.id = likes.map_id
-where m.deleted_at is null
-  and id = any ($1)
+const createMap = `-- name: CreateMap :one
+insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
+                  published_at, opt_name, opt_icon,
+                  opt_variant, opt_subvariant, opt_spawn_point, opt_extra, opt_tags, deleted_at, deleted_by,
+                  deleted_reason, contest, size, protocol_version)
+values ($1, $2, $3, now(), now(), '', '', '', null, null, '', '',
+        $4, $5, $6, null, null, null, null, null, $7, $8, 769)
+returning id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
 `
 
-type GetMapsByIdRow struct {
-	Map        Map   `json:"map"`
-	PlayCount  int   `json:"playCount"`
-	WinCount   int   `json:"winCount"`
-	TotalLikes int64 `json:"totalLikes"`
+type CreateMapParams struct {
+	ID            string  `json:"id"`
+	Owner         string  `json:"owner"`
+	MType         string  `json:"mType"`
+	OptVariant    string  `json:"optVariant"`
+	OptSubvariant *string `json:"optSubvariant"`
+	OptSpawnPoint Pos     `json:"optSpawnPoint"`
+	Contest       *string `json:"contest"`
+	Size          int64   `json:"size"`
 }
 
-func (q *Queries) GetMapsById(ctx context.Context, id string) ([]GetMapsByIdRow, error) {
-	rows, err := q.db.Query(ctx, getMapsById, id)
+func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, error) {
+	row := q.db.QueryRow(ctx, createMap,
+		arg.ID,
+		arg.Owner,
+		arg.MType,
+		arg.OptVariant,
+		arg.OptSubvariant,
+		arg.OptSpawnPoint,
+		arg.Contest,
+		arg.Size,
+	)
+	var i Map
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.MType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Verification,
+		&i.AuthzKey,
+		&i.FileID,
+		&i.LegacyMapID,
+		&i.PublishedID,
+		&i.PublishedAt,
+		&i.QualityOverride,
+		&i.OptName,
+		&i.OptIcon,
+		&i.Size,
+		&i.OptVariant,
+		&i.OptSubvariant,
+		&i.OptSpawnPoint,
+		&i.OptOnlySprint,
+		&i.OptNoSprint,
+		&i.OptNoJump,
+		&i.OptNoSneak,
+		&i.OptBoat,
+		&i.OptExtra,
+		&i.OptTags,
+		&i.Ext,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.DeletedReason,
+		&i.ProtocolVersion,
+		&i.Contest,
+		&i.Listed,
+	)
+	return i, err
+}
+
+const getMapById = `-- name: GetMapById :one
+select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
+from maps
+where id = $1
+`
+
+func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
+	row := q.db.QueryRow(ctx, getMapById, id)
+	var i Map
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.MType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Verification,
+		&i.AuthzKey,
+		&i.FileID,
+		&i.LegacyMapID,
+		&i.PublishedID,
+		&i.PublishedAt,
+		&i.QualityOverride,
+		&i.OptName,
+		&i.OptIcon,
+		&i.Size,
+		&i.OptVariant,
+		&i.OptSubvariant,
+		&i.OptSpawnPoint,
+		&i.OptOnlySprint,
+		&i.OptNoSprint,
+		&i.OptNoJump,
+		&i.OptNoSneak,
+		&i.OptBoat,
+		&i.OptExtra,
+		&i.OptTags,
+		&i.Ext,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.DeletedReason,
+		&i.ProtocolVersion,
+		&i.Contest,
+		&i.Listed,
+	)
+	return i, err
+}
+
+const getMultiMapProgress = `-- name: GetMultiMapProgress :many
+with ranked_save_states as (select m.id::text as map_id,
+                                   ss.completed::int8 as completed,
+                                   ss.playtime::int8 as playtime,
+                                   ss.updated
+                            from (select unnest($2::uuid[]) as id) m
+                              left join
+                            save_states ss
+                            on
+                              ss.map_id = m.id and ss.player_id = $1
+                            where ss.deleted is null
+                              and (ss.type = 'playing' or ss.type = 'verifying')),
+     progress_and_playtime as (select map_id,
+                                      coalesce(max(completed), 0) as progress,
+                                      case
+                                        when max(completed) = 1 then min(playtime) filter (where completed = 1)
+                                        else (select playtime
+                                              from ranked_save_states rss
+                                              where rss.map_id = rs.map_id
+                                              order by updated desc
+                                              limit 1)
+                                        end as playtime
+                               from ranked_save_states rs
+                               group by map_id)
+select map_id::text as map_id,
+       progress::int8 + 1 as progress,
+       playtime::int8 as playtime
+from progress_and_playtime
+`
+
+type GetMultiMapProgressRow struct {
+	MapID    string `json:"mapId"`
+	Progress int32  `json:"progress"`
+	Playtime int64  `json:"playtime"`
+}
+
+func (q *Queries) GetMultiMapProgress(ctx context.Context, playerID string, column2 []string) ([]GetMultiMapProgressRow, error) {
+	rows, err := q.db.Query(ctx, getMultiMapProgress, playerID, column2)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetMapsByIdRow{}
+	items := []GetMultiMapProgressRow{}
 	for rows.Next() {
-		var i GetMapsByIdRow
-		if err := rows.Scan(
-			&i.Map.ID,
-			&i.Map.Owner,
-			&i.Map.MType,
-			&i.Map.CreatedAt,
-			&i.Map.UpdatedAt,
-			&i.Map.Verification,
-			&i.Map.AuthzKey,
-			&i.Map.FileID,
-			&i.Map.LegacyMapID,
-			&i.Map.PublishedID,
-			&i.Map.PublishedAt,
-			&i.Map.QualityOverride,
-			&i.Map.OptName,
-			&i.Map.OptIcon,
-			&i.Map.Size,
-			&i.Map.OptVariant,
-			&i.Map.OptSubvariant,
-			&i.Map.OptSpawnPoint,
-			&i.Map.OptOnlySprint,
-			&i.Map.OptNoSprint,
-			&i.Map.OptNoJump,
-			&i.Map.OptNoSneak,
-			&i.Map.OptBoat,
-			&i.Map.OptExtra,
-			&i.Map.OptTags,
-			&i.Map.Ext,
-			&i.Map.DeletedAt,
-			&i.Map.DeletedBy,
-			&i.Map.DeletedReason,
-			&i.Map.ProtocolVersion,
-			&i.Map.Contest,
-			&i.Map.Listed,
-			&i.PlayCount,
-			&i.WinCount,
-			&i.TotalLikes,
-		); err != nil {
+		var i GetMultiMapProgressRow
+		if err := rows.Scan(&i.MapID, &i.Progress, &i.Playtime); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -100,6 +193,161 @@ func (q *Queries) GetMapsById(ctx context.Context, id string) ([]GetMapsByIdRow,
 		return nil, err
 	}
 	return items, nil
+}
+
+const getPublishedMapById = `-- name: GetPublishedMapById :one
+select id, owner, m_type, created_at, updated_at, authz_key, verification, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, protocol_version, contest, listed, ext, play_count, win_count, total_likes, clear_rate, difficulty
+from maps_published
+where id = $1
+`
+
+func (q *Queries) GetPublishedMapById(ctx context.Context, id string) (PublishedMap, error) {
+	row := q.db.QueryRow(ctx, getPublishedMapById, id)
+	var i PublishedMap
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.MType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthzKey,
+		&i.Verification,
+		&i.FileID,
+		&i.LegacyMapID,
+		&i.PublishedID,
+		&i.PublishedAt,
+		&i.QualityOverride,
+		&i.OptName,
+		&i.OptIcon,
+		&i.Size,
+		&i.OptVariant,
+		&i.OptSubvariant,
+		&i.OptSpawnPoint,
+		&i.OptOnlySprint,
+		&i.OptNoSprint,
+		&i.OptNoJump,
+		&i.OptNoSneak,
+		&i.OptBoat,
+		&i.OptExtra,
+		&i.OptTags,
+		&i.ProtocolVersion,
+		&i.Contest,
+		&i.Listed,
+		&i.Ext,
+		&i.PlayCount,
+		&i.WinCount,
+		&i.TotalLikes,
+		&i.ClearRate,
+		&i.Difficulty,
+	)
+	return i, err
+}
+
+const getPublishedMapByPublishedId = `-- name: GetPublishedMapByPublishedId :one
+select id, owner, m_type, created_at, updated_at, authz_key, verification, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, protocol_version, contest, listed, ext, play_count, win_count, total_likes, clear_rate, difficulty
+from maps_published
+where published_id = $1
+`
+
+func (q *Queries) GetPublishedMapByPublishedId(ctx context.Context, publishedID *int) (PublishedMap, error) {
+	row := q.db.QueryRow(ctx, getPublishedMapByPublishedId, publishedID)
+	var i PublishedMap
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.MType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthzKey,
+		&i.Verification,
+		&i.FileID,
+		&i.LegacyMapID,
+		&i.PublishedID,
+		&i.PublishedAt,
+		&i.QualityOverride,
+		&i.OptName,
+		&i.OptIcon,
+		&i.Size,
+		&i.OptVariant,
+		&i.OptSubvariant,
+		&i.OptSpawnPoint,
+		&i.OptOnlySprint,
+		&i.OptNoSprint,
+		&i.OptNoJump,
+		&i.OptNoSneak,
+		&i.OptBoat,
+		&i.OptExtra,
+		&i.OptTags,
+		&i.ProtocolVersion,
+		&i.Contest,
+		&i.Listed,
+		&i.Ext,
+		&i.PlayCount,
+		&i.WinCount,
+		&i.TotalLikes,
+		&i.ClearRate,
+		&i.Difficulty,
+	)
+	return i, err
+}
+
+const insertMapReport = `-- name: InsertMapReport :one
+insert into map_reports (map_id, player_id, time, categories, comment)
+values ($1, $2, now(), $3, $4)
+returning id, map_id, player_id, time, categories, comment
+`
+
+type InsertMapReportParams struct {
+	MapID      string  `json:"mapId"`
+	PlayerID   string  `json:"playerId"`
+	Categories []int   `json:"categories"`
+	Comment    *string `json:"comment"`
+}
+
+func (q *Queries) InsertMapReport(ctx context.Context, arg InsertMapReportParams) (MapReport, error) {
+	row := q.db.QueryRow(ctx, insertMapReport,
+		arg.MapID,
+		arg.PlayerID,
+		arg.Categories,
+		arg.Comment,
+	)
+	var i MapReport
+	err := row.Scan(
+		&i.ID,
+		&i.MapID,
+		&i.PlayerID,
+		&i.Time,
+		&i.Categories,
+		&i.Comment,
+	)
+	return i, err
+}
+
+const publishMap = `-- name: PublishMap :exec
+update maps
+set updated_at   = now(),
+    published_at = now(),
+    published_id = $2,
+    contest      = $3
+where id = $1
+`
+
+func (q *Queries) PublishMap(ctx context.Context, iD string, publishedID *int, contest *string) error {
+	_, err := q.db.Exec(ctx, publishMap, iD, publishedID, contest)
+	return err
+}
+
+const unsafe_DeleteMap = `-- name: Unsafe_DeleteMap :exec
+update maps
+set deleted_at     = now(),
+    deleted_by     = $2,
+    deleted_reason = $3
+where id = $1
+`
+
+func (q *Queries) Unsafe_DeleteMap(ctx context.Context, iD string, deletedBy *string, deletedReason *string) error {
+	_, err := q.db.Exec(ctx, unsafe_DeleteMap, iD, deletedBy, deletedReason)
+	return err
 }
 
 const updateMapStats = `-- name: UpdateMapStats :exec
@@ -116,5 +364,16 @@ on conflict (map_id) do update
 
 func (q *Queries) UpdateMapStats(ctx context.Context, mapID string) error {
 	_, err := q.db.Exec(ctx, updateMapStats, mapID)
+	return err
+}
+
+const updateMapVerification = `-- name: UpdateMapVerification :exec
+update maps
+set verification = $2
+where id = $1
+`
+
+func (q *Queries) UpdateMapVerification(ctx context.Context, iD string, verification *int64) error {
+	_, err := q.db.Exec(ctx, updateMapVerification, iD, verification)
 	return err
 }

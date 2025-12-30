@@ -14,7 +14,7 @@ where deleted is null
 
 -- name: CreateSaveState :one
 insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
-                                state_v2, protocol_version)
+                         state_v2, protocol_version)
 values (gen_random_uuid(), $1, $2, $3, now(), now(), false, 0, 0, 'null', $4)
 returning *;
 
@@ -30,3 +30,14 @@ on conflict (id, map_id, player_id) do update
       state_v2         = excluded.state_v2,
       data_version     = excluded.data_version,
       protocol_version = excluded.protocol_version;
+
+-- name: DeleteVerifyingStates :exec
+delete
+from save_states
+where map_id = $1
+  and type = 'verifying';
+
+-- name: Unsafe_DeleteMapSaveStates :exec
+update save_states
+set deleted = now()
+where map_id = $1;
