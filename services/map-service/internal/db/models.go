@@ -79,7 +79,7 @@ type Map struct {
 	OptBoat         *bool      `json:"optBoat"`
 	OptExtra        []byte     `json:"optExtra"`
 	OptTags         []string   `json:"optTags"`
-	Ext             []byte     `json:"ext"`
+	Ext             MapExt     `json:"ext"`
 	DeletedAt       *time.Time `json:"deletedAt"`
 	DeletedBy       *string    `json:"deletedBy"`
 	DeletedReason   *string    `json:"deletedReason"`
@@ -142,7 +142,7 @@ type PublishedMap struct {
 	ProtocolVersion *int       `json:"protocolVersion"`
 	Contest         *string    `json:"contest"`
 	Listed          bool       `json:"listed"`
-	Ext             []byte     `json:"ext"`
+	Ext             MapExt     `json:"ext"`
 	PlayCount       int        `json:"playCount"`
 	WinCount        int        `json:"winCount"`
 	TotalLikes      int64      `json:"totalLikes"`

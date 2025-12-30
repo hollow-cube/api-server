@@ -24,15 +24,13 @@ type ServerParams struct {
 
 	Log *zap.SugaredLogger
 
-	Storage storage.Client
 	Queries *db.Queries
 }
 
 type server struct {
 	log *zap.SugaredLogger
 
-	storageClient storage.Client
-	queries       *db.Queries
+	queries *db.Queries
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {

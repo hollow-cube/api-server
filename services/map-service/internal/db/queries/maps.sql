@@ -24,13 +24,34 @@ insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id,
                   published_at, opt_name, opt_icon,
                   opt_variant, opt_subvariant, opt_spawn_point, opt_extra, opt_tags, deleted_at, deleted_by,
                   deleted_reason, contest, size, protocol_version)
-values ($1, $2, $3, now(), now(), '', '', '', null, null, '', '',
-        $4, $5, $6, null, null, null, null, null, $7, $8, 769)
+values ($1, $2, $3, now(), now(), '', '', '', null, null, coalesce($4, ''), coalesce($5, ''),
+        $6, $7, $8, null, null, null, null, null, $9, $10, 769)
 returning *;
+
+-- name: UpdateMap :exec
+update maps
+set opt_name         = @name,
+    opt_icon         = @icon,
+    size             = @size,
+    opt_variant      = @variant,
+    opt_subvariant   = @subvariant,
+    opt_spawn_point  = @spawn_point,
+    opt_tags         = @tags,
+    ext              = @ext,
+    quality_override = @quality,
+    listed           = @listed,
+    protocol_version = @protocol_version,
+    opt_only_sprint  = @only_sprint,
+    opt_no_sprint    = @no_sprint,
+    opt_no_jump      = @no_jump,
+    opt_no_sneak     = @no_sneak,
+    opt_boat         = @boat,
+    opt_extra        = @extra
+where id = $1;
 
 -- name: UpdateMapVerification :exec
 update maps
-set verification = $2
+set verification = $2 and protocol_version = coalesce($3, protocol_version)
 where id = $1;
 
 -- name: PublishMap :exec
@@ -92,3 +113,23 @@ from progress_and_playtime;
 insert into map_reports (map_id, player_id, time, categories, comment)
 values ($1, $2, now(), $3, $4)
 returning *;
+
+-- name: SearchMaps :many
+select sqlc.embed(maps_published),
+       count(*) over () as total_count
+from maps_published
+where listed = true
+  and opt_variant in (@variants::text[])
+  and (owner = sqlc.narg('owner') or sqlc.narg('owner') is null)
+  and (opt_name ~* @name or @name = '')
+  and (contest = sqlc.narg('contest') or sqlc.narg('contest') is null)
+  and (quality_override = any (@quality::int[]) or cardinality(@quality::int[]) = 0)
+  and (difficulty = any (@difficulty::int[]) or cardinality(@difficulty::int[]) = 0)
+order by case when @sort = 'random' then random() end,
+         case when @sort = 'best' and @sort_order = 'desc' then quality_override end desc,
+         case when @sort = 'best' and @sort_order = 'asc' then quality_override end asc,
+         case when @sort = 'best' then total_likes end desc,
+         case when @sort = 'best' then published_at end desc,
+         case when @sort = 'published' and @sort_order = 'desc' then published_at end desc,
+         case when @sort = 'published' and @sort_order = 'asc' then published_at end asc
+offset sqlc.arg('page')::int * sqlc.arg('page_size')::int limit sqlc.arg('page_size')::int;

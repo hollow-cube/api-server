@@ -179,25 +179,25 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, mapParams db.Create
 			}
 		}
 
-		return m, nil
+		return &m, nil
 	})
 	if err != nil {
 		// Rollback authz update
-		if rbErr := s.authzClient.DeleteMap(ctx, m.Id); rbErr != nil {
+		if rbErr := s.authzClient.DeleteMap(ctx, mapParams.ID); rbErr != nil {
 			zap.S().Errorw("failed to rollback authz", "err", rbErr)
 		}
 
-		return fmt.Errorf("failed to create map: %w", err)
+		return nil, fmt.Errorf("failed to create map: %w", err)
 	}
 
 	// Send update to kafka if we updated the player data
 	if optionalPlayerData != nil {
 		if err = s.writePlayerDataUpdateMessage(*optionalPlayerData); err != nil {
-			return fmt.Errorf("failed to send player data update message: %w", err)
+			return nil, fmt.Errorf("failed to send player data update message: %w", err)
 		}
 	}
 
-	return
+	return m, nil
 }
 
 func (s *server) writePlayerDataUpdateMessage(pd db.MapPlayerData) error {

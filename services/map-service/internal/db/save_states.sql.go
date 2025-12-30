@@ -64,16 +64,259 @@ func (q *Queries) CreateSaveState(ctx context.Context, arg CreateSaveStateParams
 	return i, err
 }
 
-const deleteVerifyingStates = `-- name: DeleteVerifyingStates :exec
+const deleteMapPlayerSaveStates = `-- name: DeleteMapPlayerSaveStates :exec
+update public.save_states
+set deleted = now()
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+`
+
+func (q *Queries) DeleteMapPlayerSaveStates(ctx context.Context, mapID string, playerID string) error {
+	_, err := q.db.Exec(ctx, deleteMapPlayerSaveStates, mapID, playerID)
+	return err
+}
+
+const deleteSaveState = `-- name: DeleteSaveState :execrows
 delete
 from save_states
+where id = $1
+  and map_id = $2
+  and player_id = $3
+`
+
+func (q *Queries) DeleteSaveState(ctx context.Context, iD string, mapID string, playerID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSaveState, iD, mapID, playerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteVerifyingStates = `-- name: DeleteVerifyingStates :exec
+update save_states
+set deleted = now()
 where map_id = $1
   and type = 'verifying'
+  and deleted is null
 `
 
 func (q *Queries) DeleteVerifyingStates(ctx context.Context, mapID string) error {
 	_, err := q.db.Exec(ctx, deleteVerifyingStates, mapID)
 	return err
+}
+
+const getAllSaveStates = `-- name: GetAllSaveStates :many
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+from save_states
+where deleted is null
+  and completed = true
+  and map_id = $1
+  and (type = 'playing' or type = 'verifying')
+`
+
+func (q *Queries) GetAllSaveStates(ctx context.Context, mapID string) ([]SaveState, error) {
+	rows, err := q.db.Query(ctx, getAllSaveStates, mapID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SaveState{}
+	for rows.Next() {
+		var i SaveState
+		if err := rows.Scan(
+			&i.ID,
+			&i.MapID,
+			&i.PlayerID,
+			&i.Type,
+			&i.Created,
+			&i.Updated,
+			&i.Deleted,
+			&i.Completed,
+			&i.Playtime,
+			&i.StateV2,
+			&i.DataVersion,
+			&i.ProtocolVersion,
+			&i.Ticks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBestSaveState = `-- name: GetBestSaveState :one
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = 'playing'
+  and completed = true
+order by playtime
+limit 1
+`
+
+func (q *Queries) GetBestSaveState(ctx context.Context, mapID string, playerID string) (SaveState, error) {
+	row := q.db.QueryRow(ctx, getBestSaveState, mapID, playerID)
+	var i SaveState
+	err := row.Scan(
+		&i.ID,
+		&i.MapID,
+		&i.PlayerID,
+		&i.Type,
+		&i.Created,
+		&i.Updated,
+		&i.Deleted,
+		&i.Completed,
+		&i.Playtime,
+		&i.StateV2,
+		&i.DataVersion,
+		&i.ProtocolVersion,
+		&i.Ticks,
+	)
+	return i, err
+}
+
+const getBestSaveStateSinceBeta = `-- name: GetBestSaveStateSinceBeta :one
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = 'playing'
+  and completed = true
+  and created > '2024-04-05T09:00:00-04:00'::timestamptz
+order by playtime
+limit 1
+`
+
+func (q *Queries) GetBestSaveStateSinceBeta(ctx context.Context, mapID string, playerID string) (SaveState, error) {
+	row := q.db.QueryRow(ctx, getBestSaveStateSinceBeta, mapID, playerID)
+	var i SaveState
+	err := row.Scan(
+		&i.ID,
+		&i.MapID,
+		&i.PlayerID,
+		&i.Type,
+		&i.Created,
+		&i.Updated,
+		&i.Deleted,
+		&i.Completed,
+		&i.Playtime,
+		&i.StateV2,
+		&i.DataVersion,
+		&i.ProtocolVersion,
+		&i.Ticks,
+	)
+	return i, err
+}
+
+const getCompletedMaps = `-- name: GetCompletedMaps :many
+select distinct map_id
+from save_states
+where deleted is null
+  and completed = true
+  and player_id = $1
+`
+
+func (q *Queries) GetCompletedMaps(ctx context.Context, playerID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, getCompletedMaps, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var map_id string
+		if err := rows.Scan(&map_id); err != nil {
+			return nil, err
+		}
+		items = append(items, map_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLatestSaveState = `-- name: GetLatestSaveState :one
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = $3
+order by updated desc
+limit 1
+`
+
+func (q *Queries) GetLatestSaveState(ctx context.Context, mapID string, playerID string, type_ SaveStateType) (SaveState, error) {
+	row := q.db.QueryRow(ctx, getLatestSaveState, mapID, playerID, type_)
+	var i SaveState
+	err := row.Scan(
+		&i.ID,
+		&i.MapID,
+		&i.PlayerID,
+		&i.Type,
+		&i.Created,
+		&i.Updated,
+		&i.Deleted,
+		&i.Completed,
+		&i.Playtime,
+		&i.StateV2,
+		&i.DataVersion,
+		&i.ProtocolVersion,
+		&i.Ticks,
+	)
+	return i, err
+}
+
+const getRecentMaps = `-- name: GetRecentMaps :many
+select map_id
+from save_states
+where player_id = $1
+  and type = $2
+  and deleted is null
+group by map_id
+order by max(updated) desc
+offset $3::int * $4::int limit $4::int + 1
+`
+
+type GetRecentMapsParams struct {
+	PlayerID string        `json:"playerId"`
+	Type     SaveStateType `json:"type"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"pageSize"`
+}
+
+func (q *Queries) GetRecentMaps(ctx context.Context, arg GetRecentMapsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, getRecentMaps,
+		arg.PlayerID,
+		arg.Type,
+		arg.Page,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var map_id string
+		if err := rows.Scan(&map_id); err != nil {
+			return nil, err
+		}
+		items = append(items, map_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getSaveState = `-- name: GetSaveState :one
@@ -110,6 +353,7 @@ const unsafe_DeleteMapSaveStates = `-- name: Unsafe_DeleteMapSaveStates :exec
 update save_states
 set deleted = now()
 where map_id = $1
+  and deleted is null
 `
 
 func (q *Queries) Unsafe_DeleteMapSaveStates(ctx context.Context, mapID string) error {

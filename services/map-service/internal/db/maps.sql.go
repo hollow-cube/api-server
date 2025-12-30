@@ -28,20 +28,22 @@ insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id,
                   published_at, opt_name, opt_icon,
                   opt_variant, opt_subvariant, opt_spawn_point, opt_extra, opt_tags, deleted_at, deleted_by,
                   deleted_reason, contest, size, protocol_version)
-values ($1, $2, $3, now(), now(), '', '', '', null, null, '', '',
-        $4, $5, $6, null, null, null, null, null, $7, $8, 769)
+values ($1, $2, $3, now(), now(), '', '', '', null, null, coalesce($4, ''), coalesce($5, ''),
+        $6, $7, $8, null, null, null, null, null, $9, $10, 769)
 returning id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
 `
 
 type CreateMapParams struct {
-	ID            string  `json:"id"`
-	Owner         string  `json:"owner"`
-	MType         string  `json:"mType"`
-	OptVariant    string  `json:"optVariant"`
-	OptSubvariant *string `json:"optSubvariant"`
-	OptSpawnPoint Pos     `json:"optSpawnPoint"`
-	Contest       *string `json:"contest"`
-	Size          int64   `json:"size"`
+	ID            string      `json:"id"`
+	Owner         string      `json:"owner"`
+	MType         string      `json:"mType"`
+	Column4       interface{} `json:"column4"`
+	Column5       interface{} `json:"column5"`
+	OptVariant    string      `json:"optVariant"`
+	OptSubvariant *string     `json:"optSubvariant"`
+	OptSpawnPoint Pos         `json:"optSpawnPoint"`
+	Contest       *string     `json:"contest"`
+	Size          int64       `json:"size"`
 }
 
 func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, error) {
@@ -49,6 +51,8 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 		arg.ID,
 		arg.Owner,
 		arg.MType,
+		arg.Column4,
+		arg.Column5,
 		arg.OptVariant,
 		arg.OptSubvariant,
 		arg.OptSpawnPoint,
@@ -337,6 +341,112 @@ func (q *Queries) PublishMap(ctx context.Context, iD string, publishedID *int, c
 	return err
 }
 
+const searchMaps = `-- name: SearchMaps :many
+select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.authz_key, maps_published.verification, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.ext, maps_published.play_count, maps_published.win_count, maps_published.total_likes, maps_published.clear_rate, maps_published.difficulty,
+       count(*) over () as total_count
+from maps_published
+where listed = true
+  and opt_variant in ($1::text[])
+  and (owner = $2 or $2 is null)
+  and (opt_name ~* $3 or $3 = '')
+  and (contest = $4 or $4 is null)
+  and (quality_override = any ($5::int[]) or cardinality($5::int[]) = 0)
+  and (difficulty = any ($6::int[]) or cardinality($6::int[]) = 0)
+order by case when $7 = 'random' then random() end,
+         case when $7 = 'best' and $8 = 'desc' then quality_override end desc,
+         case when $7 = 'best' and $8 = 'asc' then quality_override end asc,
+         case when $7 = 'best' then total_likes end desc,
+         case when $7 = 'best' then published_at end desc,
+         case when $7 = 'published' and $8 = 'desc' then published_at end desc,
+         case when $7 = 'published' and $8 = 'asc' then published_at end asc
+offset $9::int * $10::int limit $10::int
+`
+
+type SearchMapsParams struct {
+	Variants   []string    `json:"variants"`
+	Owner      *string     `json:"owner"`
+	Name       *string     `json:"name"`
+	Contest    *string     `json:"contest"`
+	Quality    []int       `json:"quality"`
+	Difficulty []int       `json:"difficulty"`
+	Sort       interface{} `json:"sort"`
+	SortOrder  interface{} `json:"sortOrder"`
+	Page       int         `json:"page"`
+	PageSize   int         `json:"pageSize"`
+}
+
+type SearchMapsRow struct {
+	PublishedMap PublishedMap `json:"publishedMap"`
+	TotalCount   int64        `json:"totalCount"`
+}
+
+func (q *Queries) SearchMaps(ctx context.Context, arg SearchMapsParams) ([]SearchMapsRow, error) {
+	rows, err := q.db.Query(ctx, searchMaps,
+		arg.Variants,
+		arg.Owner,
+		arg.Name,
+		arg.Contest,
+		arg.Quality,
+		arg.Difficulty,
+		arg.Sort,
+		arg.SortOrder,
+		arg.Page,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchMapsRow{}
+	for rows.Next() {
+		var i SearchMapsRow
+		if err := rows.Scan(
+			&i.PublishedMap.ID,
+			&i.PublishedMap.Owner,
+			&i.PublishedMap.MType,
+			&i.PublishedMap.CreatedAt,
+			&i.PublishedMap.UpdatedAt,
+			&i.PublishedMap.AuthzKey,
+			&i.PublishedMap.Verification,
+			&i.PublishedMap.FileID,
+			&i.PublishedMap.LegacyMapID,
+			&i.PublishedMap.PublishedID,
+			&i.PublishedMap.PublishedAt,
+			&i.PublishedMap.QualityOverride,
+			&i.PublishedMap.OptName,
+			&i.PublishedMap.OptIcon,
+			&i.PublishedMap.Size,
+			&i.PublishedMap.OptVariant,
+			&i.PublishedMap.OptSubvariant,
+			&i.PublishedMap.OptSpawnPoint,
+			&i.PublishedMap.OptOnlySprint,
+			&i.PublishedMap.OptNoSprint,
+			&i.PublishedMap.OptNoJump,
+			&i.PublishedMap.OptNoSneak,
+			&i.PublishedMap.OptBoat,
+			&i.PublishedMap.OptExtra,
+			&i.PublishedMap.OptTags,
+			&i.PublishedMap.ProtocolVersion,
+			&i.PublishedMap.Contest,
+			&i.PublishedMap.Listed,
+			&i.PublishedMap.Ext,
+			&i.PublishedMap.PlayCount,
+			&i.PublishedMap.WinCount,
+			&i.PublishedMap.TotalLikes,
+			&i.PublishedMap.ClearRate,
+			&i.PublishedMap.Difficulty,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unsafe_DeleteMap = `-- name: Unsafe_DeleteMap :exec
 update maps
 set deleted_at     = now(),
@@ -347,6 +457,73 @@ where id = $1
 
 func (q *Queries) Unsafe_DeleteMap(ctx context.Context, iD string, deletedBy *string, deletedReason *string) error {
 	_, err := q.db.Exec(ctx, unsafe_DeleteMap, iD, deletedBy, deletedReason)
+	return err
+}
+
+const updateMap = `-- name: UpdateMap :exec
+update maps
+set opt_name         = $2,
+    opt_icon         = $3,
+    size             = $4,
+    opt_variant      = $5,
+    opt_subvariant   = $6,
+    opt_spawn_point  = $7,
+    opt_tags         = $8,
+    ext              = $9,
+    quality_override = $10,
+    listed           = $11,
+    protocol_version = $12,
+    opt_only_sprint  = $13,
+    opt_no_sprint    = $14,
+    opt_no_jump      = $15,
+    opt_no_sneak     = $16,
+    opt_boat         = $17,
+    opt_extra        = $18
+where id = $1
+`
+
+type UpdateMapParams struct {
+	ID              string   `json:"id"`
+	Name            *string  `json:"name"`
+	Icon            *string  `json:"icon"`
+	Size            int64    `json:"size"`
+	Variant         string   `json:"variant"`
+	Subvariant      *string  `json:"subvariant"`
+	SpawnPoint      Pos      `json:"spawnPoint"`
+	Tags            []string `json:"tags"`
+	Ext             MapExt   `json:"ext"`
+	Quality         *int64   `json:"quality"`
+	Listed          bool     `json:"listed"`
+	ProtocolVersion *int     `json:"protocolVersion"`
+	OnlySprint      *bool    `json:"onlySprint"`
+	NoSprint        *bool    `json:"noSprint"`
+	NoJump          *bool    `json:"noJump"`
+	NoSneak         *bool    `json:"noSneak"`
+	Boat            *bool    `json:"boat"`
+	Extra           []byte   `json:"extra"`
+}
+
+func (q *Queries) UpdateMap(ctx context.Context, arg UpdateMapParams) error {
+	_, err := q.db.Exec(ctx, updateMap,
+		arg.ID,
+		arg.Name,
+		arg.Icon,
+		arg.Size,
+		arg.Variant,
+		arg.Subvariant,
+		arg.SpawnPoint,
+		arg.Tags,
+		arg.Ext,
+		arg.Quality,
+		arg.Listed,
+		arg.ProtocolVersion,
+		arg.OnlySprint,
+		arg.NoSprint,
+		arg.NoJump,
+		arg.NoSneak,
+		arg.Boat,
+		arg.Extra,
+	)
 	return err
 }
 
@@ -369,11 +546,11 @@ func (q *Queries) UpdateMapStats(ctx context.Context, mapID string) error {
 
 const updateMapVerification = `-- name: UpdateMapVerification :exec
 update maps
-set verification = $2
+set verification = $2 and protocol_version = coalesce($3, protocol_version)
 where id = $1
 `
 
-func (q *Queries) UpdateMapVerification(ctx context.Context, iD string, verification *int64) error {
-	_, err := q.db.Exec(ctx, updateMapVerification, iD, verification)
+func (q *Queries) UpdateMapVerification(ctx context.Context, iD string, verification *int64, protocolVersion *int) error {
+	_, err := q.db.Exec(ctx, updateMapVerification, iD, verification, protocolVersion)
 	return err
 }

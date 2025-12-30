@@ -50,6 +50,10 @@ sql:
             go_type: { type: "Pos" }
           - column: "maps_published.opt_spawn_point"
             go_type: { type: "Pos" }
+          - column: "maps.ext"
+            go_type: { type: "MapExt" }
+          - column: "maps_published.ext"
+            go_type: { type: "MapExt" }
 
     strict_function_checks: true
     strict_order_by: true

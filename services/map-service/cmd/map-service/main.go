@@ -38,8 +38,6 @@ import (
 
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/handler"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -66,7 +64,7 @@ func main() {
 		}),
 
 		// Storage
-		fx.Provide(newDbQuerySet, newStoragePostgres),
+		fx.Provide(newPostgresStore),
 
 		// Authz
 		fx.Provide(newAuthzSpiceDB),
@@ -193,16 +191,6 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	} else {
 		return tracefx.NewNoopExporter()
 	}
-}
-
-// deprecated
-func newStoragePostgres(conf *config.Config, lc fx.Lifecycle) (storage.Client, error) {
-	c, err := storage.NewPostgresClient(conf.Postgres.URI)
-	if err != nil {
-		return nil, err
-	}
-	lc.Append(fx.Hook{OnStart: c.Start, OnStop: c.Shutdown})
-	return c, nil
 }
 
 func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
@@ -352,16 +340,16 @@ func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, err
 	return c, nil
 }
 
-func newDbQuerySet(lc fx.Lifecycle, conf *config.Config) (*db.Queries, error) {
+func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*db.Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	queries, pool, err := db.NewQuerySet(ctx, conf.Postgres.URI)
+	store, pool, err := db.NewQuerySet(ctx, metrics, conf.Postgres.URI)
 	if err != nil {
 		return nil, err
 	}
 
 	lc.Append(fx.StopHook(pool.Close))
 
-	return queries, nil
+	return store, nil
 }

@@ -12,6 +12,47 @@ where deleted is null
   and map_id = $2
   and player_id = $3;
 
+-- name: GetAllSaveStates :many
+select *
+from save_states
+where deleted is null
+  and completed = true
+  and map_id = $1
+  and (type = 'playing' or type = 'verifying');
+
+-- name: GetLatestSaveState :one
+select *
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = $3
+order by updated desc
+limit 1;
+
+-- name: GetBestSaveState :one
+select *
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = 'playing'
+  and completed = true
+order by playtime
+limit 1;
+
+-- name: GetBestSaveStateSinceBeta :one
+select *
+from save_states
+where deleted is null
+  and map_id = $1
+  and player_id = $2
+  and type = 'playing'
+  and completed = true
+  and created > '2024-04-05T09:00:00-04:00'::timestamptz
+order by playtime
+limit 1;
+
 -- name: CreateSaveState :one
 insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
                          state_v2, protocol_version)
@@ -31,13 +72,46 @@ on conflict (id, map_id, player_id) do update
       data_version     = excluded.data_version,
       protocol_version = excluded.protocol_version;
 
--- name: DeleteVerifyingStates :exec
+-- name: DeleteSaveState :execrows
 delete
 from save_states
+where id = $1
+  and map_id = $2
+  and player_id = $3;
+
+-- name: DeleteVerifyingStates :exec
+update save_states
+set deleted = now()
 where map_id = $1
-  and type = 'verifying';
+  and type = 'verifying'
+  and deleted is null;
+
+-- name: DeleteMapPlayerSaveStates :exec
+update public.save_states
+set deleted = now()
+where deleted is null
+  and map_id = $1
+  and player_id = $2;
 
 -- name: Unsafe_DeleteMapSaveStates :exec
 update save_states
 set deleted = now()
-where map_id = $1;
+where map_id = $1
+  and deleted is null;
+
+-- name: GetRecentMaps :many
+select map_id
+from save_states
+where player_id = @player_id
+  and type = @type
+  and deleted is null
+group by map_id
+order by max(updated) desc
+offset sqlc.arg('page')::int * sqlc.arg('page_size')::int limit sqlc.arg('page_size')::int + 1;
+
+-- name: GetCompletedMaps :many
+select distinct map_id
+from save_states
+where deleted is null
+  and completed = true
+  and player_id = $1;

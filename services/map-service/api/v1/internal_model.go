@@ -3,6 +3,8 @@ package v1
 import (
 	"encoding/json"
 	"time"
+
+	v3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
 )
 
 type MapCreateRequest struct {
@@ -239,7 +241,7 @@ type GetLegacyMapsResponseItem struct {
 type GetLegacyMapsResponse []*GetLegacyMapsResponseItem
 
 type MapWithSlot struct {
-	MapData
+	v3.MapData
 	Slot int `json:"slot"`
 }
 

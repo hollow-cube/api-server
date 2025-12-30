@@ -18,21 +18,18 @@ type TerraformHandlerParams struct {
 	fx.In
 
 	Log     *zap.SugaredLogger
-	Storage storage.Client
 	Queries *db.Queries
 }
 
 type TerraformHandler struct {
-	log           *zap.SugaredLogger
-	storageClient storage.Client
-	queries       *db.Queries
+	log     *zap.SugaredLogger
+	queries *db.Queries
 }
 
 func NewTerraformHandler(p TerraformHandlerParams) (v1.TerraformServer, error) {
 	return &TerraformHandler{
-		log:           p.Log.With("handler", "terraform"),
-		storageClient: p.Storage,
-		queries:       p.Queries,
+		log:     p.Log.With("handler", "terraform"),
+		queries: p.Queries,
 	}, nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 )
 
 // MapmakerSpawnMapId is the hardcoded Id of the spawn map in the dev server for now
@@ -279,8 +278,6 @@ func CreateDefaultMap(owner string, size int) (*db.CreateMapParams, error) {
 	var m db.CreateMapParams
 	m.Owner = owner
 	m.MType = string(TypeDefault)
-	now := util.CurrentTime()
-	m.ProtocolVersion = util.Ptr(769) // Default to 1.21.4
 
 	if size > MapSize__Max {
 		return nil, fmt.Errorf("invalid map size: %d", size)

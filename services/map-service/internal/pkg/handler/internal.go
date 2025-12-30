@@ -13,7 +13,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
@@ -30,7 +29,6 @@ type InternalHandler struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	storageClient   storage.Client
 	store           *db.Store
 	authzClient     authz.Client
 	objectClient    object.Client
@@ -50,7 +48,6 @@ type InternalHandlerParams struct {
 	Log     *zap.SugaredLogger
 	Metrics metric.Writer
 
-	Storage          storage.Client
 	Store            *db.Store
 	Authz            authz.Client
 	Object           object.Client `name:"object-mapmaker"`
@@ -70,7 +67,6 @@ func NewInternalHandler(p InternalHandlerParams) (v1.InternalServer, error) {
 		log:     p.Log.With("handler", "internal"),
 		metrics: p.Metrics,
 
-		storageClient:   p.Storage,
 		store:           p.Store,
 		authzClient:     p.Authz,
 		objectClient:    p.Object,
@@ -89,10 +85,10 @@ func NewInternalHandler(p InternalHandlerParams) (v1.InternalServer, error) {
 
 func (h *InternalHandler) safeWriteMapToDatabase(
 	ctx context.Context,
-	m *model.Map,
+	mapParams db.CreateMapParams,
 	optionalPlayerData *db.MapPlayerData,
-) (err error) {
-	return SafeWriteMapToDatabase(ctx, h.store, h.authzClient, h.producer, m, optionalPlayerData)
+) (db.Map, error) {
+	return SafeWriteMapToDatabase(ctx, h.store, h.authzClient, h.producer, mapParams, optionalPlayerData)
 }
 
 func SafeWriteMapToDatabase(
@@ -100,20 +96,19 @@ func SafeWriteMapToDatabase(
 	store *db.Store,
 	authzClient authz.Client,
 	producer sarama.AsyncProducer,
-	m *model.Map,
+	mapParams db.CreateMapParams,
 	optionalPlayerData *db.MapPlayerData,
-) (err error) {
-
+) (db.Map, error) {
 	// Write to DB and permission manager at the same time (2 phase commit)
-	err = db.TxNoReturn(ctx, store, func(ctx context.Context, tx *db.Store) error {
-		tok, err := authzClient.SetMapOwner(ctx, m.Id, m.Owner)
+	m, err := db.Tx(ctx, store, func(ctx context.Context, tx *db.Store) (db.Map, error) {
+		_, err := authzClient.SetMapOwner(ctx, mapParams.ID, mapParams.Owner)
 		if err != nil {
-			return fmt.Errorf("authz write failed: %w", err)
+			return db.Map{}, fmt.Errorf("authz write failed: %w", err)
 		}
 
-		m.AuthzKey = tok
-		if err := storageClient.CreateMap(ctx, m); err != nil {
-			return fmt.Errorf("db write failed: %w", err)
+		m, err := tx.CreateMap(ctx, mapParams)
+		if err != nil {
+			return db.Map{}, fmt.Errorf("db write failed: %w", err)
 		}
 
 		if optionalPlayerData != nil {
@@ -126,29 +121,29 @@ func SafeWriteMapToDatabase(
 				ContestSlot:   optionalPlayerData.ContestSlot,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to update player data: %w", err)
+				return db.Map{}, fmt.Errorf("failed to update player data: %w", err)
 			}
 		}
 
-		return nil
+		return m, nil
 	})
 	if err != nil {
 		// Rollback authz update
-		if rbErr := authzClient.DeleteMap(ctx, m.Id); rbErr != nil {
+		if rbErr := authzClient.DeleteMap(ctx, mapParams.ID); rbErr != nil {
 			zap.S().Errorw("failed to rollback authz", "err", rbErr)
 		}
 
-		return fmt.Errorf("failed to create map: %w", err)
+		return db.Map{}, fmt.Errorf("failed to create map: %w", err)
 	}
 
 	// Send update to kafka if we updated the player data
 	if optionalPlayerData != nil {
 		if err = writePlayerDataUpdateMessage(producer, *optionalPlayerData); err != nil {
-			return fmt.Errorf("failed to send player data update message: %w", err)
+			return db.Map{}, fmt.Errorf("failed to send player data update message: %w", err)
 		}
 	}
 
-	return
+	return m, nil
 }
 
 func writePlayerDataUpdateMessage(producer sarama.AsyncProducer, pd db.MapPlayerData) error {

@@ -118,7 +118,7 @@ func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (Get
 }
 
 func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject) (SearchMapsResponseObject, error) {
-	var params storage.SearchQueryV3
+	var params db.SearchMapsParams
 	if errText := parseSearchQueryParams(&params, request.Params.Params); errText != "" {
 		return SearchMaps400JSONResponse{BadRequestJSONResponse{Error: errText}}, nil
 	}
@@ -141,7 +141,7 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 		}
 	}
 
-	entries, err := s.storageClient.SearchMapsV3(ctx, params)
+	entries, err := s.store.SearchMaps(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query maps: %w", err)
 	}
@@ -150,17 +150,10 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 		Results: make([]MapData, len(entries)),
 	}
 	for i, entry := range entries {
-		result.Results[i] = MapData(mapToAPI(entry))
-	}
-
-	// If this is page 0 we also need to fetch the total count
-	if result.Page == 0 {
-		result.PageCount, err = s.storageClient.SearchMapsCountV3(ctx, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query maps count: %w", err)
+		result.Results[i] = MapData(s.hydratePublishedMap(entry.PublishedMap))
+		if i == 0 {
+			result.PageCount = int(math.Ceil(float64(entry.TotalCount) / float64(params.PageSize)))
 		}
-
-		result.PageCount = int(math.Ceil(float64(result.PageCount) / float64(params.PageSize)))
 	}
 
 	// Cache the result for 5 minutes
@@ -206,47 +199,84 @@ func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressB
 }
 
 func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMapResponseObject, error) {
-	var m db.PublishedMap
-	var err error
+	// todo should switch this to split between getmap and getpublishedmap and change all the dependent places.
 	if common.IsUUID(request.MapId) {
-		m, err = s.storageClient.GetMapById(ctx, request.MapId)
-	} else {
-		//todo add IsPublishedId also
-		m, err = s.storageClient.GetMapByPublishedId(ctx, request.MapId)
-	}
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		m, err := s.store.GetMapById(ctx, request.MapId)
+		if errors.Is(err, db.ErrNoRows) {
 			return MapNotFoundResponse{}, nil
+		} else if err != nil {
+			return nil, fmt.Errorf("failed to fetch map: %w", err)
 		}
 
-		return nil, fmt.Errorf("failed to fetch map: %w", err)
+		// If map is published we need to get that version
+		if m.PublishedID != nil {
+			pm, err := s.store.GetPublishedMapById(ctx, m.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch published map: %w", err)
+			}
+			return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
+		}
+
+		return GetMap200JSONResponse{s.hydrateMap(m)}, nil
 	}
 
-	return GetMap200JSONResponse{mapToAPI(m)}, nil
+	// Can also search by published id
+	pid, err := strconv.Atoi(request.MapId)
+	if err != nil {
+		return nil, fmt.Errorf("invalid published id: %w", err)
+	}
+	pm, err := s.store.GetPublishedMapByPublishedId(ctx, &pid)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+	return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
 }
 
 func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error) {
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
+	m, err := s.store.GetMapById(ctx, request.MapId)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return MapNotFoundResponse{}, nil
 		}
 
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	update := db.UpdateMapParams{
+		ID:              m.ID,
+		Name:            m.OptName,
+		Icon:            m.OptIcon,
+		Size:            m.Size,
+		Variant:         m.OptVariant,
+		Subvariant:      m.OptSubvariant,
+		SpawnPoint:      m.OptSpawnPoint,
+		Tags:            m.OptTags,
+		Ext:             m.Ext,
+		Quality:         m.QualityOverride,
+		Listed:          m.Listed,
+		ProtocolVersion: m.ProtocolVersion,
+		OnlySprint:      m.OptOnlySprint,
+		NoSprint:        m.OptNoSprint,
+		NoJump:          m.OptNoJump,
+		NoSneak:         m.OptNoSneak,
+		Boat:            m.OptBoat,
+		Extra:           m.OptExtra,
 	}
 
 	// Update the map
 	var changed bool
-	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != 0 && *request.Body.ProtocolVersion != m.ProtocolVersion {
-		m.ProtocolVersion = *request.Body.ProtocolVersion
+	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != 0 && *request.Body.ProtocolVersion != *m.ProtocolVersion {
+		update.ProtocolVersion = request.Body.ProtocolVersion
 		changed = true
 	}
 	if request.Body.Name != nil {
-		m.Settings.Name = *request.Body.Name
+		update.Name = request.Body.Name
 		changed = true
 	}
 	if request.Body.Icon != nil {
-		m.Settings.Icon = *request.Body.Icon
+		update.Icon = request.Body.Icon
 		changed = true
 	}
 	if request.Body.Size != nil {
@@ -256,76 +286,76 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 				Error: fmt.Sprintf("invalid map size: ", *request.Body.Size),
 			}}, nil
 		}
-		m.Settings.Size = size
+		update.Size = int64(size)
 		changed = true
 	}
 	if request.Body.Variant != nil {
-		m.Settings.Variant = mapVariantFromAPI(*request.Body.Variant)
+		update.Variant = string(mapVariantFromAPI(*request.Body.Variant))
 		changed = true
 	}
 	if request.Body.Subvariant != nil {
-		sv := model.MapSubVariant(*request.Body.Subvariant)
-		if sv == model.SubVariantNone {
-			m.Settings.SubVariant = nil
+		sv := *request.Body.Subvariant
+		if sv == string(model.SubVariantNone) {
+			update.Subvariant = nil
 		} else {
-			variant, ok := model.MapSubVariantTypeMap[sv]
+			variant, ok := model.MapSubVariantTypeMap[model.MapSubVariant(sv)]
 			if !ok {
 				return UpdateMap400JSONResponse{BadRequestJSONResponse{
 					Error: fmt.Sprintf("invalid sub size: ", sv),
 				}}, nil
 			}
-			if variant != m.Settings.Variant {
+			if string(variant) != update.Variant {
 				return UpdateMap400JSONResponse{BadRequestJSONResponse{
 					Error: fmt.Sprintf("invalid sub variant for map type: %s and %s", sv, variant),
 				}}, nil
 			}
-			m.Settings.SubVariant = &sv
+			update.Subvariant = &sv
 		}
 		changed = true
 	}
 	if request.Body.SpawnPoint != nil {
-		m.Settings.SpawnPoint = posFromAPI(*request.Body.SpawnPoint)
+		update.SpawnPoint = posFromAPI(*request.Body.SpawnPoint)
 		changed = true
 	}
 
 	//todo ensure there arent any invalid configurations of settings
 	if request.Body.Extra != nil && len(*request.Body.Extra) > 0 {
-		if m.Settings.Extra == nil {
-			m.Settings.Extra = make(map[string]interface{})
-		}
+		var extra = make(map[string]interface{})
+		_ = json.Unmarshal(update.Extra, &extra)
 		for k, v := range *request.Body.Extra {
 			switch k {
 			case "only_sprint":
-				m.Settings.OnlySprint = v.(bool)
+				update.OnlySprint = util.Ptr(v.(bool))
 			case "no_sprint":
-				m.Settings.NoSprint = v.(bool)
+				update.NoSprint = util.Ptr(v.(bool))
 			case "no_jump":
-				m.Settings.NoJump = v.(bool)
+				update.NoJump = util.Ptr(v.(bool))
 			case "no_sneak":
-				m.Settings.NoSneak = v.(bool)
+				update.NoSneak = util.Ptr(v.(bool))
 			case "boat":
-				m.Settings.Boat = v.(bool)
+				update.Boat = util.Ptr(v.(bool))
 			default:
-				m.Settings.Extra[k] = v
+				extra[k] = v
 			}
 		}
+		update.Extra, _ = json.Marshal(extra)
 		changed = true
 	}
 
 	if request.Body.Tags != nil {
-		m.Settings.Tags = *request.Body.Tags
+		update.Tags = *request.Body.Tags
 		changed = true
 	}
 
 	if request.Body.NewObjects != nil && len(*request.Body.NewObjects) > 0 {
-		if m.Objects == nil {
-			m.Objects = make(map[string]*model.ObjectData)
+		if update.Ext.Objects == nil {
+			update.Ext.Objects = make(map[string]*db.ObjectData)
 		}
 		for _, newObject := range *request.Body.NewObjects {
-			objectData := &model.ObjectData{
+			objectData := &db.ObjectData{
 				Id:   newObject.Id,
 				Type: newObject.Type,
-				Pos: model.Point{
+				Pos: db.Point{
 					X: float64(newObject.Pos.X),
 					Y: float64(newObject.Pos.Y),
 					Z: float64(newObject.Pos.Z),
@@ -334,26 +364,27 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 			if newObject.Data != nil {
 				objectData.Data = *newObject.Data
 			}
-			m.Objects[newObject.Id] = objectData
+			update.Ext.Objects[newObject.Id] = objectData
 		}
 		changed = true
 	}
-	if len(m.Objects) > 0 && request.Body.RemovedObjects != nil && len(*request.Body.RemovedObjects) > 0 {
+	if len(m.Ext.Objects) > 0 && request.Body.RemovedObjects != nil && len(*request.Body.RemovedObjects) > 0 {
 		for _, removedObject := range *request.Body.RemovedObjects {
-			delete(m.Objects, removedObject)
+			delete(m.Ext.Objects, removedObject)
 		}
 		changed = true
 	}
 
 	// Post publish bits
 	if request.Body.QualityOverride != nil {
-		m.QualityOverride = mapQualityFromAPI(*request.Body.QualityOverride)
+		newQuality := int64(mapQualityFromAPI(*request.Body.QualityOverride))
+		update.Quality = &newQuality
 		changed = true
 	}
 
 	// Listing
 	if request.Body.Listed != nil {
-		m.Listed = *request.Body.Listed
+		update.Listed = *request.Body.Listed
 		changed = true
 	}
 
@@ -363,17 +394,16 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 	}
 
 	// Write back to DB
-	if err = s.storageClient.UpdateMap(ctx, m); err != nil {
+	if err = s.store.UpdateMap(ctx, update); err != nil {
 		return nil, fmt.Errorf("failed to update map: %w", err)
 	}
 
 	// If we changed the variant to parkour after publishing, delete any in-progress save states for the map
 	if m.PublishedAt != nil && request.Body.Variant != nil && *request.Body.Variant == Parkour {
-		err = s.storageClient.SoftDeleteMapSaveStates(ctx, m.Id, true)
+		err = s.store.Unsafe_DeleteMapSaveStates(ctx, m.ID)
 		if err != nil {
 			// Not fatal, just error log
-			// In the future this should be recorded in sentry or something maybe?
-			s.log.Errorw("failed to delete save states when map became parkour", "mapId", m.Id, "error", err)
+			s.log.Errorw("failed to delete save states when map became parkour", "mapId", m.ID, "error", err)
 		}
 	}
 
@@ -495,7 +525,7 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 	}
 
 	newVerification := int64(model.VerificationPending)
-	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification)
+	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update map: %w", err)
 	}
@@ -521,7 +551,7 @@ func (s *server) DeleteMapVerification(ctx context.Context, request DeleteMapVer
 	// Unset the verification in the database
 	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
 		newVerification := int64(model.VerificationUnverified)
-		if err := s.store.UpdateMapVerification(ctx, m.ID, &newVerification); err != nil {
+		if err := s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil); err != nil {
 			return fmt.Errorf("failed to update map: %w", err)
 		}
 
@@ -583,7 +613,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 
 	// PRECONDITION: Owner must have spent >20m editing the map
 	// todo actually implement this (it is currently checked locally before sending request)
-	ownerState, err := s.storageClient.GetLatestSaveState(ctx, m.ID, m.Owner, model.SaveStateTypeEditing)
+	ownerState, err := s.store.GetLatestSaveState(ctx, m.ID, m.Owner, db.SaveStateTypeEditing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch owner save state: %w", err)
 	}
@@ -634,7 +664,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 		Variant:        m.OptVariant,
 		SubVariant:     subVariantStr,
 		WorldDataSize:  int(worldInfo.Size),
-		OwnerBuildTime: ownerState.PlayTime,
+		OwnerBuildTime: ownerState.Playtime,
 		Contest:        m.Contest,
 	})
 
@@ -722,7 +752,7 @@ var (
 	}
 )
 
-func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams) string {
+func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) string {
 	var err error
 	var ok bool
 	if req.Page != nil && *req.Page != "" {
@@ -762,10 +792,10 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 	}
 
 	if req.Parkour != nil && *req.Parkour {
-		params.Variant = append(params.Variant, model.Parkour)
+		params.Variants = append(params.Variants, string(model.Parkour))
 	}
 	if req.Building != nil && *req.Building {
-		params.Variant = append(params.Variant, model.Building)
+		params.Variants = append(params.Variants, string(model.Building))
 	}
 
 	if req.Quality != nil && *req.Quality != "" {
@@ -791,7 +821,7 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 			if !ok {
 				return fmt.Sprintf("invalid difficulty: %s", rawDifficulty)
 			}
-			params.Difficulty = append(params.Difficulty, difficulty)
+			params.Difficulty = append(params.Difficulty, int(difficulty))
 		}
 	}
 
@@ -799,13 +829,13 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 		if !common.IsUUID(*req.Owner) {
 			return fmt.Sprintf("invalid owner: %s", *req.Owner)
 		}
-		params.Owner = *req.Owner
+		params.Owner = req.Owner
 	}
 	if req.Query != nil && *req.Query != "" {
-		params.Query = *req.Query
+		params.Name = req.Query
 	}
 	if req.Contest != nil && *req.Contest != "" {
-		params.Contest = *req.Contest
+		params.Contest = req.Contest
 	}
 
 	return ""
@@ -1077,8 +1107,8 @@ func posToAPI(pos db.Pos) Pos {
 	}
 }
 
-func posFromAPI(pos Pos) model.Pos {
-	return model.Pos{
+func posFromAPI(pos Pos) db.Pos {
+	return db.Pos{
 		X:     float64(pos.X),
 		Y:     float64(pos.Y),
 		Z:     float64(pos.Z),
@@ -1135,8 +1165,8 @@ func mapReportCategoryFromAPI(category MapReportCategory) int {
 	}
 }
 
-func createMapSearchCacheKey(params *storage.SearchQueryV3) (string, bool) {
-	if params.Query != "" {
+func createMapSearchCacheKey(params *db.SearchMapsParams) (string, bool) {
+	if params.Name != nil || *params.Name != "" {
 		return "", false // Never cache queries with search text
 	}
 	hash, err := hashstructure.Hash(params, hashstructure.FormatV2, nil)
