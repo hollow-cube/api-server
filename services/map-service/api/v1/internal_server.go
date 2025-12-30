@@ -12,7 +12,6 @@ import (
 )
 
 type InternalServer interface {
-	SearchOrgMaps(ctx context.Context, params *SearchOrgMapsParams) (*SearchOrgMapsResponse, error)
 	GetLegacyMaps(ctx context.Context, playerId string) ([]*GetLegacyMapsResponseItem, error)
 	ImportLegacyMap(ctx context.Context, playerId string, legacyMapId string) (*MapWithSlot, error)
 	GetLegacyMapWorld(ctx context.Context, playerId string, legacyMapId string) (*MapWorldData, error)
@@ -44,54 +43,10 @@ func NewInternalServerWrapper(p InternalServerWrapperParams) (*InternalServerWra
 
 func (sw *InternalServerWrapper) Apply(r chi.Router) {
 	r.Route("/v1/internal", func(r chi.Router) {
-		r.Get("/maps/search_orgs", sw.SearchOrgMaps)
 		r.Get("/maps/legacy/{playerId}", sw.GetLegacyMaps)
 		r.Post("/maps/legacy/{playerId}/{legacyMapId}/import", sw.ImportLegacyMap)
 		r.Get("/maps/legacy/{playerId}/{legacyMapId}/world", sw.GetLegacyMapWorld)
 	})
-}
-
-func (sw *InternalServerWrapper) SearchOrgMaps(w http.ResponseWriter, r *http.Request) {
-	var err error
-	_ = err // Sometimes we don't use it but need that not to be an error
-
-	// Read Parameters
-
-	var params SearchOrgMapsParams
-	if err := oapi_rt.ReadExplodedQuery(r, &params); err != nil {
-		oapi_rt.WriteGenericError(w, err)
-		return
-	}
-
-	var handler http.Handler
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := oapi_rt.NewContext(r.Context(), r)
-
-		code200, err := sw.handler.SearchOrgMaps(ctx, &params)
-		if err != nil {
-			oapi_rt.WriteGenericError(w, err)
-			return
-		}
-
-		if code200 != nil {
-			w.Header().Set("content-type", "application/json")
-			w.WriteHeader(200)
-			if err = json.NewEncoder(w).Encode(code200); err != nil {
-				sw.log.Errorw("failed to encode response", "err", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-			return
-		}
-
-		// !! UNDEFINED EMPTY BEHAVIOR !!
-		// Set `x-type: empty` on a response to define this behavior.
-		sw.log.Errorw("empty response")
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	for _, middleware := range sw.middlewares {
-		handler = middleware.Run(handler)
-	}
-	handler.ServeHTTP(w, r)
 }
 
 func (sw *InternalServerWrapper) GetLegacyMaps(w http.ResponseWriter, r *http.Request) {

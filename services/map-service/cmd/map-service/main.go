@@ -117,9 +117,6 @@ func main() {
 			handler.NewInternalHandler,
 			httpfx.AsRouteProvider(v1.NewInternalServerWrapper),
 
-			handler.NewTerraformHandler,
-			httpfx.AsRouteProvider(v1.NewTerraformServerWrapper),
-
 			publicV3.NewServer,
 			intnlV3.NewServer,
 			terraformV3.NewServer,

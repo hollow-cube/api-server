@@ -13,17 +13,10 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
-
-var mapSearchTime = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name: "map_service_map_search_time_seconds",
-	Help: "The time it takes to search for maps",
-})
 
 type InternalHandler struct {
 	log     *zap.SugaredLogger
