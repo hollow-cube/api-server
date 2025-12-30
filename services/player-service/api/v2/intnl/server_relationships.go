@@ -101,9 +101,17 @@ func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequest
 }
 
 func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {
-	rows, err := s.store.GetPlayerFriends(ctx, request.PlayerId)
+	pageSize := request.Params.PageSize
+	offset := (request.Params.Page - 1) * pageSize
+
+	rows, err := s.store.GetPlayerFriends(ctx, request.PlayerId, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get friends: %w", err)
+	}
+
+	totalItems := int64(0)
+	if len(rows) > 0 {
+		totalItems = rows[0].TotalCount
 	}
 
 	friends := make([]PlayerFriend, len(rows))
@@ -115,17 +123,27 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 		}
 	}
 
-	return GetPlayerFriends200JSONResponse(friends), nil
+	return GetPlayerFriends200JSONResponse{
+		Page:       request.Params.Page,
+		TotalItems: totalItems,
+		Items:      friends,
+	}, nil
 }
 
 func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error) {
 	outgoing := request.Params.Direction == Outgoing
+	pageSize := request.Params.PageSize
+	offset := (request.Params.Page - 1) * pageSize
 
+	totalItems := int64(0)
 	var friendRequests []FriendRequest
 	if outgoing {
-		rows, err := s.store.GetOutgoingFriendRequests(ctx, request.PlayerId)
+		rows, err := s.store.GetOutgoingFriendRequests(ctx, request.PlayerId, pageSize, offset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get friend requests: %w", err)
+		}
+		if len(rows) > 0 {
+			totalItems = rows[0].TotalCount
 		}
 
 		friendRequests = make([]FriendRequest, len(rows))
@@ -137,9 +155,12 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 			}
 		}
 	} else {
-		rows, err := s.store.GetIncomingFriendRequests(ctx, request.PlayerId)
+		rows, err := s.store.GetIncomingFriendRequests(ctx, request.PlayerId, pageSize, offset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get friend requests: %w", err)
+		}
+		if len(rows) > 0 {
+			totalItems = rows[0].TotalCount
 		}
 
 		friendRequests = make([]FriendRequest, len(rows))
@@ -152,8 +173,17 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 		}
 	}
 
-	return GetFriendRequests200JSONResponse(friendRequests), nil
+	return GetFriendRequests200JSONResponse{
+		Page:       request.Params.Page,
+		TotalItems: totalItems,
+		Items:      friendRequests,
+	}, nil
 }
+
+const (
+	freeFriendLimit      = 15
+	hypercubeFriendLimit = 1000
+)
 
 func (s *server) SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error) {
 	// Check if they are already friends
@@ -164,6 +194,32 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 
 	if alreadyFriends {
 		return SendFriendRequest409JSONResponse{Code: "already_friends", Message: "you are already friends with this player"}, nil
+	}
+
+	usageResult, err := s.store.GetPlayerFriendUsage(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get friend usage: %w", err)
+	}
+
+	totalUsage := usageResult.OutgoingFriendRequestCount + usageResult.FriendCount
+	if totalUsage >= freeFriendLimit {
+		isHyperCube, err := s.authzClient.HasHypercube(ctx, request.PlayerId, authz.NoKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if player has hypercube: %w", err)
+		}
+		limit := freeFriendLimit
+		if isHyperCube {
+			limit = hypercubeFriendLimit
+		}
+
+		if totalUsage >= limit {
+			return SendFriendRequest401JSONResponse{
+				Code: "friend_limit_reached", Message: "you have reached the friend limit for your account",
+				Limit:                int32(limit),
+				FriendCount:          int32(usageResult.FriendCount),
+				OutgoingRequestCount: int32(usageResult.OutgoingFriendRequestCount),
+			}, nil
+		}
 	}
 
 	// Check if an opposite existing friend request already exists, if so they just become friends.

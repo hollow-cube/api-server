@@ -296,15 +296,40 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            maximum: 100
+            minimum: 1
       responses:
         '200':
           description: Friends successfully retrieved
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PlayerFriend'
+                type: object
+                required: [ "page", "totalItems", "items" ]
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  totalItems:
+                    type: integer
+                    format: int64
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlayerFriend'
 
   /players/{playerId}/friends/{targetId}:
     delete:
@@ -346,15 +371,40 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/FriendRequestDirection'
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            maximum: 100
+            minimum: 1
       responses:
         '200':
           description: Friend requests successfully retrieved
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/FriendRequest'
+                type: object
+                required: [ "page", "totalItems", "items" ]
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  totalItems:
+                    type: integer
+                    format: int64
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FriendRequest'
 
   /players/{playerId}/friendRequests/{targetId}:
     post:
@@ -385,6 +435,26 @@ paths:
                   isRequest:
                     description: Indicates whether it created a request (true), or accepted a friendship (false).
                     type: boolean
+        '401':
+          description: Friend limit reached
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ code, message, limit, friendCount, outgoingRequestCount ]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  limit:
+                    type: integer
+                    format: int32
+                  friendCount:
+                    type: integer
+                    format: int32
+                  outgoingRequestCount:
+                    type: integer
+                    format: int32
+
         '404':
           $ref: '#/components/responses/PlayerNotFound'
         '409':

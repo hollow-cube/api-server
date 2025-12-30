@@ -237,12 +237,20 @@ type BuyCosmeticJSONBody struct {
 type GetFriendRequestsParams struct {
 	// Direction The direction of requests to get
 	Direction FriendRequestDirection `form:"direction" json:"direction"`
+	Page      int32                  `form:"page" json:"page"`
+	PageSize  int32                  `form:"pageSize" json:"pageSize"`
 }
 
 // DeleteFriendRequestParams defines parameters for DeleteFriendRequest.
 type DeleteFriendRequestParams struct {
 	// Bidirectional Whether to delete either direction of the request
 	Bidirectional bool `form:"bidirectional" json:"bidirectional"`
+}
+
+// GetPlayerFriendsParams defines parameters for GetPlayerFriends.
+type GetPlayerFriendsParams struct {
+	Page     int32 `form:"page" json:"page"`
+	PageSize int32 `form:"pageSize" json:"pageSize"`
 }
 
 // CheckTotpParams defines parameters for CheckTotp.
@@ -445,7 +453,7 @@ type ServerInterface interface {
 	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Get a player's friends
 	// (GET /players/{playerId}/friends)
-	GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string)
+	GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerFriendsParams)
 	// Remove a friend
 	// (DELETE /players/{playerId}/friends/{targetId})
 	RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
@@ -1004,6 +1012,36 @@ func (siw *ServerInterfaceWrapper) GetFriendRequests(w http.ResponseWriter, r *h
 		return
 	}
 
+	// ------------- Required query parameter "page" -------------
+
+	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "pageSize" -------------
+
+	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFriendRequests(w, r, playerId, params)
 	}))
@@ -1115,8 +1153,41 @@ func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPlayerFriendsParams
+
+	// ------------- Required query parameter "page" -------------
+
+	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "pageSize" -------------
+
+	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPlayerFriends(w, r, playerId)
+		siw.Handler.GetPlayerFriends(w, r, playerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2295,7 +2366,11 @@ type GetFriendRequestsResponseObject interface {
 	VisitGetFriendRequestsResponse(w http.ResponseWriter) error
 }
 
-type GetFriendRequests200JSONResponse []FriendRequest
+type GetFriendRequests200JSONResponse struct {
+	Items      []FriendRequest `json:"items"`
+	Page       int32           `json:"page"`
+	TotalItems int64           `json:"totalItems"`
+}
 
 func (response GetFriendRequests200JSONResponse) VisitGetFriendRequestsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2352,6 +2427,21 @@ func (response SendFriendRequest201JSONResponse) VisitSendFriendRequestResponse(
 	return json.NewEncoder(w).Encode(response)
 }
 
+type SendFriendRequest401JSONResponse struct {
+	Code                 string `json:"code"`
+	FriendCount          int32  `json:"friendCount"`
+	Limit                int32  `json:"limit"`
+	Message              string `json:"message"`
+	OutgoingRequestCount int32  `json:"outgoingRequestCount"`
+}
+
+func (response SendFriendRequest401JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type SendFriendRequest404Response = PlayerNotFoundResponse
 
 func (response SendFriendRequest404Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
@@ -2373,13 +2463,18 @@ func (response SendFriendRequest409JSONResponse) VisitSendFriendRequestResponse(
 
 type GetPlayerFriendsRequestObject struct {
 	PlayerId string `json:"playerId"`
+	Params   GetPlayerFriendsParams
 }
 
 type GetPlayerFriendsResponseObject interface {
 	VisitGetPlayerFriendsResponse(w http.ResponseWriter) error
 }
 
-type GetPlayerFriends200JSONResponse []PlayerFriend
+type GetPlayerFriends200JSONResponse struct {
+	Items      []PlayerFriend `json:"items"`
+	Page       int32          `json:"page"`
+	TotalItems int64          `json:"totalItems"`
+}
 
 func (response GetPlayerFriends200JSONResponse) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -3583,10 +3678,11 @@ func (sh *strictHandler) SendFriendRequest(w http.ResponseWriter, r *http.Reques
 }
 
 // GetPlayerFriends operation middleware
-func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string) {
+func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerFriendsParams) {
 	var request GetPlayerFriendsRequestObject
 
 	request.PlayerId = playerId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetPlayerFriends(ctx, request.(GetPlayerFriendsRequestObject))

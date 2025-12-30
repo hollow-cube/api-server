@@ -150,21 +150,23 @@ func (q *Queries) FriendshipExists(ctx context.Context, playerID string, targetI
 
 const getIncomingFriendRequests = `-- name: GetIncomingFriendRequests :many
 
-select pfr.player_id, pd.username, pfr.created_at
+select pfr.player_id, pd.username, pfr.created_at, count(*) over () as total_count
 from player_friend_requests pfr
          join player_data pd on pd.id = pfr.player_id
 where pfr.target_id = $1
+limit $2 offset $3
 `
 
 type GetIncomingFriendRequestsRow struct {
-	PlayerID  string    `json:"playerId"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"createdAt"`
+	PlayerID   string    `json:"playerId"`
+	Username   string    `json:"username"`
+	CreatedAt  time.Time `json:"createdAt"`
+	TotalCount int64     `json:"totalCount"`
 }
 
 // Friend Requests
-func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string) ([]GetIncomingFriendRequestsRow, error) {
-	rows, err := q.db.Query(ctx, getIncomingFriendRequests, targetID)
+func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string, limit int32, offset int32) ([]GetIncomingFriendRequestsRow, error) {
+	rows, err := q.db.Query(ctx, getIncomingFriendRequests, targetID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +174,12 @@ func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string
 	items := []GetIncomingFriendRequestsRow{}
 	for rows.Next() {
 		var i GetIncomingFriendRequestsRow
-		if err := rows.Scan(&i.PlayerID, &i.Username, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.Username,
+			&i.CreatedAt,
+			&i.TotalCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -184,20 +191,22 @@ func (q *Queries) GetIncomingFriendRequests(ctx context.Context, targetID string
 }
 
 const getOutgoingFriendRequests = `-- name: GetOutgoingFriendRequests :many
-select pfr.target_id, pd.username, pfr.created_at
+select pfr.target_id, pd.username, pfr.created_at, count(*) over () as total_count
 from player_friend_requests pfr
          join player_data pd on pd.id = pfr.target_id
 where pfr.player_id = $1
+limit $2 offset $3
 `
 
 type GetOutgoingFriendRequestsRow struct {
-	TargetID  string    `json:"targetId"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"createdAt"`
+	TargetID   string    `json:"targetId"`
+	Username   string    `json:"username"`
+	CreatedAt  time.Time `json:"createdAt"`
+	TotalCount int64     `json:"totalCount"`
 }
 
-func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string) ([]GetOutgoingFriendRequestsRow, error) {
-	rows, err := q.db.Query(ctx, getOutgoingFriendRequests, playerID)
+func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string, limit int32, offset int32) ([]GetOutgoingFriendRequestsRow, error) {
+	rows, err := q.db.Query(ctx, getOutgoingFriendRequests, playerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +214,12 @@ func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string
 	items := []GetOutgoingFriendRequestsRow{}
 	for rows.Next() {
 		var i GetOutgoingFriendRequestsRow
-		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.TargetID,
+			&i.Username,
+			&i.CreatedAt,
+			&i.TotalCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -216,23 +230,44 @@ func (q *Queries) GetOutgoingFriendRequests(ctx context.Context, playerID string
 	return items, nil
 }
 
+const getPlayerFriendUsage = `-- name: GetPlayerFriendUsage :one
+select (select count(*) from player_friends where player_friends.player_id = $1)::int as friend_count,
+       (select count(*)
+        from player_friend_requests
+        where player_friend_requests.player_id = $1)::int                             as outgoing_friend_request_count
+`
+
+type GetPlayerFriendUsageRow struct {
+	FriendCount                int `json:"friendCount"`
+	OutgoingFriendRequestCount int `json:"outgoingFriendRequestCount"`
+}
+
+func (q *Queries) GetPlayerFriendUsage(ctx context.Context, playerID string) (GetPlayerFriendUsageRow, error) {
+	row := q.db.QueryRow(ctx, getPlayerFriendUsage, playerID)
+	var i GetPlayerFriendUsageRow
+	err := row.Scan(&i.FriendCount, &i.OutgoingFriendRequestCount)
+	return i, err
+}
+
 const getPlayerFriends = `-- name: GetPlayerFriends :many
 
-select pf.target_id, pd.username, pf.created_at
+select pf.target_id, pd.username, pf.created_at, count(*) over () as total_count
 from player_friends pf
          join player_data pd on pd.id = pf.target_id
 where pf.player_id = $1
+limit $2 offset $3
 `
 
 type GetPlayerFriendsRow struct {
-	TargetID  string    `json:"targetId"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"createdAt"`
+	TargetID   string    `json:"targetId"`
+	Username   string    `json:"username"`
+	CreatedAt  time.Time `json:"createdAt"`
+	TotalCount int64     `json:"totalCount"`
 }
 
 // Friends
-func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string) ([]GetPlayerFriendsRow, error) {
-	rows, err := q.db.Query(ctx, getPlayerFriends, playerID)
+func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string, limit int32, offset int32) ([]GetPlayerFriendsRow, error) {
+	rows, err := q.db.Query(ctx, getPlayerFriends, playerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +275,12 @@ func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string) ([]GetP
 	items := []GetPlayerFriendsRow{}
 	for rows.Next() {
 		var i GetPlayerFriendsRow
-		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.TargetID,
+			&i.Username,
+			&i.CreatedAt,
+			&i.TotalCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
