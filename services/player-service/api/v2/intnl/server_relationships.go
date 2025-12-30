@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
@@ -12,9 +11,16 @@ import (
 )
 
 func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
-	rows, err := s.store.GetBlockedPlayers(ctx, request.PlayerId)
+	pageSize := request.Params.PageSize
+	offset := (request.Params.Page - 1) * pageSize
+
+	rows, err := s.store.GetBlockedPlayers(ctx, request.PlayerId, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocked players: %w", err)
+	}
+
+	if len(rows) == 0 {
+		return GetBlockedPlayers200JSONResponse{Items: make([]BlockedPlayer, 0), Page: 1, TotalItems: 0}, nil
 	}
 
 	targetIds := make([]string, len(rows))
@@ -33,7 +39,6 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 		if !ok {
 			s.log.Warnw("staff state not found in SpiceDB for player %s", "targetId", row.TargetID)
 		}
-		log.Printf("staffState: %v", staffState)
 		if staffState == authz.Allow || staffState == authz.Conditional { // we must accept conditional due to the audit log hack applied
 			continue
 		}
@@ -45,7 +50,11 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 		})
 	}
 
-	return GetBlockedPlayers200JSONResponse(blocks), nil
+	return GetBlockedPlayers200JSONResponse{
+		Items:      blocks,
+		Page:       request.Params.Page,
+		TotalItems: rows[0].Total,
+	}, nil
 }
 
 func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error) {
@@ -63,7 +72,6 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if target is staff member: %w", err)
 	}
-	log.Printf("staff state: %v", staffState)
 	if staffState == authz.Allow || staffState == authz.Conditional { // We must accept conditional due to the audit log hack applied
 		return BlockPlayer400Response{}, nil
 	}
@@ -247,6 +255,15 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 
 		// todo use new Notification service once implemented to notify of friendship
 		return SendFriendRequest201JSONResponse{IsRequest: false}, nil
+	}
+
+	// Check if target is auto-rejecting friend requests
+	targetData, err := s.store.GetPlayerData(ctx, request.TargetId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get target settings: %w", err)
+	}
+	if targetData.Settings.GetBool(db.PlayerSettingAutoRejectFriendRequests) {
+		return SendFriendRequest409JSONResponse{Code: "target_auto_rejects_friend_requests", Message: "target has auto-rejecting friend requests enabled"}, nil
 	}
 
 	// Check for blocks in both directions

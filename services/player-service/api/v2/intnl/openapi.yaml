@@ -510,15 +510,40 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            maximum: 100
+            minimum: 1
       responses:
         '200':
           description: Blocked players successfully retrieved
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BlockedPlayer'
+                type: object
+                required: [ "page", "totalItems", "items" ]
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  totalItems:
+                    type: integer
+                    format: int64
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BlockedPlayer'
 
   /players/{playerId}/blocks/{targetId}:
     post:

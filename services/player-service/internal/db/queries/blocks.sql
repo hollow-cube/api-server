@@ -1,8 +1,8 @@
 -- name: GetBlockedPlayers :many
-select pb.target_id, pd.username, pb.created_at
+select pb.target_id, pd.username, pb.created_at, count(*) over () as total
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
-where pb.player_id = $1;
+where pb.player_id = $1 limit $2 offset $3;
 
 -- name: CreatePlayerBlock :exec
 insert into player_blocks (player_id, target_id)

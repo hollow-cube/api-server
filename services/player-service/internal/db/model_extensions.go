@@ -1,6 +1,26 @@
 package db
 
+// This is not an exhaustive list of player settings - only those used by the player service.
+
+type PlayerSetting struct {
+	Key          string
+	DefaultValue interface{}
+}
+
+var (
+	PlayerSettingAutoRejectFriendRequests = PlayerSetting{Key: "auto_reject_friend_requests", DefaultValue: false}
+)
+
 type PlayerSettings map[string]interface{}
+
+func (ps PlayerSettings) GetBool(setting PlayerSetting) bool {
+	value, ok := ps[setting.Key].(bool)
+	if !ok {
+		return setting.DefaultValue.(bool)
+	}
+
+	return value
+}
 
 type CurrencyType int
 

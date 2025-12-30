@@ -225,6 +225,12 @@ type GivePlayerItemsJSONBody struct {
 	TxMeta map[string]interface{} `json:"txMeta"`
 }
 
+// GetBlockedPlayersParams defines parameters for GetBlockedPlayers.
+type GetBlockedPlayersParams struct {
+	Page     int32 `form:"page" json:"page"`
+	PageSize int32 `form:"pageSize" json:"pageSize"`
+}
+
 // BuyCosmeticJSONBody defines parameters for BuyCosmetic.
 type BuyCosmeticJSONBody struct {
 	Coins      *int                    `json:"coins,omitempty"`
@@ -426,7 +432,7 @@ type ServerInterface interface {
 	GivePlayerItems(w http.ResponseWriter, r *http.Request, playerId string)
 	// Get players blocked by this player - automatically filters out staff members
 	// (GET /players/{playerId}/blocks)
-	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string)
+	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string, params GetBlockedPlayersParams)
 	// Unblock a player
 	// (DELETE /players/{playerId}/blocks/{targetId})
 	UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
@@ -826,8 +832,41 @@ func (siw *ServerInterfaceWrapper) GetBlockedPlayers(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetBlockedPlayersParams
+
+	// ------------- Required query parameter "page" -------------
+
+	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "pageSize" -------------
+
+	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetBlockedPlayers(w, r, playerId)
+		siw.Handler.GetBlockedPlayers(w, r, playerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2196,13 +2235,18 @@ func (response GivePlayerItems404Response) VisitGivePlayerItemsResponse(w http.R
 
 type GetBlockedPlayersRequestObject struct {
 	PlayerId string `json:"playerId"`
+	Params   GetBlockedPlayersParams
 }
 
 type GetBlockedPlayersResponseObject interface {
 	VisitGetBlockedPlayersResponse(w http.ResponseWriter) error
 }
 
-type GetBlockedPlayers200JSONResponse []BlockedPlayer
+type GetBlockedPlayers200JSONResponse struct {
+	Items      []BlockedPlayer `json:"items"`
+	Page       int32           `json:"page"`
+	TotalItems int64           `json:"totalItems"`
+}
 
 func (response GetBlockedPlayers200JSONResponse) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -3431,10 +3475,11 @@ func (sh *strictHandler) GivePlayerItems(w http.ResponseWriter, r *http.Request,
 }
 
 // GetBlockedPlayers operation middleware
-func (sh *strictHandler) GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string) {
+func (sh *strictHandler) GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string, params GetBlockedPlayersParams) {
 	var request GetBlockedPlayersRequestObject
 
 	request.PlayerId = playerId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetBlockedPlayers(ctx, request.(GetBlockedPlayersRequestObject))

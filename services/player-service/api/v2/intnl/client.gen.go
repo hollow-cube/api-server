@@ -141,7 +141,7 @@ type ClientInterface interface {
 	GivePlayerItems(ctx context.Context, playerId string, body GivePlayerItemsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetBlockedPlayers request
-	GetBlockedPlayers(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetBlockedPlayers(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UnblockPlayer request
 	UnblockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -461,8 +461,8 @@ func (c *Client) GivePlayerItems(ctx context.Context, playerId string, body Give
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetBlockedPlayers(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBlockedPlayersRequest(c.Server, playerId)
+func (c *Client) GetBlockedPlayers(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBlockedPlayersRequest(c.Server, playerId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1364,7 +1364,7 @@ func NewGivePlayerItemsRequestWithBody(server string, playerId string, contentTy
 }
 
 // NewGetBlockedPlayersRequest generates requests for GetBlockedPlayers
-func NewGetBlockedPlayersRequest(server string, playerId string) (*http.Request, error) {
+func NewGetBlockedPlayersRequest(server string, playerId string, params *GetBlockedPlayersParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1387,6 +1387,36 @@ func NewGetBlockedPlayersRequest(server string, playerId string) (*http.Request,
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, params.Page); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "pageSize", runtime.ParamLocationQuery, params.PageSize); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2674,7 +2704,7 @@ type ClientWithResponsesInterface interface {
 	GivePlayerItemsWithResponse(ctx context.Context, playerId string, body GivePlayerItemsJSONRequestBody, reqEditors ...RequestEditorFn) (*GivePlayerItemsResponse, error)
 
 	// GetBlockedPlayersWithResponse request
-	GetBlockedPlayersWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error)
+	GetBlockedPlayersWithResponse(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error)
 
 	// UnblockPlayerWithResponse request
 	UnblockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*UnblockPlayerResponse, error)
@@ -3065,7 +3095,11 @@ func (r GivePlayerItemsResponse) StatusCode() int {
 type GetBlockedPlayersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]BlockedPlayer
+	JSON200      *struct {
+		Items      []BlockedPlayer `json:"items"`
+		Page       int32           `json:"page"`
+		TotalItems int64           `json:"totalItems"`
+	}
 }
 
 // Status returns HTTPResponse.Status
@@ -3820,8 +3854,8 @@ func (c *ClientWithResponses) GivePlayerItemsWithResponse(ctx context.Context, p
 }
 
 // GetBlockedPlayersWithResponse request returning *GetBlockedPlayersResponse
-func (c *ClientWithResponses) GetBlockedPlayersWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error) {
-	rsp, err := c.GetBlockedPlayers(ctx, playerId, reqEditors...)
+func (c *ClientWithResponses) GetBlockedPlayersWithResponse(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error) {
+	rsp, err := c.GetBlockedPlayers(ctx, playerId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -4454,7 +4488,11 @@ func ParseGetBlockedPlayersResponse(rsp *http.Response) (*GetBlockedPlayersRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []BlockedPlayer
+		var dest struct {
+			Items      []BlockedPlayer `json:"items"`
+			Page       int32           `json:"page"`
+			TotalItems int64           `json:"totalItems"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
