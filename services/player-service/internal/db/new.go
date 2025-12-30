@@ -99,7 +99,7 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	}
 
 	version, dirty, err := m.Version()
-	if err != nil {
+	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
 		return nil, nil, fmt.Errorf("failed to get current migration version: %w", err)
 	}
 	if dirty || version < targetVersion {
