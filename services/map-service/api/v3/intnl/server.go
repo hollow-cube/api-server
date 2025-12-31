@@ -4,11 +4,11 @@
 package intnl
 
 import (
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/wkafka"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -24,7 +24,7 @@ type ServerParams struct {
 	Storage  storage.Client
 	Authz    authz.Client
 	Redis    rueidis.Client
-	Producer wkafka.SyncWriter
+	Producer kafkafx.SyncProducer
 	Metrics  metric.Writer
 
 	Object object.Client `name:"object-mapmaker"`
@@ -48,7 +48,7 @@ type server struct {
 	storageClient storage.Client
 	authzClient   authz.Client
 	redis         rueidis.Client
-	producer      wkafka.SyncWriter
+	producer      kafkafx.SyncProducer
 	metrics       metric.Writer
 
 	objectClient object.Client

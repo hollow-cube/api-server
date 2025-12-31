@@ -17,6 +17,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	intnlV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
@@ -26,12 +27,10 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/config"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/wkafka"
 	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 	"go.opentelemetry.io/otel/sdk/trace"
 
@@ -71,7 +70,7 @@ func main() {
 		fx.Provide(newAuthzSpiceDB),
 
 		// Kafka
-		fx.Provide(newKafkaProducer, newSyncKafkaWriter, newKafkaReaderFactory),
+		fx.Provide(newAsyncKafkaWriter, newSyncKafkaWriter),
 
 		// Metrics
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -176,6 +175,7 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
+	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -183,6 +183,7 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "map-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
+		Kafka:   conf.Kafka,
 	}
 }
 
@@ -297,34 +298,12 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	return client, nil
 }
 
-func newSyncKafkaWriter(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.SyncWriter {
-	w := &kafka.Writer{
-		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
-		Balancer:               &kafka.Hash{},
-		Async:                  false,
-		AllowAutoTopicCreation: true,
-		//Logger:                 kafka.LoggerFunc(log.Infof),
-		ErrorLogger: kafka.LoggerFunc(log.Errorf),
-	}
-
-	lc.Append(fx.StopHook(w.Close))
-	return w
+func newSyncKafkaWriter(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
+	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
 }
 
-func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {
-	brokers := strings.Split(conf.Kafka.Brokers, ",")
-	return wkafka.ReaderFactoryFunc(func(topic string) wkafka.Reader {
-		r := kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  brokers,
-			GroupID:  serviceName,
-			Topic:    topic,
-			MaxBytes: 10e6, // 10mb
-			//Logger:      kafka.LoggerFunc(log.Infof),
-			ErrorLogger: kafka.LoggerFunc(log.Errorf),
-		})
-		lc.Append(fx.StopHook(r.Close))
-		return r
-	})
+func newAsyncKafkaWriter(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
+	return kafkafx.NewAsyncKafkaProducer(conf, lc, log)
 }
 
 func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {
