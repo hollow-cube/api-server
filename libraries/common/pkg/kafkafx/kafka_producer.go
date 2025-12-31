@@ -13,28 +13,12 @@ import (
 var _ SyncProducer = (*producerImpl)(nil)
 var _ AsyncProducer = (*producerImpl)(nil)
 
-type Producer interface {
+type SyncProducer interface {
 	WriteMessages(ctx context.Context, messages ...kafka.Message) error
 }
 
-type SyncProducer interface {
-	Producer
-	sync() // marker - makes interface distinct from AsyncProducer
-}
-
 type AsyncProducer interface {
-	Producer
-	async() // marker - makes interface distinct from SyncProducer
-}
-
-func (p *producerImpl) async() {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (p *producerImpl) sync() {
-	//TODO implement me
-	panic("implement me")
+	WriteMessages(ctx context.Context, messages ...kafka.Message) error
 }
 
 type producerImpl struct {
