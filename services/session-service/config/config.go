@@ -25,10 +25,6 @@ type Redis struct {
 	Address string `mapstructure:"address"`
 }
 
-type Kafka struct {
-	Brokers string `mapstructure:"brokers"`
-}
-
 type Kubernetes struct {
 	Namespace string `mapstructure:"namespace"`
 }
@@ -68,21 +64,21 @@ type Github struct {
 }
 
 type Config struct {
-	Env              string            `mapstructure:"env"`
-	HTTP             common.HTTPConfig `mapstructure:"http"`
-	Metrics          Metrics           `mapstructure:"metrics"`
-	OTLP             common.OtlpConfig `mapstructure:"otlp"`
-	PlayerServiceUrl string            `mapstructure:"player_service_url"`
-	MapServiceUrl    string            `mapstructure:"map_service_url"`
-	Redis            Redis             `mapstructure:"redis"`
-	Kafka            Kafka             `mapstructure:"kafka"`
-	Kubernetes       Kubernetes        `mapstructure:"kubernetes"`
-	Postgres         Postgres          `mapstructure:"postgres"`
-	SpiceDB          SpiceDB           `mapstructure:"spicedb"`
-	Posthog          Posthog           `mapstructure:"posthog"`
-	Unleash          Unleash           `mapstructure:"unleash"`
-	MapIsolate       MapIsolate        `mapstructure:"map_isolate"`
-	Github           Github            `mapstructure:"github"`
+	Env              string             `mapstructure:"env"`
+	HTTP             common.HTTPConfig  `mapstructure:"http"`
+	Metrics          Metrics            `mapstructure:"metrics"`
+	OTLP             common.OtlpConfig  `mapstructure:"otlp"`
+	PlayerServiceUrl string             `mapstructure:"player_service_url"`
+	MapServiceUrl    string             `mapstructure:"map_service_url"`
+	Redis            Redis              `mapstructure:"redis"`
+	Kafka            common.KafkaConfig `mapstructure:"kafka"`
+	Kubernetes       Kubernetes         `mapstructure:"kubernetes"`
+	Postgres         Postgres           `mapstructure:"postgres"`
+	SpiceDB          SpiceDB            `mapstructure:"spicedb"`
+	Posthog          Posthog            `mapstructure:"posthog"`
+	Unleash          Unleash            `mapstructure:"unleash"`
+	MapIsolate       MapIsolate         `mapstructure:"map_isolate"`
+	Github           Github             `mapstructure:"github"`
 }
 
 //go:embed default.yaml

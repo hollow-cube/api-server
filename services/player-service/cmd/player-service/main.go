@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/player-service/pkg/kafkafx"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
 	"google.golang.org/grpc"
@@ -58,12 +58,9 @@ func main() {
 
 		fx.Provide(newPostgresStore),
 		fx.Provide(newAuthzSpiceDB),
-		fx.Provide(newSyncKafkaWriter, newKafkaReaderFactory),
+		fx.Provide(newSyncKafkaProducer, newKafkaReaderFactory),
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 		fx.Provide(newTebexHeadlessClient),
-
-		// Kafka
-		fx.Provide(kafkafx.NewWriter),
 
 		// Converted punishment ladders - for internal handler
 		fx.Provide(newLaddersFromConfig),
@@ -123,6 +120,7 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
+	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -130,6 +128,7 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "player-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
+		Kafka:   conf.Kafka,
 	}
 }
 
@@ -167,18 +166,8 @@ func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 	)
 }
 
-func newSyncKafkaWriter(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.SyncWriter {
-	w := &kafka.Writer{
-		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
-		Balancer:               &kafka.Hash{},
-		Async:                  false,
-		AllowAutoTopicCreation: true,
-		//Logger:                 kafka.LoggerFunc(log.Infof),
-		ErrorLogger: kafka.LoggerFunc(log.Errorf),
-	}
-
-	lc.Append(fx.StopHook(w.Close))
-	return w
+func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
+	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
 }
 
 func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {

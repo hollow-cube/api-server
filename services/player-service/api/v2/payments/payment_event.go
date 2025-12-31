@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
@@ -389,7 +390,7 @@ func extractTargetFromEvent(event interface{}) string {
 	}
 }
 
-func sendPlayerDataUpdateMessage(w wkafka.Writer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
+func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
 	log := zap.S()
 
 	content, err := json.Marshal(msg)

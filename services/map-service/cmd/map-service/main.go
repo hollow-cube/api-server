@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsCredentials "github.com/aws/aws-sdk-go-v2/credentials"
@@ -70,7 +68,7 @@ func main() {
 		fx.Provide(newAuthzSpiceDB),
 
 		// Kafka
-		fx.Provide(newAsyncKafkaWriter, newSyncKafkaWriter),
+		fx.Provide(newAsyncKafkaProducer, newSyncKafkaProducer),
 
 		// Metrics
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -250,35 +248,6 @@ func newRedisClient(conf *config.Config) (*redis.Client, error) {
 	return c, c.Ping(ctx).Err()
 }
 
-func newKafkaProducer(lc fx.Lifecycle, log *zap.SugaredLogger, conf *config.Config) (sarama.AsyncProducer, error) {
-	kc := sarama.NewConfig()
-	p, err := sarama.NewAsyncProducer(strings.Split(conf.Kafka.Brokers, ","), kc)
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			go func() {
-				for err := range p.Errors() {
-					if err == nil {
-						return
-					}
-
-					log.Errorw("kafka produce failed", zap.Error(err))
-				}
-			}()
-
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			return p.Close()
-		},
-	})
-
-	return p, nil
-}
-
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
 	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
 	if conf.Env == "tilt" {
@@ -298,11 +267,11 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	return client, nil
 }
 
-func newSyncKafkaWriter(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
+func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
 	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
 }
 
-func newAsyncKafkaWriter(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
+func newAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
 	return kafkafx.NewAsyncKafkaProducer(conf, lc, log)
 }
 

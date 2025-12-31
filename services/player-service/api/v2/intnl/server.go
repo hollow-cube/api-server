@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
@@ -17,7 +18,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
@@ -32,7 +32,7 @@ type ServerParams struct {
 	Log        *zap.SugaredLogger
 	Config     *config.Config
 	Metrics    metric.Writer
-	Producer   wkafka.SyncWriter
+	Producer   kafkafx.SyncProducer
 	TBHeadless *tebex.HeadlessClient
 
 	Store             *db.Store
@@ -79,7 +79,7 @@ type server struct {
 
 	store       *db.Store
 	authzClient authz.Client
-	producer    wkafka.Writer
+	producer    kafkafx.SyncProducer
 	tbHeadless  *tebex.HeadlessClient
 
 	punishmentLadders map[string]*model.PunishmentLadder
@@ -324,7 +324,7 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 	return &PerformTabComplete200JSONResponse{Result: result}, nil
 }
 
-func sendPlayerDataUpdateMessage(w wkafka.Writer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
+func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
 	log := zap.S()
 
 	content, err := json.Marshal(msg)

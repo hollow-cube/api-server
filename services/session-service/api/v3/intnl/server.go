@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v56/github"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
@@ -20,7 +21,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
@@ -32,7 +32,7 @@ var _ StrictServerInterface = (*serverImpl)(nil)
 
 type serverImpl struct {
 	invites     *handler.InviteManager
-	producer    wkafka.SyncWriter
+	producer    kafkafx.SyncProducer
 	authzClient authz.Client
 	gh          *github.Client
 
@@ -50,7 +50,7 @@ type ServerParams struct {
 	fx.In
 
 	Invites  *handler.InviteManager
-	Producer wkafka.SyncWriter
+	Producer kafkafx.SyncProducer
 	Authz    authz.Client
 	GitHub   *github.Client
 

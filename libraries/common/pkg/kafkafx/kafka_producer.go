@@ -3,6 +3,7 @@ package kafkafx
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/segmentio/kafka-go"
@@ -32,7 +33,20 @@ func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogge
 		Async:                  async,
 		AllowAutoTopicCreation: true,
 		ErrorLogger:            kafka.LoggerFunc(log.Errorf),
+
+		WriteBackoffMin: 20 * time.Millisecond,
+		WriteBackoffMax: 100 * time.Millisecond,
+		BatchTimeout:    100 * time.Millisecond,
 	}
+
+	if async {
+		w.Completion = func(messages []kafka.Message, err error) {
+			if err != nil {
+				log.Errorw("failed to write message", "error", err)
+			}
+		}
+	}
+
 	for _, opt := range opts {
 		opt(w)
 	}

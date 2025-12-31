@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/wkafka"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
@@ -24,7 +24,7 @@ import (
 // Tracker keeps track of the currently online players and their sessions/presences.
 type Tracker struct {
 	queries  *db.Queries
-	producer wkafka.SyncWriter
+	producer kafkafx.SyncProducer
 
 	countReportCtx    context.Context
 	countReportCancel context.CancelFunc
@@ -36,7 +36,7 @@ type TrackerParams struct {
 
 	Redis    rueidis.Client
 	Queries  *db.Queries
-	Producer wkafka.SyncWriter
+	Producer kafkafx.SyncProducer
 }
 
 func NewTracker(p TrackerParams) (*Tracker, error) {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
@@ -36,6 +37,7 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
+	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -43,26 +45,16 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "session-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
+		Kafka:   conf.Kafka,
 	}
 }
 
-func newSyncKafkaWriter(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.SyncWriter {
-	w := &kafka.Writer{
-		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
-		Balancer:               &kafka.Hash{},
-		Async:                  false,
-		AllowAutoTopicCreation: true,
+func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
+	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
+}
 
-		WriteBackoffMin: 20 * time.Millisecond,
-		WriteBackoffMax: 100 * time.Millisecond,
-		BatchTimeout:    100 * time.Millisecond,
-
-		//Logger:                 kafka.LoggerFunc(log.Infof),
-		ErrorLogger: kafka.LoggerFunc(log.Errorf),
-	}
-
-	lc.Append(fx.StopHook(w.Close))
-	return w
+func newAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
+	return kafkafx.NewAsyncKafkaProducer(conf, lc, log, kafkafx.WithInstantWrite())
 }
 
 func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {

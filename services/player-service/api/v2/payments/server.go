@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
@@ -40,7 +41,7 @@ type ServerParams struct {
 	Config     *config.Config
 
 	ReaderFactory wkafka.ReaderFactory
-	Producer      wkafka.SyncWriter
+	Producer      kafkafx.SyncProducer
 	Store         *db.Store
 	Authz         authz.Client
 	Posthog       posthog.Client
@@ -94,7 +95,7 @@ type server struct {
 
 	cancelConsumerCtx func()
 
-	producer   wkafka.SyncWriter
+	producer   kafkafx.SyncProducer
 	store      *db.Store
 	authClient authz.Client
 	posthog    posthog.Client

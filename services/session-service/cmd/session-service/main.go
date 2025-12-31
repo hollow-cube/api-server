@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
@@ -16,7 +15,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -45,7 +43,7 @@ func main() {
 		// Dependencies
 		fx.Invoke(setupPosthogClient),
 		fx.Provide(newKubernetesClient),
-		fx.Provide(newKafkaProducer, newSyncKafkaWriter, newKafkaReaderFactory),
+		fx.Provide(newAsyncKafkaProducer, newSyncKafkaProducer, newKafkaReaderFactory),
 		fx.Provide(newRedisClient),
 		fx.Provide(newPlayerSvc2, newMapServiceClient),
 		fx.Provide(newDbQuerySet),
@@ -101,22 +99,6 @@ func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 	}
 	//todo replace the klog logger with a zap version
 	return kubernetes.NewForConfig(k8sConfig)
-}
-
-func newKafkaProducer(log *zap.SugaredLogger, conf *config.Config) (*kafka.Writer, error) {
-	return &kafka.Writer{
-		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
-		ErrorLogger:            kafka.LoggerFunc(log.Errorf),
-		AllowAutoTopicCreation: true,
-
-		BatchSize: 1, // Send all messages immediately
-		Async:     true,
-		Completion: func(messages []kafka.Message, err error) {
-			if err != nil {
-				log.Errorw("failed to write message", "error", err)
-			}
-		},
-	}, nil
 }
 
 type v2RouteHandlerImpl struct {
