@@ -84,7 +84,7 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 		defer c.shutdownWg.Done()
 
 		for {
-			m, err := r.ReadMessage(ctx)
+			m, err := r.FetchMessage(ctx)
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
 					c.log.Errorf("failed to read kafka message: %v", err)
@@ -95,10 +95,10 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			// todo: in the future we could handle automatic error retries and DLQ logic in a common manner
 			if err := handler(ctx, m); err != nil {
 				c.log.Errorf("failed to handle kafka message: %v", err)
-				continue
+				continue // message not committed, will be redelivered
 			}
 
-			if err := r.CommitMessages(ctx, m); err != nil {
+			if err := r.CommitMessages(ctx, m); err != nil { // commit only after success
 				c.log.Errorf("failed to commit kafka message: %v", err)
 			}
 		}
