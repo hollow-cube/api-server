@@ -43,7 +43,7 @@ func main() {
 		// Dependencies
 		fx.Invoke(setupPosthogClient),
 		fx.Provide(newKubernetesClient),
-		fx.Provide(newAsyncKafkaProducer, newSyncKafkaProducer, newKafkaReaderFactory),
+		fx.Provide(newAsyncKafkaProducer, newSyncKafkaProducer),
 		fx.Provide(newRedisClient),
 		fx.Provide(newPlayerSvc2, newMapServiceClient),
 		fx.Provide(newDbQuerySet),

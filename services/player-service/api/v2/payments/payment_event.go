@@ -5,36 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
-func (s *server) processStoredEventStream(ctx context.Context, r wkafka.Reader, shutdown func()) {
-	for {
-		m, err := r.FetchMessage(ctx)
-		if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			break // EOF = no more messages
-		} else if err != nil {
-			s.log.Errorw("failed to fetch message from kafka", "error", err)
-			continue
-		}
-
+func (s *server) processStoredEventStream(c kafkafx.Consumer) {
+	c.Subscribe(payments.TebexMessageTopic, "session-service", func(ctx context.Context, m kafka.Message) error {
 		s.log.Infow("read tebex message", "key", string(m.Key), "offset", m.Offset)
-
 		event, err := tebex.ParseEvent(m.Value)
 		if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
-			s.log.Errorw("failed to parse tebex event", "error", err)
-			continue
+			return fmt.Errorf("failed to parse tebex event: %w", err)
 		}
 
 		switch sub := event.Subject.(type) {
@@ -72,22 +60,15 @@ func (s *server) processStoredEventStream(ctx context.Context, r wkafka.Reader, 
 				Value: m.Value,
 			}
 			if err = s.producer.WriteMessages(ctx, dlqMessage); err != nil {
-				s.log.Errorw("failed to write to kafka dlq", "error", err)
-				shutdown()
-				break
+				return fmt.Errorf("failed to write to kafka dlq: %w", err)
 			}
 		}
 
-		// Parsing the message went fine, so we can commit it.
-		if err = r.CommitMessages(ctx, m); err != nil {
-			s.log.Errorw("failed to commit message", "error", err)
-			shutdown()
-			break
-		}
-		s.log.Infow("committed tebex message", "key", string(m.Key), "offset", m.Offset)
-	}
+		// Parsing the message went fine. Returning a nil error will make kafkafx commit the message
+		s.log.Infow("finished handling tebex message...", "key", string(m.Key), "offset", m.Offset)
 
-	s.log.Info("tebex message processing loop ended")
+		return nil
+	})
 }
 
 func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentCompletedEvent) error {

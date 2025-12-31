@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
@@ -11,10 +10,8 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	posthog2 "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/wkafka"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -55,22 +52,6 @@ func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.Sug
 
 func newAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
 	return kafkafx.NewAsyncKafkaProducer(conf, lc, log, kafkafx.WithInstantWrite())
-}
-
-func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {
-	brokers := strings.Split(conf.Kafka.Brokers, ",")
-	return wkafka.ReaderFactoryFunc(func(topic string) wkafka.Reader {
-		r := kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  brokers,
-			GroupID:  "session-service",
-			Topic:    topic,
-			MaxBytes: 10e6, // 10mb
-			//Logger:      kafka.LoggerFunc(log.Infof),
-			ErrorLogger: kafka.LoggerFunc(log.Errorf),
-		})
-		lc.Append(fx.StopHook(r.Close))
-		return r
-	})
 }
 
 func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {

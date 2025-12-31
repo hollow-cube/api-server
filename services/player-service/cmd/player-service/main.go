@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,8 +26,6 @@ import (
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
-	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	"go.uber.org/fx"
@@ -58,7 +55,10 @@ func main() {
 
 		fx.Provide(newPostgresStore),
 		fx.Provide(newAuthzSpiceDB),
-		fx.Provide(newSyncKafkaProducer, newKafkaReaderFactory),
+
+		kafkafx.ConsumerModule,
+		fx.Provide(newSyncKafkaProducer),
+
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 		fx.Provide(newTebexHeadlessClient),
 
@@ -168,22 +168,6 @@ func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 
 func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
 	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
-}
-
-func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {
-	brokers := strings.Split(conf.Kafka.Brokers, ",")
-	return wkafka.ReaderFactoryFunc(func(topic string) wkafka.Reader {
-		r := kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  brokers,
-			GroupID:  serviceName,
-			Topic:    topic,
-			MaxBytes: 10e6, // 10mb
-			//Logger:      kafka.LoggerFunc(log.Infof),
-			ErrorLogger: kafka.LoggerFunc(log.Errorf),
-		})
-		lc.Append(fx.StopHook(r.Close))
-		return r
-	})
 }
 
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
