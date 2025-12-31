@@ -93,6 +93,12 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			}
 
 			// todo: in the future we could handle automatic error retries and DLQ logic in a common manner
+			// **REALLY IMPORTANT NOTE**:
+			// As this does not currently do DLQs for you, throwing an error you should consider the message lost.
+			// You may be lucky to handle it again, but not necessarily.
+			// When committing, Kafka treats that as committing up to that offset, so if a newer message is committed,
+			// it commits the previous failed message as well.
+			// A handler should implement a DLQ itself where necessary.
 			if err := handler(ctx, m); err != nil {
 				c.log.Errorf("failed to handle kafka message: %v", err)
 				continue // message not committed, will be redelivered
