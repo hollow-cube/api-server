@@ -1,3 +1,5 @@
+drop view if exists maps_published;
+
 create or replace view maps_published as
 select m.id,
        m.owner,
