@@ -124,15 +124,15 @@ func setupPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifec
 	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
-		Endpoint:       "https://us.i.posthog.com",
 	})
 	if err != nil {
 		return err
 	}
 
 	nonLocalClient, err := posthog.NewWithConfig(apiKey, posthog.Config{
-		Endpoint: "https://us.i.posthog.com",
+		Endpoint: conf.Posthog.Endpoint,
 	})
 	if err != nil {
 		return err

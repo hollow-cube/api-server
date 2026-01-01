@@ -17,6 +17,9 @@ spicedb:
 kafka:
   brokers: kafka:9092
 
+redis:
+  address: localhost:6379
+
 tebex:
   private_key: ""
   secret: "abc"
@@ -30,6 +33,7 @@ otlp:
   endpoint: ""
 
 posthog:
+  endpoint: "http://localhost:9124/posthog"
   personal_api_key: ""
 
 unleash:

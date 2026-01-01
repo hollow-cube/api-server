@@ -16,6 +16,8 @@ base:
 
     MAPS_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
 
+    MAPS_POSTHOG_ENDPOINT: "http://player-service.mapmaker.svc.cluster.local:9124/posthog"
+
     MAPS_PLAYER_SERVICE_URL: "http://player-service.mapmaker.svc.cluster.local:9124"
 
     MAPS_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"

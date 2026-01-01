@@ -273,8 +273,8 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
-		Endpoint:       "https://us.i.posthog.com",
 	})
 	if err != nil {
 		return nil, err

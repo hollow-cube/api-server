@@ -44,6 +44,7 @@ type SpiceDB struct {
 }
 
 type Posthog struct {
+	Endpoint       string `mapstructure:"endpoint"`
 	PersonalApiKey string `mapstructure:"personal_api_key"` // Required for feature flags
 }
 
