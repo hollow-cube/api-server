@@ -10,7 +10,6 @@ import (
 	"io"
 
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -106,11 +105,9 @@ func (s *server) ListPlayerSchematics(ctx context.Context, request ListPlayerSch
 func (s *server) GetSchematicData(ctx context.Context, request GetSchematicDataRequestObject) (GetSchematicDataResponseObject, error) {
 	//todo validate schem name
 	data, err := s.store.TfGetSchematicData(ctx, request.PlayerId, request.SchemName)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetSchematicData404Response{}, nil
-		}
-
+	if errors.Is(err, db.ErrNoRows) {
+		return GetSchematicData404Response{}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -176,12 +173,12 @@ func (s *server) CreateSchematic(ctx context.Context, request CreateSchematicReq
 
 func (s *server) DeleteSchematic(ctx context.Context, request DeleteSchematicRequestObject) (DeleteSchematicResponseObject, error) {
 	//todo validate schem name
-	if err := s.store.TfDeleteSchematic(ctx, request.PlayerId, request.SchemName); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return DeleteSchematic404Response{}, nil
-		}
-
+	deleted, err := s.store.TfDeleteSchematic(ctx, request.PlayerId, request.SchemName)
+	if err != nil {
 		return nil, fmt.Errorf("failed to delete schematic: %w", err)
+	}
+	if deleted == 0 {
+		return DeleteSchematic404Response{}, nil
 	}
 
 	return DeleteSchematic200Response{}, nil

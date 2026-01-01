@@ -16,7 +16,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/redis/rueidis"
@@ -245,11 +244,9 @@ func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMa
 
 func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
@@ -430,7 +427,7 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 	// END HARDCODED SPAWN BEHAVIOR
 
 	m, err := s.store.GetMapById(ctx, request.MapId)
-	if errors.Is(err, storage.ErrNotFound) {
+	if errors.Is(err, db.ErrNoRows) {
 		return MapNotFoundResponse{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
@@ -751,13 +748,13 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 }
 
 var (
-	mapSortMap = map[MapSortType]storage.MapSortType{
-		Best:      storage.MapSortBest,
-		Published: storage.MapSortPublished,
+	mapSortMap = map[MapSortType]model.MapSortType{
+		Best:      model.MapSortBest,
+		Published: model.MapSortPublished,
 	}
-	mapSortOrderMap = map[MapSortOrder]storage.MapSortOrder{
-		Asc:  storage.MapSortAsc,
-		Desc: storage.MapSortDesc,
+	mapSortOrderMap = map[MapSortOrder]model.MapSortOrder{
+		Asc:  model.MapSortAsc,
+		Desc: model.MapSortDesc,
 	}
 )
 
@@ -789,7 +786,7 @@ func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) s
 			return fmt.Sprintf("invalid sort value: %s", *req.Sort)
 		}
 	} else {
-		params.Sort = storage.MapSortBest
+		params.Sort = model.MapSortBest
 	}
 	if req.SortOrder != nil && *req.SortOrder != "" {
 		params.SortOrder, ok = mapSortOrderMap[*req.SortOrder]
@@ -797,7 +794,7 @@ func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) s
 			return fmt.Sprintf("invalid sort order: %s", *req.SortOrder)
 		}
 	} else {
-		params.SortOrder = storage.MapSortDesc
+		params.SortOrder = model.MapSortDesc
 	}
 
 	if req.Parkour != nil && *req.Parkour {

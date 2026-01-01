@@ -43,7 +43,7 @@ set dimensions = $3,
 where player_id = $1
   and name = $2;
 
--- name: TfDeleteSchematic :exec
+-- name: TfDeleteSchematic :execrows
 delete
 from tf_schematics
 where player_id = $1

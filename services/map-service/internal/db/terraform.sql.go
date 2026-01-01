@@ -35,16 +35,19 @@ func (q *Queries) TfCreateSchematic(ctx context.Context, arg TfCreateSchematicPa
 	return err
 }
 
-const tfDeleteSchematic = `-- name: TfDeleteSchematic :exec
+const tfDeleteSchematic = `-- name: TfDeleteSchematic :execrows
 delete
 from tf_schematics
 where player_id = $1
   and name = $2
 `
 
-func (q *Queries) TfDeleteSchematic(ctx context.Context, playerID string, name string) error {
-	_, err := q.db.Exec(ctx, tfDeleteSchematic, playerID, name)
-	return err
+func (q *Queries) TfDeleteSchematic(ctx context.Context, playerID string, name string) (int64, error) {
+	result, err := q.db.Exec(ctx, tfDeleteSchematic, playerID, name)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const tfGetAllSchematics = `-- name: TfGetAllSchematics :many

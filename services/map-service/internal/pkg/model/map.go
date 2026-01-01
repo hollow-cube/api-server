@@ -269,6 +269,21 @@ var ReportCategoryNameMap = []string{
 	"Spam", "Troll Map",
 }
 
+type MapSortOrder = string
+
+const (
+	MapSortAsc  MapSortOrder = "asc"
+	MapSortDesc MapSortOrder = "desc"
+)
+
+type MapSortType = string
+
+const (
+	MapSortBest      MapSortType = "best"
+	MapSortPublished MapSortType = "published"
+	MapSortRandom    MapSortType = "random"
+)
+
 type MapIdAndProgress struct {
 	MapId    string
 	Progress int
