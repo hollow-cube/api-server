@@ -35,7 +35,7 @@ func (s *server) ensurePermForMapSize(ctx context.Context, playerId string, size
 	return true, nil
 }
 
-func (s *server) hasFreeMapSlot(ctx context.Context, pd db.MapPlayerData) (bool, error) {
+func (s *server) hasFreeMapSlot(ctx context.Context, pd *db.MapPlayerData) (bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
@@ -55,7 +55,7 @@ func (s *server) hasFreeMapSlot(ctx context.Context, pd db.MapPlayerData) (bool,
 	return false, nil
 }
 
-func (s *server) addMapToSlot(ctx context.Context, pd db.MapPlayerData, mapId string, slot int) (bool, error) {
+func (s *server) addMapToSlot(ctx context.Context, pd *db.MapPlayerData, mapId string, slot int) (bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
@@ -78,7 +78,7 @@ func (s *server) addMapToSlot(ctx context.Context, pd db.MapPlayerData, mapId st
 	return true, nil
 }
 
-func (s *server) addMapToFreeSlot(ctx context.Context, pd db.MapPlayerData, mapId string) (int, bool, error) {
+func (s *server) addMapToFreeSlot(ctx context.Context, pd *db.MapPlayerData, mapId string) (int, bool, error) {
 	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return -1, false, err
@@ -114,7 +114,7 @@ func (s *server) revokeMapFromSlots(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *server) getUnlockedSlots(ctx context.Context, pd db.MapPlayerData) (int, error) {
+func (s *server) getUnlockedSlots(ctx context.Context, pd *db.MapPlayerData) (int, error) {
 	slots, err := s.getTotalSlotsFromPerm(ctx, pd)
 	if err != nil {
 		return 0, err
@@ -122,7 +122,7 @@ func (s *server) getUnlockedSlots(ctx context.Context, pd db.MapPlayerData) (int
 	return slots, nil
 }
 
-func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd db.MapPlayerData) (int, error) {
+func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *db.MapPlayerData) (int, error) {
 	// This is pretty dumb logic, but uh... oh well.
 	state, err := s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot3)
 	if err != nil {

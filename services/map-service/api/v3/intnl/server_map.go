@@ -75,7 +75,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 
 		// Add to the given slot or a free slot (if available)
 		if request.Body.Slot != nil {
-			added, err := s.addMapToSlot(ctx, pd, m.ID, *request.Body.Slot)
+			added, err := s.addMapToSlot(ctx, &pd, m.ID, *request.Body.Slot)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add map to slot: %w", err)
 			}
@@ -85,7 +85,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 				}}, nil
 			}
 		} else {
-			_, ok, err := s.addMapToFreeSlot(ctx, pd, m.ID)
+			_, ok, err := s.addMapToFreeSlot(ctx, &pd, m.ID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add map to slot: %w", err)
 			}
