@@ -180,6 +180,10 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		s.log.Warnw("save state being completed with zero playtime", "mapId", request.MapId, "playerId", request.PlayerId, "saveStateId", request.SaveStateId)
 	}
 
+	if ss.Playtime > update.Playtime {
+		s.log.Warnw("save state playtime being decreased", "mapId", request.MapId, "playerId", request.PlayerId, "saveStateId", request.SaveStateId, "oldPlaytime", ss.Playtime, "newPlaytime", update.Playtime)
+	}
+
 	// If the save state is completed never store the play/edit state of it.
 	if update.Completed {
 		update.StateV2 = []byte("null")
