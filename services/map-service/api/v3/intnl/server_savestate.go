@@ -87,7 +87,7 @@ func (s *server) GetBestSaveState(ctx context.Context, request GetBestSaveStateR
 }
 
 func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateRequestObject) (UpdateSaveStateResponseObject, error) {
-	ss, err := s.store.GetSaveState(ctx, request.MapId, request.PlayerId, request.SaveStateId)
+	ss, err := s.store.GetSaveState(ctx, request.SaveStateId, request.MapId, request.PlayerId)
 	if errors.Is(err, db.ErrNoRows) {
 		if request.Body.Type == nil {
 			return SaveStateNotFoundResponse{}, nil
