@@ -123,6 +123,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		MapID:           ss.MapID,
 		PlayerID:        ss.PlayerID,
 		Type:            ss.Type,
+		Created:         ss.Created,
 		Updated:         util.CurrentTime(),
 		Completed:       ss.Completed,
 		Playtime:        ss.Playtime,
