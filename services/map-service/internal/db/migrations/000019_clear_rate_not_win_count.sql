@@ -31,7 +31,7 @@ select m.id,
        coalesce(stats.play_count, 0) as play_count,
        coalesce(stats.win_count, 0) as win_count,
        coalesce(likes.total_likes, 0) as total_likes,
-       coalesce(stats.clear_rate, 0) as clear_rate,
+       coalesce(stats.clear_rate::float, 0::float)::float as clear_rate,
        case
          when stats.play_count < 10 then -1
          when stats.clear_rate < 0.05 then 4

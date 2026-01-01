@@ -146,7 +146,7 @@ type PublishedMap struct {
 	PlayCount       int        `json:"playCount"`
 	WinCount        int        `json:"winCount"`
 	TotalLikes      int64      `json:"totalLikes"`
-	ClearRate       int        `json:"clearRate"`
+	ClearRate       float64    `json:"clearRate"`
 	Difficulty      int32      `json:"difficulty"`
 }
 
