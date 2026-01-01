@@ -1,1 +1,0 @@
-ALTER TABLE obungus_pending_boxes DROP COLUMN IF EXISTS legacy_username;

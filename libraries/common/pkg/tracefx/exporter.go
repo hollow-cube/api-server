@@ -11,6 +11,9 @@ import (
 )
 
 func NewHttpExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
+	if config.Endpoint == "" {
+		return NewNoopExporter()
+	}
 	return otlptracehttp.New(
 		context.Background(),
 		otlptracehttp.WithInsecure(),

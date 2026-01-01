@@ -9,92 +9,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
-	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
-// Defines values for GetMapWorldParamsAccept.
-const (
-	GetMapWorldParamsAcceptApplicationvndHollowcubeAnvil GetMapWorldParamsAccept = "application/vnd.hollowcube.anvil"
-	GetMapWorldParamsAcceptApplicationvndHollowcubePolar GetMapWorldParamsAccept = "application/vnd.hollowcube.polar"
-)
-
-// Defines values for UpdateMapWorldParamsContentType.
-const (
-	UpdateMapWorldParamsContentTypeApplicationvndHollowcubeAnvil UpdateMapWorldParamsContentType = "application/vnd.hollowcube.anvil"
-	UpdateMapWorldParamsContentTypeApplicationvndHollowcubePolar UpdateMapWorldParamsContentType = "application/vnd.hollowcube.polar"
-)
-
-// Point defines model for Point.
-type Point struct {
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
-	Z float32 `json:"z"`
-}
-
-// Pos defines model for Pos.
-type Pos struct {
-	Pitch float32 `json:"pitch"`
-	X     float32 `json:"x"`
-	Y     float32 `json:"y"`
-	Yaw   float32 `json:"yaw"`
-	Z     float32 `json:"z"`
-}
-
-// CreateMapJSONBody defines parameters for CreateMap.
-type CreateMapJSONBody struct {
-	// ExtraData Extra metadata to store with the map
-	ExtraData *map[string]interface{} `json:"extraData,omitempty"`
-
-	// LegacyMapId The ID of the legacy map to import, or null if not any type of 'legacy' map
-	LegacyMapId *string `json:"legacyMapId,omitempty"`
-
-	// Name The name of the map
-	Name string `json:"name"`
-
-	// OrgId The ID of the organization who owns the map
-	OrgId      string `json:"orgId"`
-	SpawnPoint Pos    `json:"spawnPoint"`
-}
-
-// GetMapWorldParams defines parameters for GetMapWorld.
-type GetMapWorldParams struct {
-	// Accept The content type (world format) to return, defaults to Anvil (latest).
-	Accept *GetMapWorldParamsAccept `json:"accept,omitempty"`
-}
-
-// GetMapWorldParamsAccept defines parameters for GetMapWorld.
-type GetMapWorldParamsAccept string
-
-// UpdateMapWorldParams defines parameters for UpdateMapWorld.
-type UpdateMapWorldParams struct {
-	// ContentType The content type (world format) being uploaded, defaults to Anvil (latest).
-	ContentType *UpdateMapWorldParamsContentType `json:"content-type,omitempty"`
-}
-
-// UpdateMapWorldParamsContentType defines parameters for UpdateMapWorld.
-type UpdateMapWorldParamsContentType string
-
-// CreateMapJSONRequestBody defines body for CreateMap for application/json ContentType.
-type CreateMapJSONRequestBody CreateMapJSONBody
-
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Create a new map
-	// (POST /)
-	CreateMap(w http.ResponseWriter, r *http.Request)
-	// Fetch publicmap statistics
+	// Fetch public map statistics
 	// (GET /stats)
 	GetMapStats(w http.ResponseWriter, r *http.Request)
-	// Fetch a map world by ID
-	// (GET /{mapId}/world)
-	GetMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params GetMapWorldParams)
-	// Update a map world by ID
-	// (PUT /{mapId}/world)
-	UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params UpdateMapWorldParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -106,123 +30,11 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// CreateMap operation middleware
-func (siw *ServerInterfaceWrapper) CreateMap(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateMap(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetMapStats operation middleware
 func (siw *ServerInterfaceWrapper) GetMapStats(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMapStats(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetMapWorld operation middleware
-func (siw *ServerInterfaceWrapper) GetMapWorld(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "mapId" -------------
-	var mapId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: false})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetMapWorldParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "accept" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("accept")]; found {
-		var Accept GetMapWorldParamsAccept
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "accept", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "accept", valueList[0], &Accept, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accept", Err: err})
-			return
-		}
-
-		params.Accept = &Accept
-
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetMapWorld(w, r, mapId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateMapWorld operation middleware
-func (siw *ServerInterfaceWrapper) UpdateMapWorld(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "mapId" -------------
-	var mapId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: false})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdateMapWorldParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "content-type" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("content-type")]; found {
-		var ContentType UpdateMapWorldParamsContentType
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "content-type", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "content-type", valueList[0], &ContentType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "content-type", Err: err})
-			return
-		}
-
-		params.ContentType = &ContentType
-
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateMapWorld(w, r, mapId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -352,37 +164,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("POST "+options.BaseURL+"/", wrapper.CreateMap)
 	m.HandleFunc("GET "+options.BaseURL+"/stats", wrapper.GetMapStats)
-	m.HandleFunc("GET "+options.BaseURL+"/{mapId}/world", wrapper.GetMapWorld)
-	m.HandleFunc("PUT "+options.BaseURL+"/{mapId}/world", wrapper.UpdateMapWorld)
 
 	return m
-}
-
-type CreateMapRequestObject struct {
-	Body *CreateMapJSONRequestBody
-}
-
-type CreateMapResponseObject interface {
-	VisitCreateMapResponse(w http.ResponseWriter) error
-}
-
-type CreateMap200JSONResponse map[string]interface{}
-
-func (response CreateMap200JSONResponse) VisitCreateMapResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type CreateMap404Response struct {
-}
-
-func (response CreateMap404Response) VisitCreateMapResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
 }
 
 type GetMapStatsRequestObject struct {
@@ -407,109 +191,11 @@ func (response GetMapStats200JSONResponse) VisitGetMapStatsResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetMapWorldRequestObject struct {
-	MapId  string `json:"mapId,omitempty"`
-	Params GetMapWorldParams
-}
-
-type GetMapWorldResponseObject interface {
-	VisitGetMapWorldResponse(w http.ResponseWriter) error
-}
-
-type GetMapWorld200ApplicationvndHollowcubeAnvilResponse struct {
-	Body          io.Reader
-	ContentLength int64
-}
-
-func (response GetMapWorld200ApplicationvndHollowcubeAnvilResponse) VisitGetMapWorldResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/vnd.hollowcube.anvil")
-	if response.ContentLength != 0 {
-		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
-	}
-	w.WriteHeader(200)
-
-	if closer, ok := response.Body.(io.ReadCloser); ok {
-		defer closer.Close()
-	}
-	_, err := io.Copy(w, response.Body)
-	return err
-}
-
-type GetMapWorld200ApplicationvndHollowcubePolarResponse struct {
-	Body          io.Reader
-	ContentLength int64
-}
-
-func (response GetMapWorld200ApplicationvndHollowcubePolarResponse) VisitGetMapWorldResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/vnd.hollowcube.polar")
-	if response.ContentLength != 0 {
-		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
-	}
-	w.WriteHeader(200)
-
-	if closer, ok := response.Body.(io.ReadCloser); ok {
-		defer closer.Close()
-	}
-	_, err := io.Copy(w, response.Body)
-	return err
-}
-
-type GetMapWorld204Response struct {
-}
-
-func (response GetMapWorld204Response) VisitGetMapWorldResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type GetMapWorld404Response struct {
-}
-
-func (response GetMapWorld404Response) VisitGetMapWorldResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type UpdateMapWorldRequestObject struct {
-	MapId  string `json:"mapId,omitempty"`
-	Params UpdateMapWorldParams
-	Body   io.Reader
-}
-
-type UpdateMapWorldResponseObject interface {
-	VisitUpdateMapWorldResponse(w http.ResponseWriter) error
-}
-
-type UpdateMapWorld204Response struct {
-}
-
-func (response UpdateMapWorld204Response) VisitUpdateMapWorldResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type UpdateMapWorld404Response struct {
-}
-
-func (response UpdateMapWorld404Response) VisitUpdateMapWorldResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// Create a new map
-	// (POST /)
-	CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error)
-	// Fetch publicmap statistics
+	// Fetch public map statistics
 	// (GET /stats)
 	GetMapStats(ctx context.Context, request GetMapStatsRequestObject) (GetMapStatsResponseObject, error)
-	// Fetch a map world by ID
-	// (GET /{mapId}/world)
-	GetMapWorld(ctx context.Context, request GetMapWorldRequestObject) (GetMapWorldResponseObject, error)
-	// Update a map world by ID
-	// (PUT /{mapId}/world)
-	UpdateMapWorld(ctx context.Context, request UpdateMapWorldRequestObject) (UpdateMapWorldResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -541,37 +227,6 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// CreateMap operation middleware
-func (sh *strictHandler) CreateMap(w http.ResponseWriter, r *http.Request) {
-	var request CreateMapRequestObject
-
-	var body CreateMapJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateMap(ctx, request.(CreateMapRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateMap")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateMapResponseObject); ok {
-		if err := validResponse.VisitCreateMapResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetMapStats operation middleware
 func (sh *strictHandler) GetMapStats(w http.ResponseWriter, r *http.Request) {
 	var request GetMapStatsRequestObject
@@ -589,62 +244,6 @@ func (sh *strictHandler) GetMapStats(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMapStatsResponseObject); ok {
 		if err := validResponse.VisitGetMapStatsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetMapWorld operation middleware
-func (sh *strictHandler) GetMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params GetMapWorldParams) {
-	var request GetMapWorldRequestObject
-
-	request.MapId = mapId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetMapWorld(ctx, request.(GetMapWorldRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetMapWorld")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetMapWorldResponseObject); ok {
-		if err := validResponse.VisitGetMapWorldResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateMapWorld operation middleware
-func (sh *strictHandler) UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params UpdateMapWorldParams) {
-	var request UpdateMapWorldRequestObject
-
-	request.MapId = mapId
-	request.Params = params
-
-	request.Body = r.Body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateMapWorld(ctx, request.(UpdateMapWorldRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateMapWorld")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateMapWorldResponseObject); ok {
-		if err := validResponse.VisitUpdateMapWorldResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

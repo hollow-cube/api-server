@@ -13,10 +13,12 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	commonV1 "github.com/hollow-cube/hc-services/libraries/common/pkg/api"
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
+	v3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/legacy"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model/transform"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -57,10 +59,11 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 
 	//todo permissions
 
-	playerData, err := h.storageClient.GetPlayerData(ctx, userId)
+	playerData, err := h.store.GetPlayerData(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
+
 	hasFreeSlot, err := h.HasFreeMapSlot(ctx, playerData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check free slots: %w", err)
@@ -83,10 +86,10 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 	if err != nil {
 		return nil, err
 	}
-	m.Type = model.TypeLegacy
-	m.Settings.Name = info.Name
-	m.Settings.Icon, _ = legacy.ConvertItem(info.DisplayItem)
-	m.Settings.Variant = model.Parkour
+	m.MType = string(model.TypeLegacy)
+	m.Column4 = info.Name
+	m.Column5, _ = legacy.ConvertItem(info.DisplayItem)
+	m.OptVariant = string(model.Parkour)
 
 	spawnPointParts := strings.Split(info.StartLocation, ":")
 	if len(spawnPointParts) == 6 {
@@ -100,7 +103,7 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 		pitch, pitcherr := strconv.ParseFloat(spawnPointParts[4], 64)
 
 		if xerr == nil && yerr == nil && zerr == nil && yawerr == nil && pitcherr == nil {
-			m.Settings.SpawnPoint = model.Pos{
+			m.OptSpawnPoint = db.Pos{
 				X: x, Y: y, Z: z,
 				Yaw: yaw, Pitch: pitch,
 			}
@@ -111,24 +114,24 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 		h.log.Warnw("unknown legacy spawn point format", "spawnPoint", info.StartLocation)
 	}
 
-	slot, _, err := h.AddMapToFreeSlot(ctx, playerData, m.Id) // Always OK because we checked above that this is fine.
+	slot, _, err := h.AddMapToFreeSlot(ctx, playerData, m.ID) // Always OK because we checked above that this is fine.
 	if err != nil {
 		return nil, fmt.Errorf("failed to add slot to free slot: %w", err)
 	}
 
-	if err = h.fetchAndMigrateLegacyMapWorld(ctx, m, info); err != nil {
+	if err = h.fetchAndMigrateLegacyMapWorld(ctx, *m, info); err != nil {
 		return nil, err
 	}
 
-	err = h.safeWriteMapToDatabase(ctx, m, playerData)
+	created, err := h.safeWriteMapToDatabase(ctx, *m, &playerData)
 	if err != nil {
 		return nil, err
 	}
 
-	go h.metrics.Write(model.MapImportedEvent{PlayerId: playerData.Id, Format: "legacy"})
+	go h.metrics.Write(model.MapImportedEvent{PlayerId: playerData.ID, Format: "legacy"})
 
 	return &v1.MapWithSlot{
-		MapData: *transform.Map2API(m),
+		MapData: hydrateMap(created),
 		Slot:    slot,
 	}, nil
 }
@@ -194,7 +197,7 @@ func (l *legacyDataCache) GetLegacyMap(ctx context.Context, playerId, legacyMapI
 	return infos[legacyMapId], nil
 }
 
-func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, m *model.Map, info *legacyMapInfo) error {
+func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, m db.CreateMapParams, info *legacyMapInfo) error {
 	mapDataPath := fmt.Sprintf("/%s/%s/%d.polar", info.PlayerID[0:2], info.PlayerID, info.ID)
 	zap.S().Infow("trying to download legacy map", "path", mapDataPath)
 	worldData, err := h.legacyData.client.Download(ctx, mapDataPath)
@@ -205,9 +208,93 @@ func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, m *
 		return fmt.Errorf("failed to download legacy map: %w", err)
 	}
 
-	if err = h.objectClient.Upload(ctx, m.Id, worldData); err != nil {
+	if err = h.objectClient.Upload(ctx, m.ID, worldData); err != nil {
 		return fmt.Errorf("failed to upload map converted: %w", err)
 	}
 
 	return nil
+}
+
+func hydrateMap(m db.Map) v3.MapData {
+	extra := make(map[string]interface{})
+	if m.OptExtra != nil {
+		_ = json.Unmarshal(m.OptExtra, &extra)
+	}
+	if m.OptOnlySprint != nil && *m.OptOnlySprint {
+		extra["only_sprint"] = true
+	}
+	if m.OptNoSprint != nil && *m.OptNoSprint {
+		extra["no_sprint"] = true
+	}
+	if m.OptNoJump != nil && *m.OptNoJump {
+		extra["no_jump"] = true
+	}
+	if m.OptNoSneak != nil && *m.OptNoSneak {
+		extra["no_sneak"] = true
+	}
+	if m.OptBoat != nil && *m.OptBoat {
+		extra["boat"] = true
+	}
+
+	return v3.MapData{
+		Id:              m.ID,
+		Owner:           m.Owner,
+		CreatedAt:       m.CreatedAt,
+		LastModified:    m.UpdatedAt,
+		ProtocolVersion: *m.ProtocolVersion, // todo shouldnt be nullable in db
+
+		Verification: v3.Unverified,
+		Settings: v3.MapSettings{
+			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
+			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
+			Size:       mapSizeToAPI(m.Size),
+			Variant:    v3.Parkour,
+			Subvariant: m.OptSubvariant,
+			Tags:       m.OptTags,
+			SpawnPoint: posToAPI(m.OptSpawnPoint),
+			Extra:      extra,
+		},
+
+		PublishedId: m.PublishedID,
+		PublishedAt: m.PublishedAt,
+		Listed:      m.Listed,
+
+		Quality:    v3.MapQualityUnrated,
+		Difficulty: v3.Unknown,
+
+		Objects: nil,
+
+		Contest: m.Contest,
+	}
+}
+
+func mapSizeToAPI(size int64) v3.MapSize {
+	switch size {
+	case model.MapSizeNormal:
+		return v3.Normal
+	case model.MapSizeLarge:
+		return v3.Large
+	case model.MapSizeMassive:
+		return v3.Massive
+	case model.MapSizeColossal:
+		return v3.Colossal
+	case model.MapSizeUnlimited:
+		return v3.Unlimited
+	case model.MapSizeTall2k:
+		return v3.Tall2k
+	case model.MapSizeTall4k:
+		return v3.Tall4k
+	default:
+		return v3.Normal
+	}
+}
+
+func posToAPI(pos db.Pos) v3.Pos {
+	return v3.Pos{
+		X:     float32(pos.X),
+		Y:     float32(pos.Y),
+		Z:     float32(pos.Z),
+		Yaw:   float32(pos.Yaw),
+		Pitch: float32(pos.Pitch),
+	}
 }

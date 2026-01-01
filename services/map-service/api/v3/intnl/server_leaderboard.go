@@ -16,12 +16,12 @@ func (s *server) GetGlobalLeaderboard(ctx context.Context, request GetGlobalLead
 	if playerId != nil && *playerId != "" {
 		// Fetch the player score (if present)
 
-		var score int
+		var score int64
 		var err error
 		if leaderboardName == "top_times" {
-			score, err = s.storageClient.GetTopTimesLeaderboardForPlayer(ctx, *playerId)
+			score, err = s.store.GetTopTimesLeaderboardForPlayer(ctx, *playerId)
 		} else if leaderboardName == "maps_beaten" {
-			score, err = s.storageClient.GetMapsBeatenLeaderboardForPlayer(ctx, *playerId)
+			score, err = s.store.GetMapsBeatenLeaderboardForPlayer(ctx, *playerId)
 		} else {
 			return GetGlobalLeaderboard404Response{}, nil
 		}
@@ -32,37 +32,50 @@ func (s *server) GetGlobalLeaderboard(ctx context.Context, request GetGlobalLead
 		return &GetGlobalLeaderboard200JSONResponse{LeaderboardDataJSONResponse{
 			Player: &LeaderboardEntry{
 				Player: *playerId,
-				Score:  score,
+				Score:  int(score),
 				Rank:   -1,
 			},
 		}}, nil
 	}
 
 	// Fetch top 10
-	var entries []*model.LeaderboardEntry
-	var err error
 	if leaderboardName == "top_times" {
-		entries, err = s.storageClient.GetTopTimesLeaderboard(ctx)
+		entries, err := s.store.GetTopTimesLeaderboard(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch leaderboard: %w", err)
+		}
+
+		var result LeaderboardDataJSONResponse
+		result.Top = make([]LeaderboardEntry, len(entries))
+		for i, entry := range entries {
+			result.Top[i] = LeaderboardEntry{
+				Player: entry.PlayerID,
+				Score:  int(entry.TopTimes),
+				Rank:   i + 1,
+			}
+		}
+
+		return &GetGlobalLeaderboard200JSONResponse{result}, nil
 	} else if leaderboardName == "maps_beaten" {
-		entries, err = s.storageClient.GetMapsBeatenLeaderboard(ctx)
+		entries, err := s.store.GetMapsBeatenLeaderboard(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch leaderboard: %w", err)
+		}
+
+		var result LeaderboardDataJSONResponse
+		result.Top = make([]LeaderboardEntry, len(entries))
+		for i, entry := range entries {
+			result.Top[i] = LeaderboardEntry{
+				Player: entry.PlayerID,
+				Score:  int(entry.UniqueMapsBeaten),
+				Rank:   i + 1,
+			}
+		}
+
+		return &GetGlobalLeaderboard200JSONResponse{result}, nil
 	} else {
 		return GetGlobalLeaderboard404Response{}, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch leaderboard: %w", err)
-	}
-
-	var result LeaderboardDataJSONResponse
-	result.Top = make([]LeaderboardEntry, len(entries))
-	for i, entry := range entries {
-		result.Top[i] = LeaderboardEntry{
-			Player: entry.PlayerId,
-			Score:  entry.Score,
-			Rank:   i + 1,
-		}
-	}
-
-	return &GetGlobalLeaderboard200JSONResponse{result}, nil
 }
 
 func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboardRequestObject) (GetMapLeaderboardResponseObject, error) {
@@ -141,7 +154,7 @@ func (s *server) DeleteMapLeaderboard(ctx context.Context, request DeleteMapLead
 	playerId := request.Params.PlayerId
 	if playerId == nil || *playerId == "" {
 		// We cannot do the two deletions in a transaction, so do the savestate first because it is the more important one.
-		err := s.storageClient.SoftDeleteMapSaveStates(ctx, request.MapId, false)
+		err := s.store.Unsafe_DeleteMapSaveStates(ctx, request.MapId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mark save states for deletion: %w", err)
 		}
@@ -151,7 +164,7 @@ func (s *server) DeleteMapLeaderboard(ctx context.Context, request DeleteMapLead
 		}
 	} else {
 		// We cannot do the two deletions in a transaction, so do the savestate first because it is the more important one.
-		err := s.storageClient.SoftDeleteMapPlayerSaveStates(ctx, request.MapId, *playerId)
+		err := s.store.DeleteMapPlayerSaveStates(ctx, request.MapId, *playerId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mark save states for deletion: %w", err)
 		}
@@ -171,17 +184,17 @@ func (s *server) RestoreMapLeaderboard(ctx context.Context, request RestoreMapLe
 	leaderboardKey := mapLeaderboardKey(request.MapId, request.LeaderboardName)
 
 	// Confirm that the map is a parkour map, otherwise do nothing (its not currently an error)
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
+	m, err := s.store.GetMapById(ctx, request.MapId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
-	if m.Settings.Variant != model.Parkour {
+	if m.OptVariant != string(model.Parkour) {
 		return RestoreMapLeaderboard200Response{}, nil
 	}
 
 	// Fetch all save states for this map and rewrite them into redis
 	// TODO: This should really be paged it could be a ton of entries.
-	saveStates, err := s.storageClient.GetAllSaveStates(ctx, request.MapId)
+	saveStates, err := s.store.GetAllSaveStates(ctx, request.MapId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch save states: %w", err)
 	}
@@ -189,7 +202,7 @@ func (s *server) RestoreMapLeaderboard(ctx context.Context, request RestoreMapLe
 	cmds := make(rueidis.Commands, len(saveStates))
 	for i, saveState := range saveStates {
 		cmds[i] = s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-			ScoreMember(float64(saveState.PlayTime), string(common.UUIDToBin(saveState.PlayerId))).Build()
+			ScoreMember(float64(saveState.Playtime), string(common.UUIDToBin(saveState.PlayerID))).Build()
 	}
 	for _, resp := range s.redis.DoMulti(ctx, cmds...) {
 		if err = resp.Error(); err != nil {

@@ -1,5 +1,7 @@
 package model
 
+import "github.com/hollow-cube/hc-services/services/map-service/internal/db"
+
 // PlayerData represents player data related to maps in particular
 type PlayerData struct {
 	Id            string   `json:"id"`
@@ -24,5 +26,5 @@ const (
 
 type PlayerDataUpdateMessage struct {
 	Action PlayerDataUpdateAction `json:"action"`
-	Data   *PlayerData            `json:"data"` // Present for Update
+	Data   db.MapPlayerData       `json:"data"` // Present for Update
 }

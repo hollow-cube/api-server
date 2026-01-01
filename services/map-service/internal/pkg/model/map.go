@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
+	"github.com/google/uuid"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 )
 
 // MapmakerSpawnMapId is the hardcoded Id of the spawn map in the dev server for now
@@ -269,28 +269,39 @@ var ReportCategoryNameMap = []string{
 	"Spam", "Troll Map",
 }
 
+type MapSortOrder = string
+
+const (
+	MapSortAsc  MapSortOrder = "asc"
+	MapSortDesc MapSortOrder = "desc"
+)
+
+type MapSortType = string
+
+const (
+	MapSortBest      MapSortType = "best"
+	MapSortPublished MapSortType = "published"
+	MapSortRandom    MapSortType = "random"
+)
+
 type MapIdAndProgress struct {
 	MapId    string
 	Progress int
 	Playtime int
 }
 
-func CreateDefaultMap(owner string, size int) (*Map, error) {
-	var m Map
-	m.Id = common.NewUUID()
+func CreateDefaultMap(owner string, size int) (*db.CreateMapParams, error) {
+	var m db.CreateMapParams
+	m.ID = uuid.NewString()
 	m.Owner = owner
-	m.Type = TypeDefault
-	now := util.CurrentTime()
-	m.CreatedAt = now
-	m.UpdatedAt = now
-	m.ProtocolVersion = 769 // Default to 1.21.4
+	m.MType = string(TypeDefault)
 
 	if size > MapSize__Max {
 		return nil, fmt.Errorf("invalid map size: %d", size)
 	}
-	m.Settings.Size = size
-	m.Settings.Variant = Parkour
-	m.Settings.SpawnPoint = Pos{0, 40, 0, 90, 0}
+	m.Size = int64(size)
+	m.OptVariant = string(Parkour)
+	m.OptSpawnPoint = db.Pos{0, 40, 0, 90, 0}
 
 	return &m, nil
 }

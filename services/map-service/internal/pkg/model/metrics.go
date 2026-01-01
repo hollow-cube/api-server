@@ -10,8 +10,8 @@ type MapCreatedEvent struct {
 type MapPublishedEvent struct {
 	PlayerId       string  `mapstructure:"player_id"`
 	MapId          string  `mapstructure:"map_id"`
-	PublishedMapId int64   `mapstructure:"published_map_id"`
-	MapName        string  `mapstructure:"map_name"`
+	PublishedMapId int     `mapstructure:"published_map_id"`
+	MapName        *string `mapstructure:"map_name"`
 	Variant        string  `mapstructure:"variant"`
 	SubVariant     string  `mapstructure:"subvariant"`
 	WorldDataSize  int     `mapstructure:"world_data_size"`

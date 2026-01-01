@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/discord"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/redis/rueidis"
@@ -34,11 +34,11 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 	}
 
 	var contestId *string
-	var pd *model.PlayerData
+	var savePlayer *db.MapPlayerData
 	if request.Body.IsOrg {
-		m.Type = model.TypeOrg
+		m.MType = string(model.TypeOrg)
 	} else if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
-		pd, err = s.storageClient.GetPlayerData2(ctx, request.Body.Owner)
+		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch player data: %w", err)
 		}
@@ -49,22 +49,22 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 			}}, nil
 		}
 
-		m.Settings.Variant = model.Parkour
+		m.OptVariant = string(model.Parkour)
 		// Contest maps are always 1200x1200
-		m.Settings.Size = model.MapSizeColossal
+		m.Size = model.MapSizeColossal
 		m.Contest = &mapContestId
 		contestId = &mapContestId
 
-		pd.ContestSlot = &m.Id
-
+		pd.ContestSlot = &m.ID
+		savePlayer = &pd
 	} else {
-		pd, err = s.storageClient.GetPlayerData(ctx, request.Body.Owner)
+		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch player data: %w", err)
 		}
 
 		// Ensure they have permission for the size map they are creating
-		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.Id, size)
+		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.ID, size)
 		if err != nil {
 			return nil, err
 		} else if !allowedForSize {
@@ -75,7 +75,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 
 		// Add to the given slot or a free slot (if available)
 		if request.Body.Slot != nil {
-			added, err := s.addMapToSlot(ctx, pd, m.Id, *request.Body.Slot)
+			added, err := s.addMapToSlot(ctx, pd, m.ID, *request.Body.Slot)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add map to slot: %w", err)
 			}
@@ -85,7 +85,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 				}}, nil
 			}
 		} else {
-			_, ok, err := s.addMapToFreeSlot(ctx, pd, m.Id)
+			_, ok, err := s.addMapToFreeSlot(ctx, pd, m.ID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add map to slot: %w", err)
 			}
@@ -95,9 +95,11 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 				}}, nil
 			}
 		}
+		savePlayer = &pd
 	}
 
-	if err = s.safeWriteMapToDatabase(ctx, m, pd); err != nil {
+	createdMap, err := s.safeWriteMapToDatabase(ctx, *m, savePlayer)
+	if err != nil {
 		return nil, fmt.Errorf("failed to write map to database: %w", err)
 	}
 
@@ -107,33 +109,24 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		Contest:  contestId,
 	})
 
-	return CreateMap201JSONResponse{mapToAPI(m)}, nil
+	return CreateMap201JSONResponse{s.hydrateMap(*createdMap)}, nil
 }
 
 func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error) {
-	mapIds := strings.Split(request.Params.MapIds, ",")
-
-	if len(mapIds) > 50 || len(mapIds) == 0 {
-		return GetMaps400JSONResponse{BadRequestJSONResponse{Error: "Can only fetch 1 to 50 maps at a time"}}, nil
-	}
-
-	entries, err := s.storageClient.GetMapsByIds(ctx, mapIds)
-
+	raw, err := s.store.MultiGetPublishedMapsById(ctx, strings.Split(request.Params.MapIds, ","))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch maps: %w", err)
 	}
 
-	results := make([]MapData, len(entries))
-
-	for i, entry := range entries {
-		results[i] = MapData(mapToAPI(entry))
+	res := make([]MapData, len(raw))
+	for i, m := range raw {
+		res[i] = MapData(s.hydratePublishedMap(m))
 	}
-
-	return GetMaps200JSONResponse{results}, nil
+	return GetMaps200JSONResponse{res}, nil
 }
 
 func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject) (SearchMapsResponseObject, error) {
-	var params storage.SearchQueryV3
+	var params db.SearchMapsParams
 	if errText := parseSearchQueryParams(&params, request.Params.Params); errText != "" {
 		return SearchMaps400JSONResponse{BadRequestJSONResponse{Error: errText}}, nil
 	}
@@ -156,7 +149,7 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 		}
 	}
 
-	entries, err := s.storageClient.SearchMapsV3(ctx, params)
+	entries, err := s.store.SearchMaps(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query maps: %w", err)
 	}
@@ -165,17 +158,10 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 		Results: make([]MapData, len(entries)),
 	}
 	for i, entry := range entries {
-		result.Results[i] = MapData(mapToAPI(entry))
-	}
-
-	// If this is page 0 we also need to fetch the total count
-	if result.Page == 0 {
-		result.PageCount, err = s.storageClient.SearchMapsCountV3(ctx, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query maps count: %w", err)
+		result.Results[i] = MapData(s.hydratePublishedMap(entry.PublishedMap))
+		if i == 0 {
+			result.PageCount = int(math.Ceil(float64(entry.TotalCount) / float64(params.PageSize)))
 		}
-
-		result.PageCount = int(math.Ceil(float64(result.PageCount) / float64(params.PageSize)))
 	}
 
 	// Cache the result for 5 minutes
@@ -194,7 +180,7 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 
 func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressBulkRequestObject) (GetMapProgressBulkResponseObject, error) {
 	mapIds := strings.Split(request.Params.MapIds, ",")
-	entries, err := s.storageClient.GetMapProgress(ctx, request.Params.PlayerId, mapIds)
+	entries, err := s.store.GetMultiMapProgress(ctx, request.Params.PlayerId, mapIds)
 	if err != nil {
 		return nil, err
 	}
@@ -209,9 +195,9 @@ func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressB
 		}
 
 		result[i] = MapProgressEntry{
-			MapId:    entry.MapId,
+			MapId:    entry.MapID,
 			Progress: progress,
-			Playtime: entry.Playtime,
+			Playtime: int(entry.Playtime),
 		}
 	}
 
@@ -221,47 +207,82 @@ func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressB
 }
 
 func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMapResponseObject, error) {
-	var m *model.Map
-	var err error
+	// todo should switch this to split between getmap and getpublishedmap and change all the dependent places.
 	if common.IsUUID(request.MapId) {
-		m, err = s.storageClient.GetMapById(ctx, request.MapId)
-	} else {
-		//todo add IsPublishedId also
-		m, err = s.storageClient.GetMapByPublishedId(ctx, request.MapId)
-	}
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		m, err := s.store.GetMapById(ctx, request.MapId)
+		if errors.Is(err, db.ErrNoRows) {
 			return MapNotFoundResponse{}, nil
+		} else if err != nil {
+			return nil, fmt.Errorf("failed to fetch map: %w", err)
 		}
 
-		return nil, fmt.Errorf("failed to fetch map: %w", err)
+		// If map is published we need to get that version
+		if m.PublishedID != nil {
+			pm, err := s.store.GetPublishedMapById(ctx, m.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch published map: %w", err)
+			}
+			return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
+		}
+
+		return GetMap200JSONResponse{s.hydrateMap(m)}, nil
 	}
 
-	return GetMap200JSONResponse{mapToAPI(m)}, nil
+	// Can also search by published id
+	pid, err := strconv.Atoi(request.MapId)
+	if err != nil {
+		return nil, fmt.Errorf("invalid published id: %w", err)
+	}
+	pm, err := s.store.GetPublishedMapByPublishedId(ctx, &pid)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+	return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
 }
 
 func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error) {
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	update := db.UpdateMapParams{
+		ID:              m.ID,
+		Name:            m.OptName,
+		Icon:            m.OptIcon,
+		Size:            m.Size,
+		Variant:         m.OptVariant,
+		Subvariant:      m.OptSubvariant,
+		SpawnPoint:      m.OptSpawnPoint,
+		Tags:            m.OptTags,
+		Ext:             m.Ext,
+		Quality:         m.QualityOverride,
+		Listed:          m.Listed,
+		ProtocolVersion: m.ProtocolVersion,
+		OnlySprint:      m.OptOnlySprint,
+		NoSprint:        m.OptNoSprint,
+		NoJump:          m.OptNoJump,
+		NoSneak:         m.OptNoSneak,
+		Boat:            m.OptBoat,
+		Extra:           m.OptExtra,
 	}
 
 	// Update the map
 	var changed bool
-	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != 0 && *request.Body.ProtocolVersion != m.ProtocolVersion {
-		m.ProtocolVersion = *request.Body.ProtocolVersion
+	if request.Body.ProtocolVersion != nil && *request.Body.ProtocolVersion != 0 && *request.Body.ProtocolVersion != *m.ProtocolVersion {
+		update.ProtocolVersion = request.Body.ProtocolVersion
 		changed = true
 	}
 	if request.Body.Name != nil {
-		m.Settings.Name = *request.Body.Name
+		update.Name = request.Body.Name
 		changed = true
 	}
 	if request.Body.Icon != nil {
-		m.Settings.Icon = *request.Body.Icon
+		update.Icon = request.Body.Icon
 		changed = true
 	}
 	if request.Body.Size != nil {
@@ -271,76 +292,76 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 				Error: fmt.Sprintf("invalid map size: ", *request.Body.Size),
 			}}, nil
 		}
-		m.Settings.Size = size
+		update.Size = int64(size)
 		changed = true
 	}
 	if request.Body.Variant != nil {
-		m.Settings.Variant = mapVariantFromAPI(*request.Body.Variant)
+		update.Variant = string(mapVariantFromAPI(*request.Body.Variant))
 		changed = true
 	}
 	if request.Body.Subvariant != nil {
-		sv := model.MapSubVariant(*request.Body.Subvariant)
-		if sv == model.SubVariantNone {
-			m.Settings.SubVariant = nil
+		sv := *request.Body.Subvariant
+		if sv == string(model.SubVariantNone) {
+			update.Subvariant = nil
 		} else {
-			variant, ok := model.MapSubVariantTypeMap[sv]
+			variant, ok := model.MapSubVariantTypeMap[model.MapSubVariant(sv)]
 			if !ok {
 				return UpdateMap400JSONResponse{BadRequestJSONResponse{
 					Error: fmt.Sprintf("invalid sub size: ", sv),
 				}}, nil
 			}
-			if variant != m.Settings.Variant {
+			if string(variant) != update.Variant {
 				return UpdateMap400JSONResponse{BadRequestJSONResponse{
 					Error: fmt.Sprintf("invalid sub variant for map type: %s and %s", sv, variant),
 				}}, nil
 			}
-			m.Settings.SubVariant = &sv
+			update.Subvariant = &sv
 		}
 		changed = true
 	}
 	if request.Body.SpawnPoint != nil {
-		m.Settings.SpawnPoint = posFromAPI(*request.Body.SpawnPoint)
+		update.SpawnPoint = posFromAPI(*request.Body.SpawnPoint)
 		changed = true
 	}
 
 	//todo ensure there arent any invalid configurations of settings
 	if request.Body.Extra != nil && len(*request.Body.Extra) > 0 {
-		if m.Settings.Extra == nil {
-			m.Settings.Extra = make(map[string]interface{})
-		}
+		var extra = make(map[string]interface{})
+		_ = json.Unmarshal(update.Extra, &extra)
 		for k, v := range *request.Body.Extra {
 			switch k {
 			case "only_sprint":
-				m.Settings.OnlySprint = v.(bool)
+				update.OnlySprint = util.Ptr(v.(bool))
 			case "no_sprint":
-				m.Settings.NoSprint = v.(bool)
+				update.NoSprint = util.Ptr(v.(bool))
 			case "no_jump":
-				m.Settings.NoJump = v.(bool)
+				update.NoJump = util.Ptr(v.(bool))
 			case "no_sneak":
-				m.Settings.NoSneak = v.(bool)
+				update.NoSneak = util.Ptr(v.(bool))
 			case "boat":
-				m.Settings.Boat = v.(bool)
+				update.Boat = util.Ptr(v.(bool))
 			default:
-				m.Settings.Extra[k] = v
+				extra[k] = v
 			}
 		}
+		update.Extra, _ = json.Marshal(extra)
 		changed = true
 	}
 
 	if request.Body.Tags != nil {
-		m.Settings.Tags = *request.Body.Tags
+		update.Tags = *request.Body.Tags
 		changed = true
 	}
 
 	if request.Body.NewObjects != nil && len(*request.Body.NewObjects) > 0 {
-		if m.Objects == nil {
-			m.Objects = make(map[string]*model.ObjectData)
+		if update.Ext.Objects == nil {
+			update.Ext.Objects = make(map[string]*db.ObjectData)
 		}
 		for _, newObject := range *request.Body.NewObjects {
-			objectData := &model.ObjectData{
+			objectData := &db.ObjectData{
 				Id:   newObject.Id,
 				Type: newObject.Type,
-				Pos: model.Point{
+				Pos: db.Point{
 					X: float64(newObject.Pos.X),
 					Y: float64(newObject.Pos.Y),
 					Z: float64(newObject.Pos.Z),
@@ -349,26 +370,27 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 			if newObject.Data != nil {
 				objectData.Data = *newObject.Data
 			}
-			m.Objects[newObject.Id] = objectData
+			update.Ext.Objects[newObject.Id] = objectData
 		}
 		changed = true
 	}
-	if len(m.Objects) > 0 && request.Body.RemovedObjects != nil && len(*request.Body.RemovedObjects) > 0 {
+	if len(m.Ext.Objects) > 0 && request.Body.RemovedObjects != nil && len(*request.Body.RemovedObjects) > 0 {
 		for _, removedObject := range *request.Body.RemovedObjects {
-			delete(m.Objects, removedObject)
+			delete(m.Ext.Objects, removedObject)
 		}
 		changed = true
 	}
 
 	// Post publish bits
 	if request.Body.QualityOverride != nil {
-		m.QualityOverride = mapQualityFromAPI(*request.Body.QualityOverride)
+		newQuality := int64(mapQualityFromAPI(*request.Body.QualityOverride))
+		update.Quality = &newQuality
 		changed = true
 	}
 
 	// Listing
 	if request.Body.Listed != nil {
-		m.Listed = *request.Body.Listed
+		update.Listed = *request.Body.Listed
 		changed = true
 	}
 
@@ -378,17 +400,16 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 	}
 
 	// Write back to DB
-	if err = s.storageClient.UpdateMap(ctx, m); err != nil {
+	if err = s.store.UpdateMap(ctx, update); err != nil {
 		return nil, fmt.Errorf("failed to update map: %w", err)
 	}
 
 	// If we changed the variant to parkour after publishing, delete any in-progress save states for the map
 	if m.PublishedAt != nil && request.Body.Variant != nil && *request.Body.Variant == Parkour {
-		err = s.storageClient.SoftDeleteMapSaveStates(ctx, m.Id, true)
+		err = s.store.Unsafe_DeleteMapSaveStates(ctx, m.ID)
 		if err != nil {
 			// Not fatal, just error log
-			// In the future this should be recorded in sentry or something maybe?
-			s.log.Errorw("failed to delete save states when map became parkour", "mapId", m.Id, "error", err)
+			s.log.Errorw("failed to delete save states when map became parkour", "mapId", m.ID, "error", err)
 		}
 	}
 
@@ -405,18 +426,16 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 	}
 	// END HARDCODED SPAWN BEHAVIOR
 
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
 	userId := ctx.Value(ContextKeyUser).(string)
 
-	reasonRequired := m.PublishedId != nil || m.Owner != userId
+	reasonRequired := m.PublishedID != nil || m.Owner != userId
 	if reasonRequired && (request.Body.Reason == nil || *request.Body.Reason == "") {
 		return DeleteMap400JSONResponse{BadRequestJSONResponse{
 			Error: "reason is required",
@@ -424,7 +443,7 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 	}
 
 	// Must have admin perms on the map to delete it
-	hasPermission, err := s.authzClient.CheckMapAdmin(ctx, request.MapId, userId, m.AuthzKey)
+	hasPermission, err := s.authzClient.CheckMapAdmin(ctx, request.MapId, userId, authz.NoKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check permission: %w", err)
 	}
@@ -440,7 +459,7 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 	}
 
 	// Delete map from DB first, if the perm delete fails after its not catastrophic
-	if err = s.storageClient.DeleteMapSoft(ctx, request.MapId, userId, reason); err != nil {
+	if err = s.store.DeleteMap(ctx, request.MapId, &userId, &reason); err != nil {
 		return nil, fmt.Errorf("failed to delete map: %w", err)
 	}
 	if err = s.authzClient.DeleteMap(ctx, request.MapId); err != nil {
@@ -487,35 +506,33 @@ func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldReque
 }
 
 func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerificationRequestObject) (BeginMapVerificationResponseObject, error) {
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
 	//todo better errors
-	if m.PublishedId != nil {
+	if m.PublishedID != nil {
 		return BeginMapVerification400JSONResponse{BadRequestJSONResponse{
 			Error: "cannot verify a published map",
 		}}, nil
 	}
-	if m.Settings.Variant == model.Building {
+	if m.OptVariant == string(model.Building) {
 		return BeginMapVerification400JSONResponse{BadRequestJSONResponse{
 			Error: "cannot verify a building map",
 		}}, nil
 	}
-	if m.Verification != model.VerificationUnverified {
+	if m.Verification == nil || *m.Verification != int64(model.VerificationUnverified) {
 		return BeginMapVerification400JSONResponse{BadRequestJSONResponse{
 			Error: "map already being verifified or done verifying",
 		}}, nil
 	}
 
-	m.Verification = model.VerificationPending
-
-	if err := s.storageClient.UpdateMap(ctx, m); err != nil {
+	newVerification := int64(model.VerificationPending)
+	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
+	if err != nil {
 		return nil, fmt.Errorf("failed to update map: %w", err)
 	}
 
@@ -523,30 +540,28 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 }
 
 func (s *server) DeleteMapVerification(ctx context.Context, request DeleteMapVerificationRequestObject) (DeleteMapVerificationResponseObject, error) {
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
 	// Delete the leaderboard of the map to wipe the top time
 	// Do it first because if it goes without the others it's not a big deal (and it can't be transactional with the others)
-	err = s.redis.Do(ctx, s.redis.B().Del().Key(mapLeaderboardKey(m.Id, "playtime")).Build()).Error()
+	err = s.redis.Do(ctx, s.redis.B().Del().Key(mapLeaderboardKey(m.ID, "playtime")).Build()).Error()
 	if err != nil && !errors.Is(err, rueidis.Nil) {
 		return nil, fmt.Errorf("failed to delete leaderboard: %w", err)
 	}
 
 	// Unset the verification in the database
-	m.Verification = model.VerificationUnverified
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
-		if err := s.storageClient.UpdateMap(ctx, m); err != nil {
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
+		newVerification := int64(model.VerificationUnverified)
+		if err := s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil); err != nil {
 			return fmt.Errorf("failed to update map: %w", err)
 		}
 
-		if err := s.storageClient.DeleteVerifyingStates(ctx, m.Id); err != nil {
+		if err := s.store.DeleteVerifyingStates(ctx, m.ID); err != nil {
 			return fmt.Errorf("failed to delete verifying states: %w", err)
 		}
 
@@ -582,31 +597,29 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 	}
 	// END HARDCODED SPAWN BEHAVIOR
 
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
 	// If this is an org map, then we need to handle it differently (by sending a webhook)
-	if m.Type == model.TypeOrg {
+	if m.MType == string(model.TypeOrg) {
 		return PublishMap400JSONResponse{BadRequestJSONResponse{
 			Error: "cannot publish org map",
 		}}, nil
 	}
 
 	// PRECONDITION: World must exist in object storage (sanity check, but needed for metric anyway)
-	worldInfo, err := s.objectClient.Stat(ctx, m.Id)
+	worldInfo, err := s.objectClient.Stat(ctx, m.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch world info: %w", err)
 	}
 
-	// PRECONDITION: Owner must have spent >5m editing the map
+	// PRECONDITION: Owner must have spent >20m editing the map
 	// todo actually implement this (it is currently checked locally before sending request)
-	ownerState, err := s.storageClient.GetLatestSaveState(ctx, m.Id, m.Owner, model.SaveStateTypeEditing)
+	ownerState, err := s.store.GetLatestSaveState(ctx, m.ID, m.Owner, db.SaveStateTypeEditing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch owner save state: %w", err)
 	}
@@ -614,27 +627,19 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 	//todo: check publish preconditions
 
 	// Update the map info with published Id & time
-	publishedId, err := s.storageClient.FindNextPublishedId(ctx)
+	publishedId, err := s.store.FindNextPublishedId(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find next published id: %w", err)
 	}
-	now := time.Now()
-	m.PublishedId = &publishedId
-	m.PublishedAt = &now
-	m.UpdatedAt = now
-	if request.Body != nil && request.Body.Contest != nil {
-		m.Contest = request.Body.Contest
-	}
 
 	// Make the updates in DB & spicedb as 2pc
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
-		authzKey, err := s.authzClient.PublishMap(ctx, m.Id)
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
+		_, err = s.authzClient.PublishMap(ctx, m.ID)
 		if err != nil {
 			return fmt.Errorf("failed to publish map: %w", err)
 		}
 
-		m.AuthzKey = authzKey
-		if err = s.storageClient.UpdateMap(ctx, m); err != nil {
+		if err = s.store.PublishMap(ctx, m.ID, &publishedId, request.Body.Contest); err != nil {
 			return fmt.Errorf("failed to update map: %w", err)
 		}
 
@@ -646,7 +651,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 		return nil, err
 	}
 
-	if err = s.revokeMapFromSlots(ctx, m.Id); err != nil {
+	if err = s.revokeMapFromSlots(ctx, m.ID); err != nil {
 		s.log.Errorw("failed to revoke map from slots", "error", err)
 		// Non-fatal, still do the other bits here
 	}
@@ -654,113 +659,69 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 	s.clearCachedSearches(ctx)
 
 	subVariantStr := ""
-	if m.Settings.SubVariant != nil {
-		subVariantStr = string(*m.Settings.SubVariant)
+	if m.OptSubvariant != nil {
+		subVariantStr = *m.OptSubvariant
 	}
 	go s.metrics.Write(model.MapPublishedEvent{
 		PlayerId:       m.Owner,
-		MapId:          m.Id,
+		MapId:          m.ID,
 		PublishedMapId: publishedId,
-		MapName:        m.Settings.Name,
-		Variant:        string(m.Settings.Variant),
+		MapName:        m.OptName,
+		Variant:        m.OptVariant,
 		SubVariant:     subVariantStr,
 		WorldDataSize:  int(worldInfo.Size),
-		OwnerBuildTime: ownerState.PlayTime,
+		OwnerBuildTime: ownerState.Playtime,
 		Contest:        m.Contest,
 	})
 
-	return PublishMap200JSONResponse{mapToAPI(m)}, nil
+	publishedMap, err := s.store.GetPublishedMapById(ctx, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch published map: %w", err)
+	}
+	return PublishMap200JSONResponse{s.hydratePublishedMap(publishedMap)}, nil
 }
 
 func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) (ReportMapResponseObject, error) {
-	m, err := s.storageClient.GetMapById(ctx, request.MapId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return MapNotFoundResponse{}, nil
-		}
-
+	_, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
-	report := &model.MapReport{
-		MapId:      request.MapId,
-		PlayerId:   request.Body.Reporter,
-		Timestamp:  time.Now(),
+	reportParams := db.InsertMapReportParams{
+		MapID:      request.MapId,
+		PlayerID:   request.Body.Reporter,
 		Categories: make([]int, len(request.Body.Categories)),
 		Comment:    request.Body.Comment,
 	}
 	for i, category := range request.Body.Categories {
-		report.Categories[i] = mapReportCategoryFromAPI(category)
+		reportParams.Categories[i] = mapReportCategoryFromAPI(category)
 	}
 
 	// Save the report to the database immediately for future lookup
-	reportId, err := s.storageClient.WriteReport(ctx, report)
+	report, err := s.store.InsertMapReport(ctx, reportParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write report: %w", err)
 	}
-	s.log.Infow("created map report #"+strconv.Itoa(reportId), "report", report)
+	s.log.Infow("created map report #"+strconv.Itoa(report.ID), "report", report)
 
 	// Submitting a report always results in disliking the map
-	err = s.storageClient.UpsertMapRating(ctx, &model.MapRating{
-		MapId:    report.MapId,
-		PlayerId: report.PlayerId,
-		Rating:   model.RatingStateDisliked,
-	})
+	err = s.store.UpsertMapRating(ctx, report.MapID, report.PlayerID, int(model.RatingStateDisliked))
 	if err != nil {
 		// This is non fatal, just log it
 		s.log.Errorw("failed to dislike map during report", "error", err)
-	}
-
-	// Fetch the player info for the webhook message
-	username, avatar, err := util.GetPlayerInfo(ctx, report.PlayerId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch player info: %w", err)
-	}
-
-	// Build a discord embed to send to the reports channel
-	content := "Reported for "
-	for i, category := range report.Categories {
-		if i > 0 {
-			content += ", "
-		}
-		content += fmt.Sprintf("**%s**", model.ReportCategoryNameMap[category])
-	}
-	if report.Comment != nil {
-		content += fmt.Sprintf(": \"%s\"", *report.Comment)
-	}
-	fields := []discord.EmbedField{
-		{"Map ID", m.Id, true},
-		{"Player ID", report.PlayerId, true},
-	}
-	embed := &discord.Embed{
-		Title:       fmt.Sprintf("New Report for %s", m.Settings.Name),
-		Description: content,
-		Timestamp:   report.Timestamp.Format(time.RFC3339),
-		Color:       0xFF0000,
-		Fields:      fields,
-		Footer: discord.EmbedFooter{
-			Text:    fmt.Sprintf("by %s (Report #%d)", username, reportId),
-			IconUrl: avatar,
-		},
-	}
-
-	// Send the webhook
-	webhookUrl := "https://discord.com/api/webhooks/1195400776667893802/8gNLuc2_Q0cRx43JQDi9w3N-9SXwd9N_tNsJYEMfVke-oRu257sdX2G8J7rxg1PJHLPa"
-	if err = discord.SendWebhookEmbed(ctx, webhookUrl, embed); err != nil {
-		s.log.Errorw("failed to send webhook embed", "error", err)
 	}
 
 	return ReportMap200Response{}, nil
 }
 
 func (s *server) GetMapRating(ctx context.Context, request GetMapRatingRequestObject) (GetMapRatingResponseObject, error) {
-	rating, err := s.storageClient.GetMapRating(ctx, request.MapId, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		rating = &model.MapRating{
-			MapId:    request.MapId,
-			PlayerId: request.PlayerId,
-			Rating:   model.RatingStateUnrated,
-		}
+	rating, err := s.store.GetMapRatingForMapBy(ctx, request.MapId, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
+		rating.MapID = request.MapId
+		rating.PlayerID = request.PlayerId
+		rating.Rating = int(model.RatingStateUnrated)
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map rating: %w", err)
 	}
@@ -776,12 +737,7 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 		}}, nil
 	}
 
-	err := s.storageClient.UpsertMapRating(ctx, &model.MapRating{
-		MapId:    request.MapId,
-		PlayerId: request.PlayerId,
-		Rating:   rating,
-		Comment:  request.Body.Comment,
-	})
+	err := s.store.UpsertMapRating(ctx, request.MapId, request.PlayerId, int(rating))
 	if err != nil {
 		return nil, fmt.Errorf("failed to set map rating: %w", err)
 	}
@@ -792,17 +748,17 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 }
 
 var (
-	mapSortMap = map[MapSortType]storage.MapSortType{
-		Best:      storage.MapSortBest,
-		Published: storage.MapSortPublished,
+	mapSortMap = map[MapSortType]model.MapSortType{
+		Best:      model.MapSortBest,
+		Published: model.MapSortPublished,
 	}
-	mapSortOrderMap = map[MapSortOrder]storage.MapSortOrder{
-		Asc:  storage.MapSortAsc,
-		Desc: storage.MapSortDesc,
+	mapSortOrderMap = map[MapSortOrder]model.MapSortOrder{
+		Asc:  model.MapSortAsc,
+		Desc: model.MapSortDesc,
 	}
 )
 
-func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams) string {
+func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) string {
 	var err error
 	var ok bool
 	if req.Page != nil && *req.Page != "" {
@@ -830,7 +786,7 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 			return fmt.Sprintf("invalid sort value: %s", *req.Sort)
 		}
 	} else {
-		params.Sort = storage.MapSortBest
+		params.Sort = model.MapSortBest
 	}
 	if req.SortOrder != nil && *req.SortOrder != "" {
 		params.SortOrder, ok = mapSortOrderMap[*req.SortOrder]
@@ -838,14 +794,14 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 			return fmt.Sprintf("invalid sort order: %s", *req.SortOrder)
 		}
 	} else {
-		params.SortOrder = storage.MapSortDesc
+		params.SortOrder = model.MapSortDesc
 	}
 
 	if req.Parkour != nil && *req.Parkour {
-		params.Variant = append(params.Variant, model.Parkour)
+		params.Variants = append(params.Variants, string(model.Parkour))
 	}
 	if req.Building != nil && *req.Building {
-		params.Variant = append(params.Variant, model.Building)
+		params.Variants = append(params.Variants, string(model.Building))
 	}
 
 	if req.Quality != nil && *req.Quality != "" {
@@ -871,7 +827,7 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 			if !ok {
 				return fmt.Sprintf("invalid difficulty: %s", rawDifficulty)
 			}
-			params.Difficulty = append(params.Difficulty, difficulty)
+			params.Difficulty = append(params.Difficulty, int(difficulty))
 		}
 	}
 
@@ -879,59 +835,64 @@ func parseSearchQueryParams(params *storage.SearchQueryV3, req *MapSearchParams)
 		if !common.IsUUID(*req.Owner) {
 			return fmt.Sprintf("invalid owner: %s", *req.Owner)
 		}
-		params.Owner = *req.Owner
+		params.Owner = req.Owner
 	}
 	if req.Query != nil && *req.Query != "" {
-		params.Query = *req.Query
+		params.Name = req.Query
 	}
 	if req.Contest != nil && *req.Contest != "" {
-		params.Contest = *req.Contest
+		params.Contest = req.Contest
 	}
 
 	return ""
 }
 
-func mapToAPI(m *model.Map) MapDataJSONResponse {
+func (s *server) hydrateMap(m db.Map) MapDataJSONResponse {
 	extra := make(map[string]interface{})
-	if m.Settings.Extra != nil {
-		for k, v := range m.Settings.Extra {
-			extra[k] = v
-		}
+	if m.OptExtra != nil {
+		_ = json.Unmarshal(m.OptExtra, &extra)
 	}
-	extra["only_sprint"] = m.Settings.OnlySprint
-	extra["no_sprint"] = m.Settings.NoSprint
-	extra["no_jump"] = m.Settings.NoJump
-	extra["no_sneak"] = m.Settings.NoSneak
-	extra["boat"] = m.Settings.Boat
+	if m.OptOnlySprint != nil && *m.OptOnlySprint {
+		extra["only_sprint"] = true
+	}
+	if m.OptNoSprint != nil && *m.OptNoSprint {
+		extra["no_sprint"] = true
+	}
+	if m.OptNoJump != nil && *m.OptNoJump {
+		extra["no_jump"] = true
+	}
+	if m.OptNoSneak != nil && *m.OptNoSneak {
+		extra["no_sneak"] = true
+	}
+	if m.OptBoat != nil && *m.OptBoat {
+		extra["boat"] = true
+	}
 
 	return MapDataJSONResponse{
-		Id:              m.Id,
+		Id:              m.ID,
 		Owner:           m.Owner,
 		CreatedAt:       m.CreatedAt,
 		LastModified:    m.UpdatedAt,
-		ProtocolVersion: m.ProtocolVersion,
+		ProtocolVersion: *m.ProtocolVersion, // todo shouldnt be nullable in db
 
 		Verification: mapVerificationToAPI(m.Verification),
 		Settings: MapSettings{
-			Name:       m.Settings.Name,
-			Icon:       m.Settings.Icon,
-			Size:       mapSizeToAPI(m.Settings.Size),
-			Variant:    mapVariantToAPI(m.Settings.Variant),
-			Subvariant: mapSubVariantToAPI(m.Settings.SubVariant),
-			Tags:       m.Settings.Tags,
-			SpawnPoint: posToAPI(m.Settings.SpawnPoint),
+			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
+			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
+			Size:       mapSizeToAPI(m.Size),
+			Variant:    mapVariantToAPI(m.OptVariant),
+			Subvariant: m.OptSubvariant,
+			Tags:       m.OptTags,
+			SpawnPoint: posToAPI(m.OptSpawnPoint),
 			Extra:      extra,
 		},
 
-		PublishedId: m.PublishedId,
+		PublishedId: m.PublishedID,
 		PublishedAt: m.PublishedAt,
 		Listed:      m.Listed,
 
-		Quality:     mapQualityToAPI(m.QualityOverride),
-		Difficulty:  mapDifficultyToAPI(m.Difficulty()),
-		UniquePlays: m.UniquePlays,
-		ClearRate:   float32(m.ClearRate),
-		Likes:       m.Likes,
+		Quality:    mapQualityToAPI(m.QualityOverride),
+		Difficulty: Unknown,
 
 		Objects: nil,
 
@@ -939,7 +900,63 @@ func mapToAPI(m *model.Map) MapDataJSONResponse {
 	}
 }
 
-func mapSizeToAPI(size int) MapSize {
+func (s *server) hydratePublishedMap(m db.PublishedMap) MapDataJSONResponse {
+	extra := make(map[string]interface{})
+	if m.OptExtra != nil {
+		_ = json.Unmarshal(m.OptExtra, &extra)
+	}
+	if m.OptOnlySprint != nil && *m.OptOnlySprint {
+		extra["only_sprint"] = true
+	}
+	if m.OptNoSprint != nil && *m.OptNoSprint {
+		extra["no_sprint"] = true
+	}
+	if m.OptNoJump != nil && *m.OptNoJump {
+		extra["no_jump"] = true
+	}
+	if m.OptNoSneak != nil && *m.OptNoSneak {
+		extra["no_sneak"] = true
+	}
+	if m.OptBoat != nil && *m.OptBoat {
+		extra["boat"] = true
+	}
+
+	return MapDataJSONResponse{
+		Id:              m.ID,
+		Owner:           m.Owner,
+		CreatedAt:       m.CreatedAt,
+		LastModified:    m.UpdatedAt,
+		ProtocolVersion: *m.ProtocolVersion, // todo shouldnt be nullable in db
+
+		Verification: mapVerificationToAPI(m.Verification),
+		Settings: MapSettings{
+			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
+			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
+			Size:       mapSizeToAPI(m.Size),
+			Variant:    mapVariantToAPI(m.OptVariant),
+			Subvariant: m.OptSubvariant,
+			Tags:       m.OptTags,
+			SpawnPoint: posToAPI(m.OptSpawnPoint),
+			Extra:      extra,
+		},
+
+		PublishedId: m.PublishedID,
+		PublishedAt: m.PublishedAt,
+		Listed:      m.Listed,
+
+		Quality:     mapQualityToAPI(m.QualityOverride),
+		Difficulty:  mapDifficultyToAPI(m.Difficulty),
+		UniquePlays: m.PlayCount,
+		ClearRate:   float32(m.ClearRate),
+		Likes:       int(m.TotalLikes),
+
+		Objects: nil,
+
+		Contest: m.Contest,
+	}
+}
+
+func mapSizeToAPI(size int64) MapSize {
 	switch size {
 	case model.MapSizeNormal:
 		return Normal
@@ -981,7 +998,7 @@ func mapSizeFromAPI(size MapSize) int {
 	}
 }
 
-func mapVariantToAPI(variant model.MapVariant) MapVariant {
+func mapVariantToAPI(variant string) MapVariant {
 	return MapVariant(variant)
 }
 
@@ -989,7 +1006,7 @@ func mapVariantFromAPI(variant MapVariant) model.MapVariant {
 	return model.MapVariant(variant)
 }
 
-func mapSubVariantToAPI(subVariant *model.MapSubVariant) *string {
+func mapSubVariantToAPI(subVariant *string) *string {
 	if subVariant == nil {
 		return nil
 	}
@@ -997,28 +1014,31 @@ func mapSubVariantToAPI(subVariant *model.MapSubVariant) *string {
 	return &svs
 }
 
-func mapVerificationToAPI(verification model.Verification) MapVerification {
-	switch verification {
-	case model.VerificationPending:
+func mapVerificationToAPI(verification *int64) MapVerification {
+	if verification == nil {
+		return Unverified
+	}
+	switch *verification {
+	case int64(model.VerificationPending):
 		return Pending
-	case model.VerificationVerified:
+	case int64(model.VerificationVerified):
 		return Verified
 	default:
 		return Unverified
 	}
 }
 
-func mapDifficultyToAPI(difficulty model.MapDifficulty) MapDifficulty {
+func mapDifficultyToAPI(difficulty int32) MapDifficulty {
 	switch difficulty {
-	case model.MapDifficultyEasy:
+	case int32(model.MapDifficultyEasy):
 		return Easy
-	case model.MapDifficultyMedium:
+	case int32(model.MapDifficultyMedium):
 		return Medium
-	case model.MapDifficultyHard:
+	case int32(model.MapDifficultyHard):
 		return Hard
-	case model.MapDifficultyExpert:
+	case int32(model.MapDifficultyExpert):
 		return Expert
-	case model.MapDifficultyNightmare:
+	case int32(model.MapDifficultyNightmare):
 		return Nightmare
 	default:
 		return Unknown
@@ -1044,8 +1064,11 @@ func mapDifficultyFromAPI(difficulty MapDifficulty) (model.MapDifficulty, bool) 
 	}
 }
 
-func mapQualityToAPI(quality int8) MapQuality {
-	switch quality {
+func mapQualityToAPI(quality *int64) MapQuality {
+	if quality == nil {
+		return MapQualityUnrated
+	}
+	switch *quality {
 	case 1:
 		return MapQualityGood
 	case 2:
@@ -1080,18 +1103,18 @@ func mapQualityFromAPI(quality MapQuality) int8 {
 	}
 }
 
-func posToAPI(pos model.Pos) Pos {
+func posToAPI(pos db.Pos) Pos {
 	return Pos{
 		X:     float32(pos.X),
 		Y:     float32(pos.Y),
 		Z:     float32(pos.Z),
-		Pitch: float32(pos.Pitch),
 		Yaw:   float32(pos.Yaw),
+		Pitch: float32(pos.Pitch),
 	}
 }
 
-func posFromAPI(pos Pos) model.Pos {
-	return model.Pos{
+func posFromAPI(pos Pos) db.Pos {
+	return db.Pos{
 		X:     float64(pos.X),
 		Y:     float64(pos.Y),
 		Z:     float64(pos.Z),
@@ -1100,18 +1123,18 @@ func posFromAPI(pos Pos) model.Pos {
 	}
 }
 
-func mapRatingToAPI(rating *model.MapRating) GetMapRatingJSONResponse {
+func mapRatingToAPI(rating db.MapRating) GetMapRatingJSONResponse {
 	return GetMapRatingJSONResponse{
 		State:   mapRatingStateToAPI(rating.Rating),
 		Comment: rating.Comment,
 	}
 }
 
-func mapRatingStateToAPI(state model.RatingState) MapRatingState {
+func mapRatingStateToAPI(state int) MapRatingState {
 	switch state {
-	case model.RatingStateLiked:
+	case int(model.RatingStateLiked):
 		return MapRatingStateLiked
-	case model.RatingStateDisliked:
+	case int(model.RatingStateDisliked):
 		return MapRatingStateDisliked
 	default:
 		return MapRatingStateUnrated
@@ -1148,8 +1171,8 @@ func mapReportCategoryFromAPI(category MapReportCategory) int {
 	}
 }
 
-func createMapSearchCacheKey(params *storage.SearchQueryV3) (string, bool) {
-	if params.Query != "" {
+func createMapSearchCacheKey(params *db.SearchMapsParams) (string, bool) {
+	if params.Name != nil && *params.Name != "" {
 		return "", false // Never cache queries with search text
 	}
 	hash, err := hashstructure.Hash(params, hashstructure.FormatV2, nil)
