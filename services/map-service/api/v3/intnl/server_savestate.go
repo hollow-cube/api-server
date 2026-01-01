@@ -70,6 +70,9 @@ func (s *server) GetLatestSaveState(ctx context.Context, request GetLatestSaveSt
 		return GetLatestSaveState404Response{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch save state: %w", err)
+	} else if ss.Completed {
+		// If the latest is completed then a new state should be created instead.
+		return GetLatestSaveState404Response{}, nil
 	}
 
 	return GetLatestSaveState200JSONResponse{hydrateSaveState(ss)}, nil
