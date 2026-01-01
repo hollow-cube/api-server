@@ -139,8 +139,8 @@ func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
 		[]intnlV3.StrictMiddlewareFunc{publicV3.AuthMiddleware}), nil, "/v3/maps"))
 	r.Handle("/v3/internal/*", intnlV3.HandlerFromMuxWithBaseURL(intnlV3.NewStrictHandler(v.intnl,
 		[]intnlV3.StrictMiddlewareFunc{intnlV3.AuthMiddleware}), nil, "/v3/internal"))
-	r.Handle("/v3/terraform/*", terraformV3.HandlerFromMuxWithBaseURL(terraformV3.NewStrictHandler(v.terraform,
-		[]terraformV3.StrictMiddlewareFunc{}), nil, "/v3/terraform"))
+	r.Handle("/v3/internal/terraform/*", terraformV3.HandlerFromMuxWithBaseURL(terraformV3.NewStrictHandler(v.terraform,
+		[]terraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
 	r.Handle("/v3/obungus/*", obungusV3.HandlerFromMuxWithBaseURL(obungusV3.NewStrictHandler(v.obungus,
 		[]obungusV3.StrictMiddlewareFunc{}), nil, "/v3/obungus"))
 }

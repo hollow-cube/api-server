@@ -19,6 +19,11 @@ select *
 from maps_published
 where published_id = $1;
 
+-- name: MultiGetPublishedMapsById :many
+select *
+from maps_published
+where id = any ($1::uuid[]);
+
 -- name: CreateMap :one
 insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
                   published_at, opt_name, opt_icon,
@@ -51,7 +56,8 @@ where id = $1;
 
 -- name: UpdateMapVerification :exec
 update maps
-set verification = $2 and protocol_version = coalesce($3, protocol_version)
+set verification     = $2,
+    protocol_version = coalesce($3, protocol_version)
 where id = $1;
 
 -- name: PublishMap :exec
@@ -82,7 +88,7 @@ where id = $1;
 
 -- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,
-                                   ss.completed::int8 as completed,
+                                   (case when ss.completed then 1 else 0 end)::int8 as completed,
                                    ss.playtime::int8 as playtime,
                                    ss.updated
                             from (select unnest($2::uuid[]) as id) m
@@ -119,17 +125,18 @@ select sqlc.embed(maps_published),
        count(*) over () as total_count
 from maps_published
 where listed = true
-  and opt_variant in (@variants::text[])
+  and opt_variant = any (@variants::varchar[])
   and (owner = sqlc.narg('owner') or sqlc.narg('owner') is null)
-  and (opt_name ~* @name or @name = '')
+  and (opt_name ~* sqlc.narg('name')::text or coalesce(@name, '') = '')
   and (contest = sqlc.narg('contest') or sqlc.narg('contest') is null)
-  and (quality_override = any (@quality::int[]) or cardinality(@quality::int[]) = 0)
-  and (difficulty = any (@difficulty::int[]) or cardinality(@difficulty::int[]) = 0)
-order by case when @sort = 'random' then random() end,
-         case when @sort = 'best' and @sort_order = 'desc' then quality_override end desc,
-         case when @sort = 'best' and @sort_order = 'asc' then quality_override end asc,
-         case when @sort = 'best' then total_likes end desc,
-         case when @sort = 'best' then published_at end desc,
-         case when @sort = 'published' and @sort_order = 'desc' then published_at end desc,
-         case when @sort = 'published' and @sort_order = 'asc' then published_at end asc
+  and (quality_override = any (@quality::int[]) or coalesce(cardinality(@quality::int[]), 0) = 0)
+  and (difficulty = any (@difficulty::int[]) or coalesce(cardinality(@difficulty::int[]), 0) = 0)
+order by case when @sort::text = 'random' then random() end,
+         case when @sort::text = 'best' and @sort_order::text = 'desc' then -quality_override end,
+         case when @sort::text = 'best' and @sort_order::text = 'asc' then quality_override end,
+         case when @sort::text = 'best' then -total_likes end,
+         case when @sort::text = 'best' then extract(epoch from published_at) * -1 end,
+         case
+           when @sort::text = 'published' and @sort_order::text = 'desc' then extract(epoch from published_at) * -1 end,
+         case when @sort::text = 'published' and @sort_order::text = 'asc' then extract(epoch from published_at) end
 offset sqlc.arg('page')::int * sqlc.arg('page_size')::int limit sqlc.arg('page_size')::int;

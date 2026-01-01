@@ -291,10 +291,10 @@ func mapSizeToAPI(size int64) v3.MapSize {
 
 func posToAPI(pos db.Pos) v3.Pos {
 	return v3.Pos{
-		Pitch: float32(pos.X),
-		X:     float32(pos.Y),
-		Y:     float32(pos.Z),
+		X:     float32(pos.X),
+		Y:     float32(pos.Y),
+		Z:     float32(pos.Z),
 		Yaw:   float32(pos.Yaw),
-		Z:     float32(pos.Pitch),
+		Pitch: float32(pos.Pitch),
 	}
 }

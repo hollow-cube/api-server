@@ -145,7 +145,7 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 
 const getMultiMapProgress = `-- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,
-                                   ss.completed::int8 as completed,
+                                   (case when ss.completed then 1 else 0 end)::int8 as completed,
                                    ss.playtime::int8 as playtime,
                                    ss.updated
                             from (select unnest($2::uuid[]) as id) m
@@ -327,6 +327,67 @@ func (q *Queries) InsertMapReport(ctx context.Context, arg InsertMapReportParams
 	return i, err
 }
 
+const multiGetPublishedMapsById = `-- name: MultiGetPublishedMapsById :many
+select id, owner, m_type, created_at, updated_at, authz_key, verification, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, protocol_version, contest, listed, ext, play_count, win_count, total_likes, clear_rate, difficulty
+from maps_published
+where id = any ($1::uuid[])
+`
+
+func (q *Queries) MultiGetPublishedMapsById(ctx context.Context, dollar_1 []string) ([]PublishedMap, error) {
+	rows, err := q.db.Query(ctx, multiGetPublishedMapsById, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PublishedMap{}
+	for rows.Next() {
+		var i PublishedMap
+		if err := rows.Scan(
+			&i.ID,
+			&i.Owner,
+			&i.MType,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AuthzKey,
+			&i.Verification,
+			&i.FileID,
+			&i.LegacyMapID,
+			&i.PublishedID,
+			&i.PublishedAt,
+			&i.QualityOverride,
+			&i.OptName,
+			&i.OptIcon,
+			&i.Size,
+			&i.OptVariant,
+			&i.OptSubvariant,
+			&i.OptSpawnPoint,
+			&i.OptOnlySprint,
+			&i.OptNoSprint,
+			&i.OptNoJump,
+			&i.OptNoSneak,
+			&i.OptBoat,
+			&i.OptExtra,
+			&i.OptTags,
+			&i.ProtocolVersion,
+			&i.Contest,
+			&i.Listed,
+			&i.Ext,
+			&i.PlayCount,
+			&i.WinCount,
+			&i.TotalLikes,
+			&i.ClearRate,
+			&i.Difficulty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publishMap = `-- name: PublishMap :exec
 update maps
 set updated_at   = now(),
@@ -346,33 +407,34 @@ select maps_published.id, maps_published.owner, maps_published.m_type, maps_publ
        count(*) over () as total_count
 from maps_published
 where listed = true
-  and opt_variant in ($1::text[])
+  and opt_variant = any ($1::varchar[])
   and (owner = $2 or $2 is null)
-  and (opt_name ~* $3 or $3 = '')
+  and (opt_name ~* $3::text or coalesce($3, '') = '')
   and (contest = $4 or $4 is null)
-  and (quality_override = any ($5::int[]) or cardinality($5::int[]) = 0)
-  and (difficulty = any ($6::int[]) or cardinality($6::int[]) = 0)
-order by case when $7 = 'random' then random() end,
-         case when $7 = 'best' and $8 = 'desc' then quality_override end desc,
-         case when $7 = 'best' and $8 = 'asc' then quality_override end asc,
-         case when $7 = 'best' then total_likes end desc,
-         case when $7 = 'best' then published_at end desc,
-         case when $7 = 'published' and $8 = 'desc' then published_at end desc,
-         case when $7 = 'published' and $8 = 'asc' then published_at end asc
+  and (quality_override = any ($5::int[]) or coalesce(cardinality($5::int[]), 0) = 0)
+  and (difficulty = any ($6::int[]) or coalesce(cardinality($6::int[]), 0) = 0)
+order by case when $7::text = 'random' then random() end,
+         case when $7::text = 'best' and $8::text = 'desc' then -quality_override end,
+         case when $7::text = 'best' and $8::text = 'asc' then quality_override end,
+         case when $7::text = 'best' then -total_likes end,
+         case when $7::text = 'best' then extract(epoch from published_at) * -1 end,
+         case
+           when $7::text = 'published' and $8::text = 'desc' then extract(epoch from published_at) * -1 end,
+         case when $7::text = 'published' and $8::text = 'asc' then extract(epoch from published_at) end
 offset $9::int * $10::int limit $10::int
 `
 
 type SearchMapsParams struct {
-	Variants   []string    `json:"variants"`
-	Owner      *string     `json:"owner"`
-	Name       *string     `json:"name"`
-	Contest    *string     `json:"contest"`
-	Quality    []int       `json:"quality"`
-	Difficulty []int       `json:"difficulty"`
-	Sort       interface{} `json:"sort"`
-	SortOrder  interface{} `json:"sortOrder"`
-	Page       int         `json:"page"`
-	PageSize   int         `json:"pageSize"`
+	Variants   []string `json:"variants"`
+	Owner      *string  `json:"owner"`
+	Name       *string  `json:"name"`
+	Contest    *string  `json:"contest"`
+	Quality    []int    `json:"quality"`
+	Difficulty []int    `json:"difficulty"`
+	Sort       string   `json:"sort"`
+	SortOrder  string   `json:"sortOrder"`
+	Page       int      `json:"page"`
+	PageSize   int      `json:"pageSize"`
 }
 
 type SearchMapsRow struct {
@@ -546,7 +608,8 @@ func (q *Queries) UpdateMapStats(ctx context.Context, mapID string) error {
 
 const updateMapVerification = `-- name: UpdateMapVerification :exec
 update maps
-set verification = $2 and protocol_version = coalesce($3, protocol_version)
+set verification     = $2,
+    protocol_version = coalesce($3, protocol_version)
 where id = $1
 `
 

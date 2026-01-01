@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 )
 
@@ -276,6 +277,7 @@ type MapIdAndProgress struct {
 
 func CreateDefaultMap(owner string, size int) (*db.CreateMapParams, error) {
 	var m db.CreateMapParams
+	m.ID = uuid.NewString()
 	m.Owner = owner
 	m.MType = string(TypeDefault)
 

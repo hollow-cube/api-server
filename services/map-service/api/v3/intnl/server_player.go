@@ -43,7 +43,7 @@ func (s *server) GetMapHistory(ctx context.Context, request GetMapHistoryRequest
 		return nil, fmt.Errorf("failed to fetch recent maps: %w", err)
 	}
 	hasNextPage := len(maps) == pageSize+1
-	maps = maps[0:pageSize]
+	maps = maps[0:min(pageSize, len(maps))]
 
 	results := make([]MapHistoryEntry, len(maps))
 	for i, m := range maps {

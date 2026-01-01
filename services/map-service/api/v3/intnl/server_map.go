@@ -114,7 +114,16 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 }
 
 func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error) {
-	return nil, fmt.Errorf("not implemented")
+	raw, err := s.store.MultiGetPublishedMapsById(ctx, strings.Split(request.Params.MapIds, ","))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch maps: %w", err)
+	}
+
+	res := make([]MapData, len(raw))
+	for i, m := range raw {
+		res[i] = MapData(s.hydratePublishedMap(m))
+	}
+	return GetMaps200JSONResponse{res}, nil
 }
 
 func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject) (SearchMapsResponseObject, error) {
@@ -1099,11 +1108,11 @@ func mapQualityFromAPI(quality MapQuality) int8 {
 
 func posToAPI(pos db.Pos) Pos {
 	return Pos{
-		Pitch: float32(pos.X),
-		X:     float32(pos.Y),
-		Y:     float32(pos.Z),
+		X:     float32(pos.X),
+		Y:     float32(pos.Y),
+		Z:     float32(pos.Z),
 		Yaw:   float32(pos.Yaw),
-		Z:     float32(pos.Pitch),
+		Pitch: float32(pos.Pitch),
 	}
 }
 
@@ -1166,7 +1175,7 @@ func mapReportCategoryFromAPI(category MapReportCategory) int {
 }
 
 func createMapSearchCacheKey(params *db.SearchMapsParams) (string, bool) {
-	if params.Name != nil || *params.Name != "" {
+	if params.Name != nil && *params.Name != "" {
 		return "", false // Never cache queries with search text
 	}
 	hash, err := hashstructure.Hash(params, hashstructure.FormatV2, nil)

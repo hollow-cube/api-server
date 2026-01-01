@@ -19,19 +19,19 @@ const (
 
 type contextKey string
 
-type MapSortOrder int
+type MapSortOrder = string
 
 const (
-	MapSortAsc MapSortOrder = iota
-	MapSortDesc
+	MapSortAsc  MapSortOrder = "asc"
+	MapSortDesc MapSortOrder = "desc"
 )
 
-type MapSortType int
+type MapSortType = string
 
 const (
-	MapSortBest MapSortType = iota
-	MapSortPublished
-	MapSortRandom
+	MapSortBest      MapSortType = "best"
+	MapSortPublished MapSortType = "published"
+	MapSortRandom    MapSortType = "random"
 )
 
 type SearchQueryV3 struct {
