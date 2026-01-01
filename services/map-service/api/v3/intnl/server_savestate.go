@@ -175,6 +175,10 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		return nil, nil
 	}
 
+	if ss.Playtime == 0 && update.Completed {
+		s.log.Warnw("save state being completed with zero playtime", "mapId", request.MapId, "playerId", request.PlayerId, "saveStateId", request.SaveStateId)
+	}
+
 	// If the save state is completed never store the play/edit state of it.
 	if update.Completed {
 		update.StateV2 = []byte("null")
@@ -199,7 +203,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	go s.store.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	s.log.Infow("updated save state", "mapId", request.MapId, "playerId", request.PlayerId,
-		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type)
+		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type, "playtime", update.Playtime)
 
 	// If this is a verification and was just completed, we need to also update the map to verified.
 	// todo we need to do this update as a transaction
