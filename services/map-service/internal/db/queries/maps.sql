@@ -127,7 +127,7 @@ from maps_published
 where listed = true
   and opt_variant = any (@variants::varchar[])
   and (owner = sqlc.narg('owner') or sqlc.narg('owner') is null)
-  and (opt_name ~* sqlc.narg('name')::text or coalesce(@name, '') = '')
+  and (opt_name ilike sqlc.narg('name')::text or sqlc.narg('name')::text is null)
   and (contest = sqlc.narg('contest') or sqlc.narg('contest') is null)
   and (quality_override = any (@quality::int[]) or coalesce(cardinality(@quality::int[]), 0) = 0)
   and (difficulty = any (@difficulty::int[]) or coalesce(cardinality(@difficulty::int[]), 0) = 0)

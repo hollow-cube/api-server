@@ -838,7 +838,8 @@ func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) s
 		params.Owner = req.Owner
 	}
 	if req.Query != nil && *req.Query != "" {
-		params.Name = req.Query
+		nameQuery := "%" + *req.Query + "%"
+		params.Name = &nameQuery
 	}
 	if req.Contest != nil && *req.Contest != "" {
 		params.Contest = req.Contest

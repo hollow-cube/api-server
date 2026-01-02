@@ -409,7 +409,7 @@ from maps_published
 where listed = true
   and opt_variant = any ($1::varchar[])
   and (owner = $2 or $2 is null)
-  and (opt_name ~* $3::text or coalesce($3, '') = '')
+  and (opt_name ilike $3::text or $3::text is null)
   and (contest = $4 or $4 is null)
   and (quality_override = any ($5::int[]) or coalesce(cardinality($5::int[]), 0) = 0)
   and (difficulty = any ($6::int[]) or coalesce(cardinality($6::int[]), 0) = 0)
