@@ -98,11 +98,11 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	// TODO check if already online
 
 	// Get/create/update the player data object
-	pd, pdRaw, err := s.getOrCreatePlayerData(ctx, request.PlayerId, request.Body.Username, request.Body.Ip)
+	pd, pdRaw, err := s.getOrCreatePlayerData(ctx, request.PlayerId, request.Body.Username, request.Body.Ip, request.Body.Skin)
 	if err != nil {
 		return nil, err
 	}
-	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip)
+	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
 	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) {
 		// PlatformBypassWhitelist will allow you in even with maintenance enabled.
@@ -317,7 +317,7 @@ func (s *serverImpl) findExistingMapState(ctx context.Context, mapId string) boo
 	return err == nil
 }
 
-func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, username, ip string) (*playerService.PlayerData, []byte, error) {
+func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, username, ip string, skin *PlayerSkin) (*playerService.PlayerData, []byte, error) {
 	pdResp, err := s.playerClient.GetPlayerDataWithResponse(ctx, playerId)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get player data: %w", err)
@@ -325,10 +325,19 @@ func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, userna
 	if pdResp.StatusCode() == 200 {
 		return pdResp.JSON200, pdResp.Body, nil
 	} else if pdResp.StatusCode() == 404 {
+		var playerSkin *playerService.PlayerSkin
+		if skin != nil {
+			playerSkin = &playerService.PlayerSkin{
+				Texture:   skin.Texture,
+				Signature: skin.Signature,
+			}
+		}
+
 		createResp, err := s.playerClient.CreatePlayerDataWithResponse(ctx, playerService.CreatePlayerDataJSONRequestBody{
 			Id:       playerId,
 			Ip:       ip,
 			Username: username,
+			Skin:     playerSkin,
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create player data: %w", err)
@@ -342,7 +351,7 @@ func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, userna
 	return nil, nil, fmt.Errorf("failed to get player data (%d): %s", pdResp.StatusCode(), pdResp.Body)
 }
 
-func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRaw []byte, newUsername, newIp string) []byte {
+func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRaw []byte, newUsername, newIp string, newSkin *PlayerSkin) []byte {
 	syncUpdate := false
 	now := time.Now()
 	pd.LastOnline = now
@@ -355,6 +364,13 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 		pd.Username = newUsername
 		pdUpdate.Username = &newUsername
 		syncUpdate = true
+	}
+	if newSkin != nil && (pd.Skin == nil || pd.Skin.Texture != newSkin.Texture || pd.Skin.Signature != newSkin.Signature) {
+		pd.Skin = &playerService.PlayerSkin{
+			Texture:   newSkin.Texture,
+			Signature: newSkin.Signature,
+		}
+		pdUpdate.Skin = pd.Skin
 	}
 
 	// If the username changed we need to block here while updating it, otherwise no need
@@ -373,7 +389,7 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 		go updateFunc()
 	}
 
-	if pdUpdate.Username == nil {
+	if pdUpdate.Username == nil && pdUpdate.Skin == nil {
 		return pdRaw
 	}
 
@@ -386,6 +402,7 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 		return pdRaw
 	}
 	raw["username"] = newUsername
+	raw["skin"] = newSkin
 	newRaw, err := json.Marshal(raw)
 	if err != nil {
 		zap.S().Errorw("failed to marshal player data", "error", err)

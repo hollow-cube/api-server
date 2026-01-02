@@ -1299,6 +1299,7 @@ components:
         username: { type: string }
         displayNameV2:
           $ref: '#/components/schemas/DisplayNameV2'
+        skin: { $ref: '#/components/schemas/PlayerSkin' }
         firstJoin:
           type: string
           format: date-time
@@ -1477,6 +1478,7 @@ components:
         id: { type: string }
         username: { type: string }
         ip: { type: string }
+        skin: { $ref: '#/components/schemas/PlayerSkin' }
     HypercubeStatus:
       description: If since and until are missing, the player does not have hypercube.
       type: object
@@ -1485,6 +1487,13 @@ components:
         exp: { type: integer }
         since: { type: string, format: date-time }
         until: { type: string, format: date-time }
+
+    PlayerSkin:
+      type: object
+      required: [texture, signature]
+      properties:
+        texture: { type: string }
+        signature: { type: string }
 
     PlayerDataUpdateRequest:
       type: object
@@ -1495,6 +1504,7 @@ components:
           type: array
           items: { type: string }
           description: "New IP addresses to add to the history, will be merged."
+        skin: { $ref: '#/components/schemas/PlayerSkin' }
         betaEnabled:
           type: boolean
         lastOnline:

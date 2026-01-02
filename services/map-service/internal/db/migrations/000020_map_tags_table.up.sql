@@ -1,6 +1,6 @@
-begin;
-
 create type map_tag as enum ('autocomplete', 'bossbattle', 'escape', 'exploration', 'interior', 'organics', 'puzzle', 'recreation', 'story', 'strategy', 'structure', 'terrain', 'trivia', 'twodimensional');
+
+begin;
 
 create table if not exists map_tags
 (

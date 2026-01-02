@@ -48,6 +48,9 @@ sql:
           - column: "player_data.settings"
             nullable: true
             go_type: { type: "PlayerSettings", pointer: false }
+          - column: "player_data.skin"
+            nullable: true
+            go_type: { type: "PlayerSkin", pointer: true }
 
           - { column: "tx_log.meta", go_type: { type: "map[string]any" } }
           - { column: "player_recaps.data", go_type: { type: "map[string]any" } }

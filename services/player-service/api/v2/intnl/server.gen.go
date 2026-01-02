@@ -101,15 +101,17 @@ type PlayerData struct {
 	LastOnline     time.Time      `json:"lastOnline"`
 	Playtime       int            `json:"playtime"`
 	Settings       PlayerSettings `json:"settings"`
+	Skin           *PlayerSkin    `json:"skin,omitempty"`
 	TotpEnabled    bool           `json:"totpEnabled"`
 	Username       string         `json:"username"`
 }
 
 // PlayerDataCreateRequest defines model for PlayerDataCreateRequest.
 type PlayerDataCreateRequest struct {
-	Id       string `json:"id"`
-	Ip       string `json:"ip"`
-	Username string `json:"username"`
+	Id       string      `json:"id"`
+	Ip       string      `json:"ip"`
+	Skin     *PlayerSkin `json:"skin,omitempty"`
+	Username string      `json:"username"`
 }
 
 // PlayerDataUpdateRequest defines model for PlayerDataUpdateRequest.
@@ -121,6 +123,7 @@ type PlayerDataUpdateRequest struct {
 	LastOnline      *time.Time      `json:"lastOnline,omitempty"`
 	PlaytimeInc     *int            `json:"playtimeInc,omitempty"`
 	SettingsUpdates *PlayerSettings `json:"settingsUpdates,omitempty"`
+	Skin            *PlayerSkin     `json:"skin,omitempty"`
 	Username        *string         `json:"username,omitempty"`
 }
 
@@ -152,6 +155,12 @@ type PlayerNotification struct {
 
 // PlayerSettings defines model for PlayerSettings.
 type PlayerSettings map[string]interface{}
+
+// PlayerSkin defines model for PlayerSkin.
+type PlayerSkin struct {
+	Signature string `json:"signature"`
+	Texture   string `json:"texture"`
+}
 
 // Punishment defines model for Punishment.
 type Punishment struct {

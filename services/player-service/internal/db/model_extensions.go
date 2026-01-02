@@ -51,3 +51,8 @@ const (
 	BalanceChangeReasonBuyCosmetic     BalanceChangeReason = "buy_cosmetic"
 	BalanceChangeReasonGiveItemGeneric BalanceChangeReason = "give_item_generic" // Used for map rewards, see meta
 )
+
+type PlayerSkin struct {
+	Signature string `json:"signature"`
+	Texture   string `json:"texture"`
+}

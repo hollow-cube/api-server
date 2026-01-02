@@ -105,7 +105,15 @@ func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 }
 
 func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
-	pd, err := s.store.CreatePlayerData(ctx, request.Body.Id, request.Body.Username)
+	var skin *db.PlayerSkin
+	if request.Body.Skin != nil {
+		skin = &db.PlayerSkin{
+			Texture:   request.Body.Skin.Texture,
+			Signature: request.Body.Skin.Signature,
+		}
+	}
+
+	pd, err := s.store.CreatePlayerData(ctx, request.Body.Id, request.Body.Username, skin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create player data: %w", err)
 	}
@@ -134,7 +142,7 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 	}
 
 	var changed bool
-	dbUpdates := db.UpdatePlayerDataParams{ID: p.ID}
+	dbUpdates := db.UpdatePlayerDataParams{ID: p.ID, Skin: p.Skin}
 	updates := request.Body
 	if updates.Username != nil && *updates.Username != p.Username {
 		dbUpdates.Username = updates.Username
@@ -159,6 +167,13 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 			dbUpdates.Settings = p.Settings
 			changed = true
 		}
+	}
+	if updates.Skin != nil {
+		dbUpdates.Skin = &db.PlayerSkin{
+			Texture:   updates.Skin.Texture,
+			Signature: updates.Skin.Signature,
+		}
+		changed = true
 	}
 
 	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
