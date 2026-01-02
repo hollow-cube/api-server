@@ -178,6 +178,22 @@ type ClientInterface interface {
 	// GetPlayerHypercube request
 	GetPlayerHypercube(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetPlayerNotifications request
+	GetPlayerNotifications(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreatePlayerNotificationWithBody request with any body
+	CreatePlayerNotificationWithBody(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreatePlayerNotification(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, body CreatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeletePlayerNotification request
+	DeletePlayerNotification(ctx context.Context, playerId string, notificationId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdatePlayerNotificationWithBody request with any body
+	UpdatePlayerNotificationWithBody(ctx context.Context, playerId string, notificationId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdatePlayerNotification(ctx context.Context, playerId string, notificationId string, body UpdatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RemoveTotp request
 	RemoveTotp(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -607,6 +623,78 @@ func (c *Client) RemoveFriend(ctx context.Context, playerId string, targetId str
 
 func (c *Client) GetPlayerHypercube(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetPlayerHypercubeRequest(c.Server, playerId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlayerNotifications(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlayerNotificationsRequest(c.Server, playerId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreatePlayerNotificationWithBody(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePlayerNotificationRequestWithBody(c.Server, playerId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreatePlayerNotification(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, body CreatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePlayerNotificationRequest(c.Server, playerId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeletePlayerNotification(ctx context.Context, playerId string, notificationId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeletePlayerNotificationRequest(c.Server, playerId, notificationId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdatePlayerNotificationWithBody(ctx context.Context, playerId string, notificationId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdatePlayerNotificationRequestWithBody(c.Server, playerId, notificationId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdatePlayerNotification(ctx context.Context, playerId string, notificationId string, body UpdatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdatePlayerNotificationRequest(c.Server, playerId, notificationId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1939,6 +2027,242 @@ func NewGetPlayerHypercubeRequest(server string, playerId string) (*http.Request
 	return req, nil
 }
 
+// NewGetPlayerNotificationsRequest generates requests for GetPlayerNotifications
+func NewGetPlayerNotificationsRequest(server string, playerId string, params *GetPlayerNotificationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Unread != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "unread", runtime.ParamLocationQuery, *params.Unread); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreatePlayerNotificationRequest calls the generic CreatePlayerNotification builder with application/json body
+func NewCreatePlayerNotificationRequest(server string, playerId string, params *CreatePlayerNotificationParams, body CreatePlayerNotificationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreatePlayerNotificationRequestWithBody(server, playerId, params, "application/json", bodyReader)
+}
+
+// NewCreatePlayerNotificationRequestWithBody generates requests for CreatePlayerNotification with any type of body
+func NewCreatePlayerNotificationRequestWithBody(server string, playerId string, params *CreatePlayerNotificationParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ReplaceUnread != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "replaceUnread", runtime.ParamLocationQuery, *params.ReplaceUnread); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeletePlayerNotificationRequest generates requests for DeletePlayerNotification
+func NewDeletePlayerNotificationRequest(server string, playerId string, notificationId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "notificationId", runtime.ParamLocationPath, notificationId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/notifications/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdatePlayerNotificationRequest calls the generic UpdatePlayerNotification builder with application/json body
+func NewUpdatePlayerNotificationRequest(server string, playerId string, notificationId string, body UpdatePlayerNotificationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdatePlayerNotificationRequestWithBody(server, playerId, notificationId, "application/json", bodyReader)
+}
+
+// NewUpdatePlayerNotificationRequestWithBody generates requests for UpdatePlayerNotification with any type of body
+func NewUpdatePlayerNotificationRequestWithBody(server string, playerId string, notificationId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "notificationId", runtime.ParamLocationPath, notificationId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/notifications/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewRemoveTotpRequest generates requests for RemoveTotp
 func NewRemoveTotpRequest(server string, playerId string) (*http.Request, error) {
 	var err error
@@ -2741,6 +3065,22 @@ type ClientWithResponsesInterface interface {
 	// GetPlayerHypercubeWithResponse request
 	GetPlayerHypercubeWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerHypercubeResponse, error)
 
+	// GetPlayerNotificationsWithResponse request
+	GetPlayerNotificationsWithResponse(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*GetPlayerNotificationsResponse, error)
+
+	// CreatePlayerNotificationWithBodyWithResponse request with any body
+	CreatePlayerNotificationWithBodyWithResponse(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePlayerNotificationResponse, error)
+
+	CreatePlayerNotificationWithResponse(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, body CreatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePlayerNotificationResponse, error)
+
+	// DeletePlayerNotificationWithResponse request
+	DeletePlayerNotificationWithResponse(ctx context.Context, playerId string, notificationId string, reqEditors ...RequestEditorFn) (*DeletePlayerNotificationResponse, error)
+
+	// UpdatePlayerNotificationWithBodyWithResponse request with any body
+	UpdatePlayerNotificationWithBodyWithResponse(ctx context.Context, playerId string, notificationId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdatePlayerNotificationResponse, error)
+
+	UpdatePlayerNotificationWithResponse(ctx context.Context, playerId string, notificationId string, body UpdatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdatePlayerNotificationResponse, error)
+
 	// RemoveTotpWithResponse request
 	RemoveTotpWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*RemoveTotpResponse, error)
 
@@ -3378,6 +3718,100 @@ func (r GetPlayerHypercubeResponse) StatusCode() int {
 	return 0
 }
 
+type GetPlayerNotificationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Page int32 `json:"page"`
+
+		// PageCount Only sent on the first page
+		PageCount int32                `json:"pageCount"`
+		Results   []PlayerNotification `json:"results"`
+	}
+	JSON400 *struct {
+		Message string `json:"message"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlayerNotificationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlayerNotificationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreatePlayerNotificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r CreatePlayerNotificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreatePlayerNotificationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeletePlayerNotificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeletePlayerNotificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeletePlayerNotificationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdatePlayerNotificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdatePlayerNotificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdatePlayerNotificationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type RemoveTotpResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3967,6 +4401,58 @@ func (c *ClientWithResponses) GetPlayerHypercubeWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseGetPlayerHypercubeResponse(rsp)
+}
+
+// GetPlayerNotificationsWithResponse request returning *GetPlayerNotificationsResponse
+func (c *ClientWithResponses) GetPlayerNotificationsWithResponse(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*GetPlayerNotificationsResponse, error) {
+	rsp, err := c.GetPlayerNotifications(ctx, playerId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlayerNotificationsResponse(rsp)
+}
+
+// CreatePlayerNotificationWithBodyWithResponse request with arbitrary body returning *CreatePlayerNotificationResponse
+func (c *ClientWithResponses) CreatePlayerNotificationWithBodyWithResponse(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePlayerNotificationResponse, error) {
+	rsp, err := c.CreatePlayerNotificationWithBody(ctx, playerId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePlayerNotificationResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreatePlayerNotificationWithResponse(ctx context.Context, playerId string, params *CreatePlayerNotificationParams, body CreatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePlayerNotificationResponse, error) {
+	rsp, err := c.CreatePlayerNotification(ctx, playerId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePlayerNotificationResponse(rsp)
+}
+
+// DeletePlayerNotificationWithResponse request returning *DeletePlayerNotificationResponse
+func (c *ClientWithResponses) DeletePlayerNotificationWithResponse(ctx context.Context, playerId string, notificationId string, reqEditors ...RequestEditorFn) (*DeletePlayerNotificationResponse, error) {
+	rsp, err := c.DeletePlayerNotification(ctx, playerId, notificationId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeletePlayerNotificationResponse(rsp)
+}
+
+// UpdatePlayerNotificationWithBodyWithResponse request with arbitrary body returning *UpdatePlayerNotificationResponse
+func (c *ClientWithResponses) UpdatePlayerNotificationWithBodyWithResponse(ctx context.Context, playerId string, notificationId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdatePlayerNotificationResponse, error) {
+	rsp, err := c.UpdatePlayerNotificationWithBody(ctx, playerId, notificationId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdatePlayerNotificationResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdatePlayerNotificationWithResponse(ctx context.Context, playerId string, notificationId string, body UpdatePlayerNotificationJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdatePlayerNotificationResponse, error) {
+	rsp, err := c.UpdatePlayerNotification(ctx, playerId, notificationId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdatePlayerNotificationResponse(rsp)
 }
 
 // RemoveTotpWithResponse request returning *RemoveTotpResponse
@@ -4778,6 +5264,95 @@ func ParseGetPlayerHypercubeResponse(rsp *http.Response) (*GetPlayerHypercubeRes
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetPlayerNotificationsResponse parses an HTTP response from a GetPlayerNotificationsWithResponse call
+func ParseGetPlayerNotificationsResponse(rsp *http.Response) (*GetPlayerNotificationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlayerNotificationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Page int32 `json:"page"`
+
+			// PageCount Only sent on the first page
+			PageCount int32                `json:"pageCount"`
+			Results   []PlayerNotification `json:"results"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreatePlayerNotificationResponse parses an HTTP response from a CreatePlayerNotificationWithResponse call
+func ParseCreatePlayerNotificationResponse(rsp *http.Response) (*CreatePlayerNotificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreatePlayerNotificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDeletePlayerNotificationResponse parses an HTTP response from a DeletePlayerNotificationWithResponse call
+func ParseDeletePlayerNotificationResponse(rsp *http.Response) (*DeletePlayerNotificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeletePlayerNotificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseUpdatePlayerNotificationResponse parses an HTTP response from a UpdatePlayerNotificationWithResponse call
+func ParseUpdatePlayerNotificationResponse(rsp *http.Response) (*UpdatePlayerNotificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdatePlayerNotificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

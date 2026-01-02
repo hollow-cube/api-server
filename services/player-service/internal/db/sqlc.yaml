@@ -51,6 +51,7 @@ sql:
 
           - { column: "tx_log.meta", go_type: { type: "map[string]any" } }
           - { column: "player_recaps.data", go_type: { type: "map[string]any" } }
+          - { column: "player_notifications.data", go_type: { type: "map[string]any", pointer: true } }
 
     strict_function_checks: true
     strict_order_by: true

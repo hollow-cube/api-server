@@ -8,6 +8,8 @@ tags:
   - name: payments
     description: Payment related endpoints
   - name: totp
+  - name: notifications
+    description: Player notification related endpoints
 paths:
   /players:
     post:
@@ -1099,6 +1101,149 @@ paths:
         '404':
           description: Recap not found
 
+  /players/{playerId}/notifications:
+    get:
+      tags: [ "notifications" ]
+      summary: Get notifications for a player
+      operationId: getPlayerNotifications
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: The page of results to get, starting at 0
+          required: false
+          schema:
+            type: integer
+        - name: unread
+          in: query
+          description: If set to true, only return unread notifications
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Notifications successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ page, pageCount, results ]
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  pageCount:
+                    description: Only sent on the first page
+                    type: integer
+                    format: int32
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/PlayerNotification' }
+        '400':
+          description: Invalid page number
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ message ]
+                properties:
+                  message:
+                    type: string
+    post:
+      tags: [ "notifications" ]
+      summary: Create a notification for a player
+      operationId: createPlayerNotification
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to create a notification for
+          required: true
+          schema:
+            type: string
+        - name: replaceUnread
+          in: query
+          description: If a notification with the same type and key exists and is unread remove it before adding the new one
+          required: false
+          schema:
+            type: boolean
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ type, key ]
+              properties:
+                type: { type: string }
+                key: { type: string }
+                data: { type: object, additionalProperties: true }
+                expiresIn:
+                  description: "Number of seconds until the notification expires."
+                  type: integer
+      responses:
+        '201':
+          description: Notification successfully created
+
+  /players/{playerId}/notifications/{notificationId}:
+    delete:
+      tags: [ "notifications" ]
+      summary: Delete notification for a player
+      operationId: deletePlayerNotification
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: notificationId
+          in: path
+          description: The notification ID to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification successfully deleted
+        '404':
+          description: Notification not found
+    patch:
+      tags: [ "notifications" ]
+      summary: Update (mark read/unread) a notification for a player
+      operationId: updatePlayerNotification
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: notificationId
+          in: path
+          description: The notification ID to update.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ read ]
+              properties:
+                read:
+                  type: boolean
+                  description: Whether to mark the notification as read or unread
+      responses:
+        '200':
+          description: Notification successfully updated
+        '404':
+          description: Notification not found
+
 components:
   responses:
     PlayerNotFound:
@@ -1367,3 +1512,17 @@ components:
       properties:
         id: { type: string }
         username: { type: string }
+
+
+    PlayerNotification:
+      type: object
+      required: [ id, type, key, createdAt ]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        key: { type: string }
+        data: { type: object, additionalProperties: true }
+
+        createdAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
