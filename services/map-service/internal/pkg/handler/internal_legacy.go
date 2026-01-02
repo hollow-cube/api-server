@@ -119,20 +119,20 @@ func (h *InternalHandler) ImportLegacyMap(ctx context.Context, playerId string, 
 		return nil, fmt.Errorf("failed to add slot to free slot: %w", err)
 	}
 
-	if err = h.fetchAndMigrateLegacyMapWorld(ctx, *m, info); err != nil {
+	if err = h.fetchAndMigrateLegacyMapWorld(ctx, m.ID, info); err != nil {
 		return nil, err
 	}
 
-	created, err := h.safeWriteMapToDatabase(ctx, *m, &playerData)
-	if err != nil {
-		return nil, err
-	}
+	//created, err := h.safeWriteMapToDatabase(ctx, *m, &playerData)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	go h.metrics.Write(model.MapImportedEvent{PlayerId: playerData.ID, Format: "legacy"})
 
 	return &v1.MapWithSlot{
-		MapData: hydrateMap(created),
-		Slot:    slot,
+		//MapData: hydrateMap(created),
+		Slot: slot,
 	}, nil
 }
 
@@ -197,7 +197,7 @@ func (l *legacyDataCache) GetLegacyMap(ctx context.Context, playerId, legacyMapI
 	return infos[legacyMapId], nil
 }
 
-func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, m db.CreateMapParams, info *legacyMapInfo) error {
+func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, mapId string, info *legacyMapInfo) error {
 	mapDataPath := fmt.Sprintf("/%s/%s/%d.polar", info.PlayerID[0:2], info.PlayerID, info.ID)
 	zap.S().Infow("trying to download legacy map", "path", mapDataPath)
 	worldData, err := h.legacyData.client.Download(ctx, mapDataPath)
@@ -208,7 +208,7 @@ func (h *InternalHandler) fetchAndMigrateLegacyMapWorld(ctx context.Context, m d
 		return fmt.Errorf("failed to download legacy map: %w", err)
 	}
 
-	if err = h.objectClient.Upload(ctx, m.ID, worldData); err != nil {
+	if err = h.objectClient.Upload(ctx, mapId, worldData); err != nil {
 		return fmt.Errorf("failed to upload map converted: %w", err)
 	}
 

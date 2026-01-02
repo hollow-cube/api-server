@@ -27,38 +27,29 @@ const mapContestSlot = 1_000_000
 var mapContestId = "c9354e33-96c2-414a-9f4a-8c2ff4669086"
 
 func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error) {
+	if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
+		// TODO: re-implement
+		return CreateMap400JSONResponse{BadRequestJSONResponse{
+			Error: "Contest maps not implemented",
+		}}, nil
+	}
+	if request.Body.Slot != nil && (*request.Body.Slot < -1 || *request.Body.Slot > 4) {
+		return CreateMap400JSONResponse{BadRequestJSONResponse{
+			Error: "Slot out of range",
+		}}, nil
+	}
+
 	size := mapSizeFromAPI(request.Body.Size)
-	m, err := model.CreateDefaultMap(request.Body.Owner, size)
+	mapParams, err := model.CreateDefaultMap(request.Body.Owner, size)
 	if err != nil {
 		return nil, err
 	}
 
-	var contestId *string
-	var savePlayer *db.MapPlayerData
+	var slot *db.InsertMapSlotParams
 	if request.Body.IsOrg {
-		m.MType = string(model.TypeOrg)
-	} else if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
-		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch player data: %w", err)
-		}
-
-		if pd.ContestSlot != nil {
-			return CreateMap400JSONResponse{BadRequestJSONResponse{
-				Error: "Only one contest map can be created!",
-			}}, nil
-		}
-
-		m.OptVariant = string(model.Parkour)
-		// Contest maps are always 1200x1200
-		m.Size = model.MapSizeColossal
-		m.Contest = &mapContestId
-		contestId = &mapContestId
-
-		pd.ContestSlot = &m.ID
-		savePlayer = &pd
+		mapParams.MType = string(model.TypeOrg)
 	} else {
-		pd, err := s.store.GetPlayerData(ctx, request.Body.Owner)
+		pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, request.Body.Owner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch player data: %w", err)
 		}
@@ -67,46 +58,64 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.ID, size)
 		if err != nil {
 			return nil, err
-		} else if !allowedForSize {
+		}
+		if !allowedForSize {
 			return CreateMap400JSONResponse{BadRequestJSONResponse{
 				Error: "You have not unlocked the requested map size",
 			}}, nil
 		}
 
-		// Add to the given slot or a free slot (if available)
-		if request.Body.Slot != nil {
-			added, err := s.addMapToSlot(ctx, &pd, m.ID, *request.Body.Slot)
+		slot = &db.InsertMapSlotParams{
+			PlayerID:  pd.ID,
+			MapID:     mapParams.ID,
+			CreatedAt: time.Now(),
+		}
+		slot.Index, err = s.getMapSlotIndex(ctx, &pd, mapParams.ID, request.Body.Slot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get slot index: %w", err)
+		}
+	}
+
+	// Write to DB and permission manager at the same time (2 phase commit)
+	createdMap, err := db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (*db.Map, error) {
+		_, err := s.authzClient.SetMapOwner(ctx, mapParams.ID, mapParams.Owner)
+		if err != nil {
+			return nil, fmt.Errorf("authz write failed: %w", err)
+		}
+
+		m, err := tx.CreateMap(ctx, mapParams)
+		if err != nil {
+			return nil, fmt.Errorf("db write failed: %w", err)
+		}
+
+		if slot != nil {
+			err = tx.InsertMapSlot(ctx, *slot)
 			if err != nil {
-				return nil, fmt.Errorf("failed to add map to slot: %w", err)
-			}
-			if !added {
-				return CreateMap400JSONResponse{BadRequestJSONResponse{
-					Error: "The slot is already in use",
-				}}, nil
-			}
-		} else {
-			_, ok, err := s.addMapToFreeSlot(ctx, &pd, m.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to add map to slot: %w", err)
-			}
-			if !ok {
-				return CreateMap400JSONResponse{BadRequestJSONResponse{
-					Error: "You have no free map slots",
-				}}, nil
+				return nil, fmt.Errorf("insert slot failed: %w", err)
 			}
 		}
-		savePlayer = &pd
-	}
 
-	createdMap, err := s.safeWriteMapToDatabase(ctx, *m, savePlayer)
+		return &m, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to write map to database: %w", err)
+		// Rollback authz update
+		if rbErr := s.authzClient.DeleteMap(ctx, mapParams.ID); rbErr != nil {
+			zap.S().Errorw("failed to rollback authz", "err", rbErr)
+		}
+
+		return nil, fmt.Errorf("failed to create map: %w", err)
 	}
 
-	//todo map created should include the size + maybe generator
+	// If not an org map, send the updated player data
+	if !request.Body.IsOrg {
+		err = s.writePlayerDataUpdateMessage(ctx, createdMap.Owner)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send player data update message: %w", err)
+		}
+	}
+
 	go s.metrics.Write(model.MapCreatedEvent{
 		PlayerId: request.Body.Owner,
-		Contest:  contestId,
 	})
 
 	return CreateMap201JSONResponse{s.hydrateMap(*createdMap, []db.MapTag{})}, nil

@@ -7,35 +7,115 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
-const removeMapFromSlots = `-- name: RemoveMapFromSlots :many
-update map_player_data
-set maps = array_replace(maps, $1, '')
-where $1 = any (maps)
-returning id, unlocked_slots, maps, last_played_map, last_edited_map, contest_slot
+const getIndexedMapSlots = `-- name: GetIndexedMapSlots :many
+select map_id, index
+from map_slots
+where player_id = $1
+  and index >= 0
+  and index < 5
 `
 
-func (q *Queries) RemoveMapFromSlots(ctx context.Context, arrayReplace interface{}) ([]MapPlayerData, error) {
-	rows, err := q.db.Query(ctx, removeMapFromSlots, arrayReplace)
+type GetIndexedMapSlotsRow struct {
+	MapID string `json:"mapId"`
+	Index int    `json:"index"`
+}
+
+func (q *Queries) GetIndexedMapSlots(ctx context.Context, playerID string) ([]GetIndexedMapSlotsRow, error) {
+	rows, err := q.db.Query(ctx, getIndexedMapSlots, playerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []MapPlayerData{}
+	items := []GetIndexedMapSlotsRow{}
 	for rows.Next() {
-		var i MapPlayerData
+		var i GetIndexedMapSlotsRow
+		if err := rows.Scan(&i.MapID, &i.Index); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMapSlots = `-- name: GetMapSlots :many
+select player_id, map_id, index, created_at
+from map_slots
+where player_id = $1
+`
+
+func (q *Queries) GetMapSlots(ctx context.Context, playerID string) ([]MapSlots, error) {
+	rows, err := q.db.Query(ctx, getMapSlots, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MapSlots{}
+	for rows.Next() {
+		var i MapSlots
 		if err := rows.Scan(
-			&i.ID,
-			&i.UnlockedSlots,
-			&i.Map,
-			&i.LastPlayedMap,
-			&i.LastEditedMap,
-			&i.ContestSlot,
+			&i.PlayerID,
+			&i.MapID,
+			&i.Index,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertMapSlot = `-- name: InsertMapSlot :exec
+insert into map_slots(player_id, map_id, index, created_at)
+values ($1, $2, $3, $4)
+`
+
+type InsertMapSlotParams struct {
+	PlayerID  string    `json:"playerId"`
+	MapID     string    `json:"mapId"`
+	Index     int       `json:"index"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (q *Queries) InsertMapSlot(ctx context.Context, arg InsertMapSlotParams) error {
+	_, err := q.db.Exec(ctx, insertMapSlot,
+		arg.PlayerID,
+		arg.MapID,
+		arg.Index,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const removeMapFromSlots = `-- name: RemoveMapFromSlots :many
+delete
+from map_slots
+where map_id = $1
+returning player_id
+`
+
+func (q *Queries) RemoveMapFromSlots(ctx context.Context, mapID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, removeMapFromSlots, mapID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var player_id string
+		if err := rows.Scan(&player_id); err != nil {
+			return nil, err
+		}
+		items = append(items, player_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -64,29 +144,26 @@ func (q *Queries) Unsafe_GetPlayerData(ctx context.Context, id string) (MapPlaye
 }
 
 const upsertPlayerData = `-- name: UpsertPlayerData :exec
-insert into map_player_data (id, unlocked_slots, maps, last_played_map, last_edited_map, contest_slot)
-values ($1, $2, $3, $4, $5, $6)
+insert into map_player_data (id, unlocked_slots, last_played_map, last_edited_map, contest_slot)
+values ($1, $2, $3, $4, $5)
 on conflict (id) do update
-  set maps=excluded.maps,
-      last_played_map=excluded.last_played_map,
+  set last_played_map=excluded.last_played_map,
       last_edited_map=excluded.last_edited_map,
       contest_slot=excluded.contest_slot
 `
 
 type UpsertPlayerDataParams struct {
-	ID            string   `json:"id"`
-	UnlockedSlots int      `json:"unlockedSlots"`
-	Map           []string `json:"maps"`
-	LastPlayedMap *string  `json:"lastPlayedMap"`
-	LastEditedMap *string  `json:"lastEditedMap"`
-	ContestSlot   *string  `json:"contestSlot"`
+	ID            string  `json:"id"`
+	UnlockedSlots int     `json:"unlockedSlots"`
+	LastPlayedMap *string `json:"lastPlayedMap"`
+	LastEditedMap *string `json:"lastEditedMap"`
+	ContestSlot   *string `json:"contestSlot"`
 }
 
 func (q *Queries) UpsertPlayerData(ctx context.Context, arg UpsertPlayerDataParams) error {
 	_, err := q.db.Exec(ctx, upsertPlayerData,
 		arg.ID,
 		arg.UnlockedSlots,
-		arg.Map,
 		arg.LastPlayedMap,
 		arg.LastEditedMap,
 		arg.ContestSlot,

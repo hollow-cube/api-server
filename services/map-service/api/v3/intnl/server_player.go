@@ -10,10 +10,29 @@ import (
 	"github.com/redis/rueidis"
 )
 
-func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error) {
-	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+func (s *server) GetMapPlayerDataWithIndexedSlots(ctx context.Context, playerId string) (db.MapPlayerData, error) {
+	pd, err := s.store.GetPlayerData(ctx, playerId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch player data: %w", err)
+		return pd, fmt.Errorf("failed to fetch player data: %w", err)
+	}
+
+	// Fill in old indexed map slots
+	indexedSlots, err := s.store.GetIndexedMapSlots(ctx, playerId)
+	if err != nil {
+		return pd, fmt.Errorf("failed to fetch indexed map slots: %w", err)
+	}
+	pd.Map = make([]string, 5)
+	for _, slot := range indexedSlots {
+		pd.Map[slot.Index] = slot.MapID
+	}
+
+	return pd, err
+}
+
+func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error) {
+	pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, request.PlayerId)
+	if err != nil {
+		return nil, err
 	}
 
 	return GetMapPlayerData200JSONResponse{playerDataToAPI(pd)}, nil

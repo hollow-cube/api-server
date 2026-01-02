@@ -174,6 +174,13 @@ type MapReports struct {
 	Comment    *string   `json:"comment"`
 }
 
+type MapSlots struct {
+	PlayerID  string    `json:"playerId"`
+	MapID     string    `json:"mapId"`
+	Index     int       `json:"index"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type MapStats struct {
 	MapID     string   `json:"mapId"`
 	PlayCount int      `json:"playCount"`
