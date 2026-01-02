@@ -28,7 +28,7 @@ func (q *Queries) RemoveMapFromSlots(ctx context.Context, arrayReplace interface
 		if err := rows.Scan(
 			&i.ID,
 			&i.UnlockedSlots,
-			&i.Maps,
+			&i.Map,
 			&i.LastPlayedMap,
 			&i.LastEditedMap,
 			&i.ContestSlot,
@@ -55,7 +55,7 @@ func (q *Queries) Unsafe_GetPlayerData(ctx context.Context, id string) (MapPlaye
 	err := row.Scan(
 		&i.ID,
 		&i.UnlockedSlots,
-		&i.Maps,
+		&i.Map,
 		&i.LastPlayedMap,
 		&i.LastEditedMap,
 		&i.ContestSlot,
@@ -76,7 +76,7 @@ on conflict (id) do update
 type UpsertPlayerDataParams struct {
 	ID            string   `json:"id"`
 	UnlockedSlots int      `json:"unlockedSlots"`
-	Maps          []string `json:"maps"`
+	Map           []string `json:"maps"`
 	LastPlayedMap *string  `json:"lastPlayedMap"`
 	LastEditedMap *string  `json:"lastEditedMap"`
 	ContestSlot   *string  `json:"contestSlot"`
@@ -86,7 +86,7 @@ func (q *Queries) UpsertPlayerData(ctx context.Context, arg UpsertPlayerDataPara
 	_, err := q.db.Exec(ctx, upsertPlayerData,
 		arg.ID,
 		arg.UnlockedSlots,
-		arg.Maps,
+		arg.Map,
 		arg.LastPlayedMap,
 		arg.LastEditedMap,
 		arg.ContestSlot,

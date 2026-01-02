@@ -12,14 +12,14 @@ func (h *InternalHandler) HasFreeMapSlot(ctx context.Context, pd db.MapPlayerDat
 	if err != nil {
 		return false, err
 	}
-	if len(pd.Maps) < unlockedSlots {
+	if len(pd.Map) < unlockedSlots {
 		// If the maps array is smaller than unlocked they always have one ready.
 		// The loop below will also fail in this case, so it is double good :)
 		return true, nil
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
+		if pd.Map[i] == "" {
 			return true, nil
 		}
 	}
@@ -37,16 +37,16 @@ func (h *InternalHandler) AddMapToSlot(ctx context.Context, pd db.MapPlayerData,
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	// Check if slot is free
-	if pd.Maps[slot] != "" {
+	if pd.Map[slot] != "" {
 		return false, nil
 	}
 
-	pd.Maps[slot] = mapId
+	pd.Map[slot] = mapId
 	return true, nil
 }
 
@@ -57,13 +57,13 @@ func (h *InternalHandler) AddMapToFreeSlot(ctx context.Context, pd db.MapPlayerD
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
-			pd.Maps[i] = mapId
+		if pd.Map[i] == "" {
+			pd.Map[i] = mapId
 			return i, true, nil
 		}
 	}

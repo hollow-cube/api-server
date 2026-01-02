@@ -9,6 +9,11 @@ select *
 from maps
 where id = $1;
 
+-- name: GetMapWithTagsById :one
+select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
+from maps
+where id = $1;
+
 -- name: GetPublishedMapById :one
 select *
 from maps_published
@@ -41,7 +46,6 @@ set opt_name         = @name,
     opt_variant      = @variant,
     opt_subvariant   = @subvariant,
     opt_spawn_point  = @spawn_point,
-    opt_tags         = @tags,
     ext              = @ext,
     quality_override = @quality,
     listed           = @listed,
@@ -53,6 +57,16 @@ set opt_name         = @name,
     opt_boat         = @boat,
     opt_extra        = @extra
 where id = $1;
+
+-- name: DeleteMapTagsNotIn :exec
+DELETE FROM map_tags
+WHERE map_id = @map_id
+  AND tag != ALL(@tags::map_tag[]);
+
+-- name: UpsertMapTags :exec
+INSERT INTO map_tags (map_id, tag)
+SELECT @map_id, unnest(@tags::map_tag[])
+ON CONFLICT (map_id, tag) DO NOTHING;
 
 -- name: UpdateMapVerification :exec
 update maps

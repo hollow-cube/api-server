@@ -109,7 +109,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		Contest:  contestId,
 	})
 
-	return CreateMap201JSONResponse{s.hydrateMap(*createdMap)}, nil
+	return CreateMap201JSONResponse{s.hydrateMap(*createdMap, []db.MapTag{})}, nil
 }
 
 func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error) {
@@ -209,12 +209,13 @@ func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressB
 func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMapResponseObject, error) {
 	// todo should switch this to split between getmap and getpublishedmap and change all the dependent places.
 	if common.IsUUID(request.MapId) {
-		m, err := s.store.GetMapById(ctx, request.MapId)
+		res, err := s.store.GetMapWithTagsById(ctx, request.MapId)
 		if errors.Is(err, db.ErrNoRows) {
 			return MapNotFoundResponse{}, nil
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to fetch map: %w", err)
 		}
+		m := res.Map
 
 		// If map is published we need to get that version
 		if m.PublishedID != nil {
@@ -225,7 +226,7 @@ func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMa
 			return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
 		}
 
-		return GetMap200JSONResponse{s.hydrateMap(m)}, nil
+		return GetMap200JSONResponse{s.hydrateMap(m, res.Tags)}, nil
 	}
 
 	// Can also search by published id
@@ -258,7 +259,6 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		Variant:         m.OptVariant,
 		Subvariant:      m.OptSubvariant,
 		SpawnPoint:      m.OptSpawnPoint,
-		Tags:            m.OptTags,
 		Ext:             m.Ext,
 		Quality:         m.QualityOverride,
 		Listed:          m.Listed,
@@ -270,6 +270,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		Boat:            m.OptBoat,
 		Extra:           m.OptExtra,
 	}
+	var newTags []db.MapTag
 
 	// Update the map
 	var changed bool
@@ -349,7 +350,10 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 	}
 
 	if request.Body.Tags != nil {
-		update.Tags = *request.Body.Tags
+		newTags = make([]db.MapTag, len(*request.Body.Tags))
+		for i, tag := range *request.Body.Tags {
+			newTags[i] = db.MapTag(tag)
+		}
 		changed = true
 	}
 
@@ -400,9 +404,22 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 	}
 
 	// Write back to DB
-	if err = s.store.UpdateMap(ctx, update); err != nil {
-		return nil, fmt.Errorf("failed to update map: %w", err)
-	}
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
+		if err = tx.UpdateMap(ctx, update); err != nil {
+			return fmt.Errorf("failed to update map: %w", err)
+		}
+
+		if newTags != nil {
+			if err = tx.DeleteMapTagsNotIn(ctx, update.ID, newTags); err != nil {
+				return fmt.Errorf("failed to remove old tags: %w", err)
+			}
+			if err = tx.UpsertMapTags(ctx, update.ID, newTags); err != nil {
+				return fmt.Errorf("failed to upsert new tags: %w", err)
+			}
+		}
+
+		return nil
+	})
 
 	// If we changed the variant to parkour after publishing, delete any in-progress save states for the map
 	if m.PublishedAt != nil && request.Body.Variant != nil && *request.Body.Variant == Parkour {
@@ -848,7 +865,7 @@ func parseSearchQueryParams(params *db.SearchMapsParams, req *MapSearchParams) s
 	return ""
 }
 
-func (s *server) hydrateMap(m db.Map) MapDataJSONResponse {
+func (s *server) hydrateMap(m db.Map, tags []db.MapTag) MapDataJSONResponse {
 	extra := make(map[string]interface{})
 	if m.OptExtra != nil {
 		_ = json.Unmarshal(m.OptExtra, &extra)
@@ -869,6 +886,11 @@ func (s *server) hydrateMap(m db.Map) MapDataJSONResponse {
 		extra["boat"] = true
 	}
 
+	apiTags := make([]string, len(tags))
+	for i, tag := range tags {
+		apiTags[i] = string(tag)
+	}
+
 	return MapDataJSONResponse{
 		Id:              m.ID,
 		Owner:           m.Owner,
@@ -883,7 +905,7 @@ func (s *server) hydrateMap(m db.Map) MapDataJSONResponse {
 			Size:       mapSizeToAPI(m.Size),
 			Variant:    mapVariantToAPI(m.OptVariant),
 			Subvariant: m.OptSubvariant,
-			Tags:       m.OptTags,
+			Tags:       apiTags,
 			SpawnPoint: posToAPI(m.OptSpawnPoint),
 			Extra:      extra,
 		},

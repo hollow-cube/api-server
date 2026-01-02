@@ -10,7 +10,7 @@ sql:
         package: "db"
         out: "."
         emit_pointers_for_null_types: true
-        omit_unused_structs: true
+        emit_exact_table_names: true
         query_parameter_limit: 3
         emit_empty_slices: true
         emit_json_tags: true
@@ -18,6 +18,9 @@ sql:
         rename:
           map_player_datum: MapPlayerData
           maps_published: PublishedMap
+          maps: Map
+          map_ratings: MapRating
+          save_states: SaveState
         overrides:
           - db_type: "timestamptz"
             go_type: "time.Time"

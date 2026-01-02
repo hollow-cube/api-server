@@ -108,7 +108,7 @@ func SafeWriteMapToDatabase(
 			err = tx.UpsertPlayerData(ctx, db.UpsertPlayerDataParams{
 				ID:            optionalPlayerData.ID,
 				UnlockedSlots: optionalPlayerData.UnlockedSlots,
-				Maps:          optionalPlayerData.Maps,
+				Map:           optionalPlayerData.Map,
 				LastPlayedMap: optionalPlayerData.LastPlayedMap,
 				LastEditedMap: optionalPlayerData.LastEditedMap,
 				ContestSlot:   optionalPlayerData.ContestSlot,

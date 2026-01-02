@@ -8,7 +8,63 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type MapTag string
+
+const (
+	MapTagAutocomplete   MapTag = "autocomplete"
+	MapTagBossbattle     MapTag = "bossbattle"
+	MapTagEscape         MapTag = "escape"
+	MapTagExploration    MapTag = "exploration"
+	MapTagInterior       MapTag = "interior"
+	MapTagOrganics       MapTag = "organics"
+	MapTagPuzzle         MapTag = "puzzle"
+	MapTagRecreation     MapTag = "recreation"
+	MapTagStory          MapTag = "story"
+	MapTagStrategy       MapTag = "strategy"
+	MapTagStructure      MapTag = "structure"
+	MapTagTerrain        MapTag = "terrain"
+	MapTagTrivia         MapTag = "trivia"
+	MapTagTwodimensional MapTag = "twodimensional"
+)
+
+func (e *MapTag) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MapTag(s)
+	case string:
+		*e = MapTag(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MapTag: %T", src)
+	}
+	return nil
+}
+
+type NullMapTag struct {
+	MapTag MapTag `json:"mapTag"`
+	Valid  bool   `json:"valid"` // Valid is true if MapTag is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMapTag) Scan(value interface{}) error {
+	if value == nil {
+		ns.MapTag, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MapTag.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMapTag) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MapTag), nil
+}
 
 type SaveStateType string
 
@@ -88,10 +144,15 @@ type Map struct {
 	Listed          bool       `json:"listed"`
 }
 
+type MapOrgs struct {
+	ID         string  `json:"id"`
+	WebhookUrl *string `json:"webhookUrl"`
+}
+
 type MapPlayerData struct {
 	ID            string   `json:"id"`
 	UnlockedSlots int      `json:"unlockedSlots"`
-	Maps          []string `json:"maps"`
+	Map           []string `json:"maps"`
 	LastPlayedMap *string  `json:"lastPlayedMap"`
 	LastEditedMap *string  `json:"lastEditedMap"`
 	ContestSlot   *string  `json:"contestSlot"`
@@ -104,7 +165,7 @@ type MapRating struct {
 	Comment  *string `json:"comment"`
 }
 
-type MapReport struct {
+type MapReports struct {
 	ID         int       `json:"id"`
 	MapID      string    `json:"mapId"`
 	PlayerID   string    `json:"playerId"`
@@ -113,14 +174,44 @@ type MapReport struct {
 	Comment    *string   `json:"comment"`
 }
 
+type MapStats struct {
+	MapID     string   `json:"mapId"`
+	PlayCount int      `json:"playCount"`
+	WinCount  int      `json:"winCount"`
+	ClearRate *float64 `json:"clearRate"`
+}
+
+type MapTags struct {
+	MapID string `json:"mapId"`
+	Tag   MapTag `json:"tag"`
+}
+
+type ObungusBoxRatings struct {
+	BoxID      string `json:"boxId"`
+	PlayerID   string `json:"playerId"`
+	IsRejected bool   `json:"isRejected"`
+	Difficulty int32  `json:"difficulty"`
+	Quality    int32  `json:"quality"`
+}
+
+type ObungusPendingBoxes struct {
+	ID             string      `json:"id"`
+	PlayerID       *string     `json:"playerId"`
+	CreatedAt      time.Time   `json:"createdAt"`
+	Name           *string     `json:"name"`
+	Shape          pgtype.Bits `json:"shape"`
+	SchematicData  []byte      `json:"schematicData"`
+	LegacyUsername *string     `json:"legacyUsername"`
+}
+
 type PublishedMap struct {
 	ID              string     `json:"id"`
 	Owner           string     `json:"owner"`
 	MType           string     `json:"mType"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
-	AuthzKey        *string    `json:"authzKey"`
 	Verification    *int64     `json:"verification"`
+	AuthzKey        *string    `json:"authzKey"`
 	FileID          string     `json:"fileId"`
 	LegacyMapID     *string    `json:"legacyMapId"`
 	PublishedID     *int       `json:"publishedId"`
@@ -139,10 +230,14 @@ type PublishedMap struct {
 	OptBoat         *bool      `json:"optBoat"`
 	OptExtra        []byte     `json:"optExtra"`
 	OptTags         []string   `json:"optTags"`
+	Ext             MapExt     `json:"ext"`
+	DeletedAt       *time.Time `json:"deletedAt"`
+	DeletedBy       *string    `json:"deletedBy"`
+	DeletedReason   *string    `json:"deletedReason"`
 	ProtocolVersion *int       `json:"protocolVersion"`
 	Contest         *string    `json:"contest"`
 	Listed          bool       `json:"listed"`
-	Ext             MapExt     `json:"ext"`
+	Tags            []MapTag   `json:"tags"`
 	PlayCount       int        `json:"playCount"`
 	WinCount        int        `json:"winCount"`
 	TotalLikes      int64      `json:"totalLikes"`
@@ -164,4 +259,24 @@ type SaveState struct {
 	DataVersion     int           `json:"dataVersion"`
 	ProtocolVersion *int          `json:"protocolVersion"`
 	Ticks           int           `json:"ticks"`
+}
+
+type TfLocalSession struct {
+	PlayerID string `json:"playerId"`
+	WorldID  string `json:"worldId"`
+	State    []byte `json:"state"`
+}
+
+type TfPlayerSession struct {
+	PlayerID string `json:"playerId"`
+	State    []byte `json:"state"`
+}
+
+type TfSchematics struct {
+	PlayerID   string `json:"playerId"`
+	Name       string `json:"name"`
+	Dimensions int    `json:"dimensions"`
+	Size       int    `json:"size"`
+	SchemData  []byte `json:"schemData"`
+	Filetype   string `json:"filetype"`
 }

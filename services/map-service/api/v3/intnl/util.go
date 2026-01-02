@@ -40,14 +40,14 @@ func (s *server) hasFreeMapSlot(ctx context.Context, pd *db.MapPlayerData) (bool
 	if err != nil {
 		return false, err
 	}
-	if len(pd.Maps) < unlockedSlots {
+	if len(pd.Map) < unlockedSlots {
 		// If the maps array is smaller than unlocked they always have one ready.
 		// The loop below will also fail in this case, so it is double good :)
 		return true, nil
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
+		if pd.Map[i] == "" {
 			return true, nil
 		}
 	}
@@ -65,16 +65,16 @@ func (s *server) addMapToSlot(ctx context.Context, pd *db.MapPlayerData, mapId s
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	// Check if slot is free
-	if pd.Maps[slot] != "" {
+	if pd.Map[slot] != "" {
 		return false, nil
 	}
 
-	pd.Maps[slot] = mapId
+	pd.Map[slot] = mapId
 	return true, nil
 }
 
@@ -85,13 +85,13 @@ func (s *server) addMapToFreeSlot(ctx context.Context, pd *db.MapPlayerData, map
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
-			pd.Maps[i] = mapId
+		if pd.Map[i] == "" {
+			pd.Map[i] = mapId
 			return i, true, nil
 		}
 	}
@@ -169,7 +169,7 @@ func (s *server) safeWriteMapToDatabase(ctx context.Context, mapParams db.Create
 			err = tx.UpsertPlayerData(ctx, db.UpsertPlayerDataParams{
 				ID:            optionalPlayerData.ID,
 				UnlockedSlots: optionalPlayerData.UnlockedSlots,
-				Maps:          optionalPlayerData.Maps,
+				Map:           optionalPlayerData.Map,
 				LastPlayedMap: optionalPlayerData.LastPlayedMap,
 				LastEditedMap: optionalPlayerData.LastEditedMap,
 				ContestSlot:   optionalPlayerData.ContestSlot,

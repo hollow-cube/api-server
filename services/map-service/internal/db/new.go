@@ -46,6 +46,21 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	}
 
 	config.ConnConfig.Tracer = postgresUtil.NewSqlCTracer()
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		typ, err := conn.LoadType(ctx, "map_tag")
+		if err != nil {
+			return err
+		}
+		conn.TypeMap().RegisterType(typ)
+
+		arrayType, err := conn.LoadType(ctx, "_map_tag")
+		if err != nil {
+			return err
+		}
+		conn.TypeMap().RegisterType(arrayType)
+
+		return nil
+	}
 
 	// Create pgx conn pool
 	pool, err := pgxpool.NewWithConfig(ctx, config)

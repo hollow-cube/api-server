@@ -83,7 +83,7 @@ func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPla
 func playerDataToAPI(pd db.MapPlayerData) GetMapPlayerDataJSONResponse {
 	return GetMapPlayerDataJSONResponse{
 		Id:          pd.ID,
-		MapSlots:    pd.Maps,
+		MapSlots:    pd.Map,
 		ContestSlot: pd.ContestSlot,
 	}
 }

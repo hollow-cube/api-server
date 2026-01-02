@@ -10,7 +10,7 @@ func (s *Store) GetPlayerData(ctx context.Context, playerId string) (MapPlayerDa
 	pd, err := s.Unsafe_GetPlayerData(ctx, playerId)
 	if errors.Is(err, ErrNoRows) {
 		pd.ID = playerId
-		pd.Maps = make([]string, 2)
+		pd.Map = make([]string, 2)
 	} else if err != nil {
 		return MapPlayerData{}, err
 	}
