@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const deleteNotification = `-- name: DeleteNotification :exec
+const deleteNotification = `-- name: DeleteNotification :execrows
 update player_notifications
 set deleted_at = now()
 where player_id = $1
@@ -18,9 +18,12 @@ where player_id = $1
   and deleted_at is null
 `
 
-func (q *Queries) DeleteNotification(ctx context.Context, playerID string, iD string) error {
-	_, err := q.db.Exec(ctx, deleteNotification, playerID, iD)
-	return err
+func (q *Queries) DeleteNotification(ctx context.Context, playerID string, iD string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotification, playerID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getNotificationCount = `-- name: GetNotificationCount :one
@@ -67,7 +70,7 @@ type GetNotificationsRow struct {
 	ExpiresAt *time.Time      `json:"expiresAt"`
 }
 
-func (q *Queries) GetNotifications(ctx context.Context, arg GetNotificationsParams) ([]*GetNotificationsRow, error) {
+func (q *Queries) GetNotifications(ctx context.Context, arg GetNotificationsParams) ([]GetNotificationsRow, error) {
 	rows, err := q.db.Query(ctx, getNotifications,
 		arg.PlayerID,
 		arg.Limit,
@@ -78,7 +81,7 @@ func (q *Queries) GetNotifications(ctx context.Context, arg GetNotificationsPara
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*GetNotificationsRow{}
+	items := []GetNotificationsRow{}
 	for rows.Next() {
 		var i GetNotificationsRow
 		if err := rows.Scan(
@@ -92,7 +95,7 @@ func (q *Queries) GetNotifications(ctx context.Context, arg GetNotificationsPara
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, &i)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -100,28 +103,34 @@ func (q *Queries) GetNotifications(ctx context.Context, arg GetNotificationsPara
 	return items, nil
 }
 
-const markNotificationRead = `-- name: MarkNotificationRead :exec
+const markNotificationRead = `-- name: MarkNotificationRead :execrows
 update player_notifications
 set read_at = now()
 where player_id = $1
   and id = $2
 `
 
-func (q *Queries) MarkNotificationRead(ctx context.Context, playerID string, iD string) error {
-	_, err := q.db.Exec(ctx, markNotificationRead, playerID, iD)
-	return err
+func (q *Queries) MarkNotificationRead(ctx context.Context, playerID string, iD string) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationRead, playerID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const markNotificationUnread = `-- name: MarkNotificationUnread :exec
+const markNotificationUnread = `-- name: MarkNotificationUnread :execrows
 update player_notifications
 set read_at = null
 where player_id = $1
   and id = $2
 `
 
-func (q *Queries) MarkNotificationUnread(ctx context.Context, playerID string, iD string) error {
-	_, err := q.db.Exec(ctx, markNotificationUnread, playerID, iD)
-	return err
+func (q *Queries) MarkNotificationUnread(ctx context.Context, playerID string, iD string) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationUnread, playerID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unsafe_AddNotification = `-- name: Unsafe_AddNotification :exec

@@ -3,7 +3,6 @@ package intnl
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
@@ -13,8 +12,8 @@ import (
 const notificationsPerPage = 21
 
 func (s *server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
-	err := s.store.DeleteNotification(ctx, request.PlayerId, request.Params.NotificationId)
-	if errors.Is(err, db.ErrNoRows) {
+	rows, err := s.store.DeleteNotification(ctx, request.PlayerId, request.NotificationId)
+	if rows == 0 {
 		return DeletePlayerNotification404Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -30,7 +29,7 @@ func (s *server) GetPlayerNotifications(ctx context.Context, request GetPlayerNo
 		page = int32(*request.Params.Page)
 	}
 	if page < 0 {
-		return GetPlayerNotifications400Response{}, nil
+		return GetPlayerNotifications400JSONResponse{Message: "page must be non-negative"}, nil
 	}
 
 	var pageCount int32 = 0
@@ -69,14 +68,15 @@ func (s *server) GetPlayerNotifications(ctx context.Context, request GetPlayerNo
 }
 
 func (s *server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
+	var rows int64
 	var err error
 	if request.Body.Read {
-		err = s.store.MarkNotificationRead(ctx, request.PlayerId, request.Params.NotificationId)
+		rows, err = s.store.MarkNotificationRead(ctx, request.PlayerId, request.NotificationId)
 	} else {
-		err = s.store.MarkNotificationUnread(ctx, request.PlayerId, request.Params.NotificationId)
+		rows, err = s.store.MarkNotificationUnread(ctx, request.PlayerId, request.NotificationId)
 	}
 
-	if errors.Is(err, db.ErrNoRows) {
+	if rows == 0 {
 		return UpdatePlayerNotification404Response{}, nil
 	} else if err != nil {
 		return nil, err
@@ -115,7 +115,8 @@ func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePla
 }
 
 func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
-	msg := model.NotificationCreatedMessage{
+	msg := model.NotificationUpdateMessage{
+		Action:   model.NotificationCreateAction,
 		PlayerId: request.PlayerId,
 		Type:     request.Body.Type,
 		Key:      request.Body.Key,
@@ -128,7 +129,7 @@ func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlay
 	}
 
 	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: model.NotificationCreatedTopic,
+		Topic: model.NotificationUpdateTopic,
 		Key:   []byte(request.PlayerId),
 		Value: raw,
 	})

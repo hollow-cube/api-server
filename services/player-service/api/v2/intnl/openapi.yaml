@@ -1146,60 +1146,14 @@ paths:
                     items: { $ref: '#/components/schemas/PlayerNotification' }
         '400':
           description: Invalid page number
-    delete:
-      tags: [ "notifications" ]
-      summary: Delete notification for a player
-      operationId: deletePlayerNotification
-      parameters:
-        - name: playerId
-          in: path
-          description: The player ID to get notifications for
-          required: true
-          schema:
-            type: string
-        - name: notificationId
-          in: query
-          description: The notification ID to delete.
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Notification successfully deleted
-        '404':
-          description: Notification not found
-    patch:
-      tags: [ "notifications" ]
-      summary: Update (mark read/unread) a notification for a player
-      operationId: updatePlayerNotification
-      parameters:
-        - name: playerId
-          in: path
-          description: The player ID to get notifications for
-          required: true
-          schema:
-            type: string
-        - name: notificationId
-          in: query
-          description: The notification ID to delete.
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ read ]
-              properties:
-                read:
-                  type: boolean
-                  description: Whether to mark the notification as read or unread
-      responses:
-        '200':
-          description: Notification successfully updated
-        '404':
-          description: Notification not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ message ]
+                properties:
+                  message:
+                    type: string
     post:
       tags: [ "notifications" ]
       summary: Create a notification for a player
@@ -1233,6 +1187,62 @@ paths:
       responses:
         '201':
           description: Notification successfully created
+
+  /players/{playerId}/notifications/{notificationId}:
+    delete:
+      tags: [ "notifications" ]
+      summary: Delete notification for a player
+      operationId: deletePlayerNotification
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: notificationId
+          in: path
+          description: The notification ID to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification successfully deleted
+        '404':
+          description: Notification not found
+    patch:
+      tags: [ "notifications" ]
+      summary: Update (mark read/unread) a notification for a player
+      operationId: updatePlayerNotification
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: notificationId
+          in: path
+          description: The notification ID to update.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ read ]
+              properties:
+                read:
+                  type: boolean
+                  description: Whether to mark the notification as read or unread
+      responses:
+        '200':
+          description: Notification successfully updated
+        '404':
+          description: Notification not found
 
 components:
   responses:

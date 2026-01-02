@@ -270,12 +270,6 @@ type GetPlayerFriendsParams struct {
 	PageSize int32 `form:"pageSize" json:"pageSize"`
 }
 
-// DeletePlayerNotificationParams defines parameters for DeletePlayerNotification.
-type DeletePlayerNotificationParams struct {
-	// NotificationId The notification ID to delete.
-	NotificationId string `form:"notificationId" json:"notificationId"`
-}
-
 // GetPlayerNotificationsParams defines parameters for GetPlayerNotifications.
 type GetPlayerNotificationsParams struct {
 	// Page The page of results to get, starting at 0
@@ -283,18 +277,6 @@ type GetPlayerNotificationsParams struct {
 
 	// Unread If set to true, only return unread notifications
 	Unread *bool `form:"unread,omitempty" json:"unread,omitempty"`
-}
-
-// UpdatePlayerNotificationJSONBody defines parameters for UpdatePlayerNotification.
-type UpdatePlayerNotificationJSONBody struct {
-	// Read Whether to mark the notification as read or unread
-	Read bool `json:"read"`
-}
-
-// UpdatePlayerNotificationParams defines parameters for UpdatePlayerNotification.
-type UpdatePlayerNotificationParams struct {
-	// NotificationId The notification ID to delete.
-	NotificationId string `form:"notificationId" json:"notificationId"`
 }
 
 // CreatePlayerNotificationJSONBody defines parameters for CreatePlayerNotification.
@@ -311,6 +293,12 @@ type CreatePlayerNotificationJSONBody struct {
 type CreatePlayerNotificationParams struct {
 	// ReplaceUnread If a notification with the same type and key exists and is unread remove it before adding the new one
 	ReplaceUnread *bool `form:"replaceUnread,omitempty" json:"replaceUnread,omitempty"`
+}
+
+// UpdatePlayerNotificationJSONBody defines parameters for UpdatePlayerNotification.
+type UpdatePlayerNotificationJSONBody struct {
+	// Read Whether to mark the notification as read or unread
+	Read bool `json:"read"`
 }
 
 // CheckTotpParams defines parameters for CheckTotp.
@@ -425,11 +413,11 @@ type GivePlayerItemsJSONRequestBody GivePlayerItemsJSONBody
 // BuyCosmeticJSONRequestBody defines body for BuyCosmetic for application/json ContentType.
 type BuyCosmeticJSONRequestBody BuyCosmeticJSONBody
 
-// UpdatePlayerNotificationJSONRequestBody defines body for UpdatePlayerNotification for application/json ContentType.
-type UpdatePlayerNotificationJSONRequestBody UpdatePlayerNotificationJSONBody
-
 // CreatePlayerNotificationJSONRequestBody defines body for CreatePlayerNotification for application/json ContentType.
 type CreatePlayerNotificationJSONRequestBody CreatePlayerNotificationJSONBody
+
+// UpdatePlayerNotificationJSONRequestBody defines body for UpdatePlayerNotification for application/json ContentType.
+type UpdatePlayerNotificationJSONRequestBody UpdatePlayerNotificationJSONBody
 
 // CompleteTotpSetupJSONRequestBody defines body for CompleteTotpSetup for application/json ContentType.
 type CompleteTotpSetupJSONRequestBody CompleteTotpSetupJSONBody
@@ -526,18 +514,18 @@ type ServerInterface interface {
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(w http.ResponseWriter, r *http.Request, playerId string)
-	// Delete notification for a player
-	// (DELETE /players/{playerId}/notifications)
-	DeletePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, params DeletePlayerNotificationParams)
 	// Get notifications for a player
 	// (GET /players/{playerId}/notifications)
 	GetPlayerNotifications(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerNotificationsParams)
-	// Update (mark read/unread) a notification for a player
-	// (PATCH /players/{playerId}/notifications)
-	UpdatePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, params UpdatePlayerNotificationParams)
 	// Create a notification for a player
 	// (POST /players/{playerId}/notifications)
 	CreatePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, params CreatePlayerNotificationParams)
+	// Delete notification for a player
+	// (DELETE /players/{playerId}/notifications/{notificationId})
+	DeletePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, notificationId string)
+	// Update (mark read/unread) a notification for a player
+	// (PATCH /players/{playerId}/notifications/{notificationId})
+	UpdatePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, notificationId string)
 	// Remove TOTP setup for a player
 	// (DELETE /players/{playerId}/totp)
 	RemoveTotp(w http.ResponseWriter, r *http.Request, playerId string)
@@ -1367,49 +1355,6 @@ func (siw *ServerInterfaceWrapper) GetPlayerHypercube(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
-// DeletePlayerNotification operation middleware
-func (siw *ServerInterfaceWrapper) DeletePlayerNotification(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeletePlayerNotificationParams
-
-	// ------------- Required query parameter "notificationId" -------------
-
-	if paramValue := r.URL.Query().Get("notificationId"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "notificationId"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "notificationId", r.URL.Query(), &params.NotificationId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeletePlayerNotification(w, r, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetPlayerNotifications operation middleware
 func (siw *ServerInterfaceWrapper) GetPlayerNotifications(w http.ResponseWriter, r *http.Request) {
 
@@ -1454,49 +1399,6 @@ func (siw *ServerInterfaceWrapper) GetPlayerNotifications(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// UpdatePlayerNotification operation middleware
-func (siw *ServerInterfaceWrapper) UpdatePlayerNotification(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdatePlayerNotificationParams
-
-	// ------------- Required query parameter "notificationId" -------------
-
-	if paramValue := r.URL.Query().Get("notificationId"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "notificationId"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "notificationId", r.URL.Query(), &params.NotificationId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdatePlayerNotification(w, r, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // CreatePlayerNotification operation middleware
 func (siw *ServerInterfaceWrapper) CreatePlayerNotification(w http.ResponseWriter, r *http.Request) {
 
@@ -1524,6 +1426,74 @@ func (siw *ServerInterfaceWrapper) CreatePlayerNotification(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreatePlayerNotification(w, r, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePlayerNotification operation middleware
+func (siw *ServerInterfaceWrapper) DeletePlayerNotification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", r.PathValue("notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePlayerNotification(w, r, playerId, notificationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePlayerNotification operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePlayerNotification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", r.PathValue("notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePlayerNotification(w, r, playerId, notificationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2081,10 +2051,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends", wrapper.GetPlayerFriends)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/{targetId}", wrapper.RemoveFriend)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/hypercube", wrapper.GetPlayerHypercube)
-	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/notifications", wrapper.DeletePlayerNotification)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/notifications", wrapper.GetPlayerNotifications)
-	m.HandleFunc("PATCH "+options.BaseURL+"/players/{playerId}/notifications", wrapper.UpdatePlayerNotification)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/notifications", wrapper.CreatePlayerNotification)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/notifications/{notificationId}", wrapper.DeletePlayerNotification)
+	m.HandleFunc("PATCH "+options.BaseURL+"/players/{playerId}/notifications/{notificationId}", wrapper.UpdatePlayerNotification)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/totp", wrapper.RemoveTotp)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/totp", wrapper.CheckTotp)
 	m.HandleFunc("PATCH "+options.BaseURL+"/players/{playerId}/totp/setup", wrapper.CompleteTotpSetup)
@@ -2819,31 +2789,6 @@ func (response GetPlayerHypercube404Response) VisitGetPlayerHypercubeResponse(w 
 	return nil
 }
 
-type DeletePlayerNotificationRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   DeletePlayerNotificationParams
-}
-
-type DeletePlayerNotificationResponseObject interface {
-	VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error
-}
-
-type DeletePlayerNotification200Response struct {
-}
-
-func (response DeletePlayerNotification200Response) VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error {
-	w.WriteHeader(200)
-	return nil
-}
-
-type DeletePlayerNotification404Response struct {
-}
-
-func (response DeletePlayerNotification404Response) VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 type GetPlayerNotificationsRequestObject struct {
 	PlayerId string `json:"playerId"`
 	Params   GetPlayerNotificationsParams
@@ -2868,18 +2813,64 @@ func (response GetPlayerNotifications200JSONResponse) VisitGetPlayerNotification
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetPlayerNotifications400Response struct {
+type GetPlayerNotifications400JSONResponse struct {
+	Message string `json:"message"`
 }
 
-func (response GetPlayerNotifications400Response) VisitGetPlayerNotificationsResponse(w http.ResponseWriter) error {
+func (response GetPlayerNotifications400JSONResponse) VisitGetPlayerNotificationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreatePlayerNotificationRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Params   CreatePlayerNotificationParams
+	Body     *CreatePlayerNotificationJSONRequestBody
+}
+
+type CreatePlayerNotificationResponseObject interface {
+	VisitCreatePlayerNotificationResponse(w http.ResponseWriter) error
+}
+
+type CreatePlayerNotification201Response struct {
+}
+
+func (response CreatePlayerNotification201Response) VisitCreatePlayerNotificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(201)
+	return nil
+}
+
+type DeletePlayerNotificationRequestObject struct {
+	PlayerId       string `json:"playerId"`
+	NotificationId string `json:"notificationId"`
+}
+
+type DeletePlayerNotificationResponseObject interface {
+	VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error
+}
+
+type DeletePlayerNotification200Response struct {
+}
+
+func (response DeletePlayerNotification200Response) VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type DeletePlayerNotification404Response struct {
+}
+
+func (response DeletePlayerNotification404Response) VisitDeletePlayerNotificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
 	return nil
 }
 
 type UpdatePlayerNotificationRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   UpdatePlayerNotificationParams
-	Body     *UpdatePlayerNotificationJSONRequestBody
+	PlayerId       string `json:"playerId"`
+	NotificationId string `json:"notificationId"`
+	Body           *UpdatePlayerNotificationJSONRequestBody
 }
 
 type UpdatePlayerNotificationResponseObject interface {
@@ -2899,24 +2890,6 @@ type UpdatePlayerNotification404Response struct {
 
 func (response UpdatePlayerNotification404Response) VisitUpdatePlayerNotificationResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
-	return nil
-}
-
-type CreatePlayerNotificationRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   CreatePlayerNotificationParams
-	Body     *CreatePlayerNotificationJSONRequestBody
-}
-
-type CreatePlayerNotificationResponseObject interface {
-	VisitCreatePlayerNotificationResponse(w http.ResponseWriter) error
-}
-
-type CreatePlayerNotification201Response struct {
-}
-
-func (response CreatePlayerNotification201Response) VisitCreatePlayerNotificationResponse(w http.ResponseWriter) error {
-	w.WriteHeader(201)
 	return nil
 }
 
@@ -3370,18 +3343,18 @@ type StrictServerInterface interface {
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error)
-	// Delete notification for a player
-	// (DELETE /players/{playerId}/notifications)
-	DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error)
 	// Get notifications for a player
 	// (GET /players/{playerId}/notifications)
 	GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error)
-	// Update (mark read/unread) a notification for a player
-	// (PATCH /players/{playerId}/notifications)
-	UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error)
 	// Create a notification for a player
 	// (POST /players/{playerId}/notifications)
 	CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error)
+	// Delete notification for a player
+	// (DELETE /players/{playerId}/notifications/{notificationId})
+	DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error)
+	// Update (mark read/unread) a notification for a player
+	// (PATCH /players/{playerId}/notifications/{notificationId})
+	UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error)
 	// Remove TOTP setup for a player
 	// (DELETE /players/{playerId}/totp)
 	RemoveTotp(ctx context.Context, request RemoveTotpRequestObject) (RemoveTotpResponseObject, error)
@@ -4157,33 +4130,6 @@ func (sh *strictHandler) GetPlayerHypercube(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// DeletePlayerNotification operation middleware
-func (sh *strictHandler) DeletePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, params DeletePlayerNotificationParams) {
-	var request DeletePlayerNotificationRequestObject
-
-	request.PlayerId = playerId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeletePlayerNotification(ctx, request.(DeletePlayerNotificationRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeletePlayerNotification")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeletePlayerNotificationResponseObject); ok {
-		if err := validResponse.VisitDeletePlayerNotificationResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetPlayerNotifications operation middleware
 func (sh *strictHandler) GetPlayerNotifications(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerNotificationsParams) {
 	var request GetPlayerNotificationsRequestObject
@@ -4204,40 +4150,6 @@ func (sh *strictHandler) GetPlayerNotifications(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlayerNotificationsResponseObject); ok {
 		if err := validResponse.VisitGetPlayerNotificationsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdatePlayerNotification operation middleware
-func (sh *strictHandler) UpdatePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, params UpdatePlayerNotificationParams) {
-	var request UpdatePlayerNotificationRequestObject
-
-	request.PlayerId = playerId
-	request.Params = params
-
-	var body UpdatePlayerNotificationJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdatePlayerNotification(ctx, request.(UpdatePlayerNotificationRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdatePlayerNotification")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdatePlayerNotificationResponseObject); ok {
-		if err := validResponse.VisitUpdatePlayerNotificationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4272,6 +4184,67 @@ func (sh *strictHandler) CreatePlayerNotification(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreatePlayerNotificationResponseObject); ok {
 		if err := validResponse.VisitCreatePlayerNotificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePlayerNotification operation middleware
+func (sh *strictHandler) DeletePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, notificationId string) {
+	var request DeletePlayerNotificationRequestObject
+
+	request.PlayerId = playerId
+	request.NotificationId = notificationId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePlayerNotification(ctx, request.(DeletePlayerNotificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePlayerNotification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePlayerNotificationResponseObject); ok {
+		if err := validResponse.VisitDeletePlayerNotificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePlayerNotification operation middleware
+func (sh *strictHandler) UpdatePlayerNotification(w http.ResponseWriter, r *http.Request, playerId string, notificationId string) {
+	var request UpdatePlayerNotificationRequestObject
+
+	request.PlayerId = playerId
+	request.NotificationId = notificationId
+
+	var body UpdatePlayerNotificationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePlayerNotification(ctx, request.(UpdatePlayerNotificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePlayerNotification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdatePlayerNotificationResponseObject); ok {
+		if err := validResponse.VisitUpdatePlayerNotificationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

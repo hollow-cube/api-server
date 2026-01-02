@@ -1,10 +1,13 @@
 package model
 
 const (
-	NotificationCreatedTopic = "notification_created"
+	NotificationUpdateTopic = "notification_update"
+
+	NotificationCreateAction = "create"
 )
 
-type NotificationCreatedMessage struct {
+type NotificationUpdateMessage struct {
+	Action   string                  `json:"action"`
 	PlayerId string                  `json:"playerId"`
 	Type     string                  `json:"type"`
 	Key      string                  `json:"key"`

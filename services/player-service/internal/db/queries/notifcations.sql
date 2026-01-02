@@ -16,19 +16,19 @@ where player_id = $1
   and (expires_at is null or expires_at > now())
   and (not $2 or read_at is null);
 
--- name: MarkNotificationRead :exec
+-- name: MarkNotificationRead :execrows
 update player_notifications
 set read_at = now()
 where player_id = $1
   and id = $2;
 
--- name: MarkNotificationUnread :exec
+-- name: MarkNotificationUnread :execrows
 update player_notifications
 set read_at = null
 where player_id = $1
   and id = $2;
 
--- name: DeleteNotification :exec
+-- name: DeleteNotification :execrows
 update player_notifications
 set deleted_at = now()
 where player_id = $1
