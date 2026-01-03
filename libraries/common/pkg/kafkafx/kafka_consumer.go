@@ -42,10 +42,10 @@ func NewConsumer(conf common.KafkaConfig, log *zap.SugaredLogger, lc fx.Lifecycl
 	return c
 }
 
-type SubscribeOption func(cfg kafka.ReaderConfig)
+type SubscribeOption func(cfg *kafka.ReaderConfig)
 
 func WithIsolationLevel(level kafka.IsolationLevel) SubscribeOption {
-	return func(cfg kafka.ReaderConfig) {
+	return func(cfg *kafka.ReaderConfig) {
 		cfg.IsolationLevel = level
 	}
 }
@@ -78,9 +78,9 @@ func (c *consumerImpl) MultiSubscribe(topics []string, consumerGroup string, han
 
 func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption) {
 	for _, opt := range opts {
-		opt(cfg)
+		opt(&cfg)
 	}
-	
+
 	r := kafka.NewReader(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
