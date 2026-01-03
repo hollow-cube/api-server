@@ -326,6 +326,7 @@ var falsePositives = []string{
 	"fistfuls",
 	"flanged",
 	"flanges",
+	"forap", // for a permanent... (matches rape)
 	"footballs",
 	"gamecock",
 	"gassed",
@@ -359,6 +360,7 @@ var falsePositives = []string{
 	"hotwater",
 	"identit",
 	"illyricum",
+	"islagged", // is lagged (matches slag). Someone could now say 'i slagged off your mom' but that's hard to prevent, even with a static profanity (coz of 'Zak is lagged off the boat')
 	"immunoassay",
 	"incumbency",
 	"incumbent",
@@ -427,6 +429,7 @@ var falsePositives = []string{
 	"oceanus",
 	"oddballs",
 	"onassis",
+	"openis", // open is matching against 'penis'
 	"pahoehoe",
 	"pandanus",
 	"parapet",
