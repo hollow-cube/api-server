@@ -290,18 +290,18 @@ type MapIdAndProgress struct {
 	Playtime int
 }
 
-func CreateDefaultMap(owner string, size int) (*db.CreateMapParams, error) {
+func CreateDefaultMap(owner string, size int) (db.CreateMapParams, error) {
 	var m db.CreateMapParams
 	m.ID = uuid.NewString()
 	m.Owner = owner
 	m.MType = string(TypeDefault)
 
 	if size > MapSize__Max {
-		return nil, fmt.Errorf("invalid map size: %d", size)
+		return m, fmt.Errorf("invalid map size: %d", size)
 	}
 	m.Size = int64(size)
 	m.OptVariant = string(Parkour)
 	m.OptSpawnPoint = db.Pos{0, 40, 0, 90, 0}
 
-	return &m, nil
+	return m, nil
 }

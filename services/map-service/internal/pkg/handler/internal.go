@@ -108,7 +108,7 @@ func SafeWriteMapToDatabase(
 			err = tx.UpsertPlayerData(ctx, db.UpsertPlayerDataParams{
 				ID:            optionalPlayerData.ID,
 				UnlockedSlots: optionalPlayerData.UnlockedSlots,
-				Map:           optionalPlayerData.Map,
+				//Map:           optionalPlayerData.Map,
 				LastPlayedMap: optionalPlayerData.LastPlayedMap,
 				LastEditedMap: optionalPlayerData.LastEditedMap,
 				ContestSlot:   optionalPlayerData.ContestSlot,
@@ -161,10 +161,11 @@ func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) err
 		return fmt.Errorf("failed to remove map from slots: %w", err)
 	}
 
-	for _, pd := range updatedUsers {
-		if err = writePlayerDataUpdateMessage(h.producer, pd); err != nil {
-			return fmt.Errorf("failed to write player data update message: %w", err)
-		}
+	for _, playerId := range updatedUsers {
+		_ = playerId
+		//if err = writePlayerDataUpdateMessage(h.producer, playerId); err != nil {
+		//	return fmt.Errorf("failed to write player data update message: %w", err)
+		//}
 	}
 
 	return nil
