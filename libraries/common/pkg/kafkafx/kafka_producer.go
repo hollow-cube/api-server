@@ -26,7 +26,7 @@ type producerImpl struct {
 	*kafka.Writer
 }
 
-func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger, async bool, opts ...ProducerOption) *producerImpl {
+func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger, async bool) *producerImpl {
 	w := &kafka.Writer{
 		Addr:                   kafka.TCP(strings.Split(conf.Brokers, ",")...),
 		Balancer:               &kafka.Hash{},
@@ -45,27 +45,28 @@ func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogge
 				log.Errorw("failed to write message", "error", err)
 			}
 		}
+
+		// Async is a lazy producer
+		w.WriteBackoffMin = 20 * time.Millisecond
+		w.WriteBackoffMax = 100 * time.Millisecond
+		w.BatchTimeout = 100 * time.Millisecond
+	} else {
+		// Sync is an instant producer
+		w.WriteBackoffMin = 0
+		w.WriteBackoffMax = 0
+		w.BatchSize = 1
 	}
 
-	for _, opt := range opts {
-		opt(w)
-	}
 	lc.Append(fx.StopHook(w.Close))
 	return &producerImpl{Writer: w}
 }
 
-func NewSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger, opts ...ProducerOption) SyncProducer {
-	return newProducer(conf, lc, log, false, opts...)
+// NewSyncKafkaProducer create a synchronous and instant publish producer
+func NewSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) SyncProducer {
+	return newProducer(conf, lc, log, false)
 }
 
-func NewAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger, opts ...ProducerOption) AsyncProducer {
-	return newProducer(conf, lc, log, true, opts...)
-}
-
-type ProducerOption func(writer *kafka.Writer)
-
-func WithInstantWrite() ProducerOption {
-	return func(writer *kafka.Writer) {
-		writer.BatchSize = 1
-	}
+// NewAsyncKafkaProducer creates a new asynchronous and lazy Kafka producer
+func NewAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) AsyncProducer {
+	return newProducer(conf, lc, log, true)
 }

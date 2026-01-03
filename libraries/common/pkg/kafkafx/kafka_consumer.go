@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"strings"
 	"sync"
 
@@ -13,13 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var ConsumerModule = fx.Module("kafka-consumer",
-	fx.Provide(NewConsumer),
-)
-
 type Consumer interface {
-	Subscribe(topic string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error)
-	MultiSubscribe(topics []string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error)
+	Subscribe(topic string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption)
+	MultiSubscribe(topics []string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption)
 }
 
 type consumerImpl struct {
@@ -45,7 +42,15 @@ func NewConsumer(conf common.KafkaConfig, log *zap.SugaredLogger, lc fx.Lifecycl
 	return c
 }
 
-func (c *consumerImpl) Subscribe(topic string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error) {
+type SubscribeOption func(cfg kafka.ReaderConfig)
+
+func WithIsolationLevel(level kafka.IsolationLevel) SubscribeOption {
+	return func(cfg kafka.ReaderConfig) {
+		cfg.IsolationLevel = level
+	}
+}
+
+func (c *consumerImpl) Subscribe(topic string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption) {
 	cfg := kafka.ReaderConfig{
 		Brokers:  strings.Split(c.conf.Brokers, ","),
 		GroupID:  consumerGroup,
@@ -55,10 +60,10 @@ func (c *consumerImpl) Subscribe(topic string, consumerGroup string, handler fun
 		ErrorLogger: kafka.LoggerFunc(c.log.Errorf),
 	}
 
-	c.subscribe(cfg, handler)
+	c.subscribe(cfg, handler, opts...)
 }
 
-func (c *consumerImpl) MultiSubscribe(topics []string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error) {
+func (c *consumerImpl) MultiSubscribe(topics []string, consumerGroup string, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption) {
 	cfg := kafka.ReaderConfig{
 		Brokers:     strings.Split(c.conf.Brokers, ","),
 		GroupID:     consumerGroup,
@@ -68,10 +73,14 @@ func (c *consumerImpl) MultiSubscribe(topics []string, consumerGroup string, han
 		ErrorLogger: kafka.LoggerFunc(c.log.Errorf),
 	}
 
-	c.subscribe(cfg, handler)
+	c.subscribe(cfg, handler, opts...)
 }
 
-func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx context.Context, message kafka.Message) error) {
+func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx context.Context, message kafka.Message) error, opts ...SubscribeOption) {
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	
 	r := kafka.NewReader(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -82,6 +91,17 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 	c.shutdownWg.Add(1)
 	go func() {
 		defer c.shutdownWg.Done()
+		defer func() {
+			err := r.Close()
+			if err != nil {
+				c.log.Errorf("failed to close kafka reader: %v", err)
+				return
+			}
+
+			c.log.Infow("kafka reader closed successfully", "topic", cfg.Topic)
+		}()
+
+		c.log.Infow("starting kafka reader", "topic", cfg.Topic)
 
 		for {
 			m, err := r.FetchMessage(ctx)
@@ -89,6 +109,7 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 				if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
 					c.log.Errorf("failed to read kafka message: %v", err)
 				}
+				log.Printf("terminating kafka reader on topic %q\n", cfg.Topic)
 				break
 			}
 
@@ -107,10 +128,6 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			if err := r.CommitMessages(ctx, m); err != nil { // commit only after success
 				c.log.Errorf("failed to commit kafka message: %v", err)
 			}
-		}
-
-		if err := r.Close(); err != nil {
-			c.log.Errorf("failed to close kafka reader: %v", err)
 		}
 	}()
 }

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
@@ -44,14 +43,6 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		OTLP:    conf.OTLP,
 		Kafka:   conf.Kafka,
 	}
-}
-
-func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
-	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
-}
-
-func newAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
-	return kafkafx.NewAsyncKafkaProducer(conf, lc, log, kafkafx.WithInstantWrite())
 }
 
 func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {

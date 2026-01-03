@@ -59,8 +59,8 @@ func main() {
 		fx.Provide(newRedisClient),
 		fx.Provide(newAuthzSpiceDB),
 
-		kafkafx.ConsumerModule,
-		fx.Provide(newSyncKafkaProducer),
+		// Kafka
+		kafkafx.Module,
 
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 		fx.Provide(newTebexHeadlessClient),
@@ -171,10 +171,6 @@ func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 		conf.SpiceDB.Token,
 		conf.SpiceDB.TLS,
 	)
-}
-
-func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
-	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
 }
 
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {

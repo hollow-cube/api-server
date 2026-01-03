@@ -67,7 +67,7 @@ func main() {
 		fx.Provide(newAuthzSpiceDB),
 
 		// Kafka
-		fx.Provide(newAsyncKafkaProducer, newSyncKafkaProducer),
+		kafkafx.Module,
 
 		// Metrics
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -252,14 +252,6 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 
 	lc.Append(fx.StopHook(client.Close))
 	return client, nil
-}
-
-func newSyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.SyncProducer {
-	return kafkafx.NewSyncKafkaProducer(conf, lc, log)
-}
-
-func newAsyncKafkaProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger) kafkafx.AsyncProducer {
-	return kafkafx.NewAsyncKafkaProducer(conf, lc, log)
 }
 
 func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {
