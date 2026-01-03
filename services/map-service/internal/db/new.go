@@ -45,6 +45,33 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 		return nil, nil, fmt.Errorf("failed to parse postgres config: %w", err)
 	}
 
+	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
+	migrateConn, err := sql.Open("pgx", databaseUri)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
+	}
+	defer migrateConn.Close()
+
+	if err := migrateConn.PingContext(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to ping postgres for migrations: %w", err)
+	}
+
+	// Create migrator using above db conn and the embed fs of the migrate directory.
+	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
+		MigrationsTable: "map-service_migrations",
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create migrate driver: %w", err)
+	}
+	migrateSource, err := iofs.New(migrationFS, "migrations")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create migrate source: %w", err)
+	}
+	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
 	config.ConnConfig.Tracer = postgresUtil.NewSqlCTracer()
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		typ, err := conn.LoadType(ctx, "map_tag")
@@ -66,32 +93,6 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to postgres: %w", err)
-	}
-	if err = pool.Ping(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to ping postgres: %w", err)
-	}
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", databaseUri)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "map-service_migrations",
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrations")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
 	// Apply all migrations up to the latest
