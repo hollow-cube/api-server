@@ -83,7 +83,7 @@ func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 
 func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.ClientChatMessage) error {
 	// Sanitize the message for invalid characters
-	text := text.StripSpecial(msg.Message)
+	text := text.StripDisallowed(msg.Message)
 	if len(text) == 0 {
 		return nil
 	}
