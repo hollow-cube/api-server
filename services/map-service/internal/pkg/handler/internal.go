@@ -174,14 +174,17 @@ func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) err
 	return nil
 }
 
-func (h *InternalHandler) writeMapUpdate(update *model.MapUpdateMessage) error {
+func (h *InternalHandler) writeMapUpdate(ctx context.Context, update *model.MapUpdateMessage) error {
 	updateMessageData, err := json.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map update message: %w", err)
 	}
-	h.producer.Input() <- &sarama.ProducerMessage{
+
+	if err := h.producer.WriteMessages(ctx, kafka.Message{
 		Topic: model.MapUpdateTopic,
-		Value: sarama.ByteEncoder(updateMessageData),
+		Value: updateMessageData,
+	}); err != nil {
+		return fmt.Errorf("failed to write map update message: %w", err)
 	}
 
 	return nil

@@ -9,7 +9,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/wkafka"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
