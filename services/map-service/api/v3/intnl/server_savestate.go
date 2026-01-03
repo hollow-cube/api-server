@@ -199,6 +199,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		return nil, fmt.Errorf("failed to fetch best save state: %w", err)
 	}
 
+	zap.S().Infow("UPDATING UPDATING UPDATING", "update", update)
 	if err = s.store.UpsertSaveState(ctx, update); err != nil {
 		if errors.Is(err, db.ErrNoRows) {
 			return SaveStateNotFoundResponse{}, nil
@@ -351,7 +352,7 @@ func (s *server) computeMapRewards(_ context.Context, _ *model.Map, _ bool, _ *m
 
 func hydrateSaveState(ss db.SaveState) SaveStateDataJSONResponse {
 	var playingState, editingState *map[string]interface{}
-	if ss.Type == db.SaveStateTypePlaying {
+	if ss.Type == db.SaveStateTypePlaying || ss.Type == db.SaveStateTypeVerifying {
 		state := map[string]interface{}{}
 		err := json.Unmarshal(ss.StateV2, &state)
 		if err != nil {
