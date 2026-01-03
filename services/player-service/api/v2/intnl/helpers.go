@@ -73,10 +73,19 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 		settings = make(map[string]interface{})
 	}
 
+	var skin *PlayerSkin
+	if pd.Skin != nil {
+		skin = &PlayerSkin{
+			Texture:   pd.Skin.Texture,
+			Signature: pd.Skin.Signature,
+		}
+	}
+
 	return &PlayerData{
 		Id:            pd.ID,
 		Username:      pd.Username,
 		DisplayNameV2: displayName2,
+		Skin:          skin,
 		FirstJoin:     pd.FirstJoin,
 		LastOnline:    pd.LastOnline,
 		Playtime:      pd.Playtime,

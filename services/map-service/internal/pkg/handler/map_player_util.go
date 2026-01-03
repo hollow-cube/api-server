@@ -3,23 +3,23 @@ package handler
 import (
 	"context"
 
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 )
 
-func (h *InternalHandler) HasFreeMapSlot(ctx context.Context, pd *model.PlayerData) (bool, error) {
+func (h *InternalHandler) HasFreeMapSlot(ctx context.Context, pd db.MapPlayerData) (bool, error) {
 	unlockedSlots, err := h.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
 	}
-	if len(pd.Maps) < unlockedSlots {
+	if len(pd.Map) < unlockedSlots {
 		// If the maps array is smaller than unlocked they always have one ready.
 		// The loop below will also fail in this case, so it is double good :)
 		return true, nil
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
+		if pd.Map[i] == "" {
 			return true, nil
 		}
 	}
@@ -27,7 +27,7 @@ func (h *InternalHandler) HasFreeMapSlot(ctx context.Context, pd *model.PlayerDa
 	return false, nil
 }
 
-func (h *InternalHandler) AddMapToSlot(ctx context.Context, pd *model.PlayerData, mapId string, slot int) (bool, error) {
+func (h *InternalHandler) AddMapToSlot(ctx context.Context, pd db.MapPlayerData, mapId string, slot int) (bool, error) {
 	unlockedSlots, err := h.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return false, err
@@ -37,33 +37,33 @@ func (h *InternalHandler) AddMapToSlot(ctx context.Context, pd *model.PlayerData
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	// Check if slot is free
-	if pd.Maps[slot] != "" {
+	if pd.Map[slot] != "" {
 		return false, nil
 	}
 
-	pd.Maps[slot] = mapId
+	pd.Map[slot] = mapId
 	return true, nil
 }
 
-func (h *InternalHandler) AddMapToFreeSlot(ctx context.Context, pd *model.PlayerData, mapId string) (int, bool, error) {
+func (h *InternalHandler) AddMapToFreeSlot(ctx context.Context, pd db.MapPlayerData, mapId string) (int, bool, error) {
 	unlockedSlots, err := h.getUnlockedSlots(ctx, pd)
 	if err != nil {
 		return -1, false, err
 	}
 
 	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
+	if len(pd.Map) < unlockedSlots {
+		pd.Map = append(pd.Map, make([]string, unlockedSlots-len(pd.Map))...)
 	}
 
 	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
-			pd.Maps[i] = mapId
+		if pd.Map[i] == "" {
+			pd.Map[i] = mapId
 			return i, true, nil
 		}
 	}
@@ -71,22 +71,17 @@ func (h *InternalHandler) AddMapToFreeSlot(ctx context.Context, pd *model.Player
 	return -1, false, nil
 }
 
-func (h *InternalHandler) getUnlockedSlots(ctx context.Context, pd *model.PlayerData) (int, error) {
-	if pd.Cached.TotalUnlockedSlots != nil {
-		return *pd.Cached.TotalUnlockedSlots, nil
-	}
-
+func (h *InternalHandler) getUnlockedSlots(ctx context.Context, pd db.MapPlayerData) (int, error) {
 	slots, err := h.getTotalSlotsFromPerm(ctx, pd)
 	if err != nil {
 		return 0, err
 	}
-	pd.Cached.TotalUnlockedSlots = &slots
 	return slots, nil
 }
 
-func (h *InternalHandler) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData) (int, error) {
+func (h *InternalHandler) getTotalSlotsFromPerm(ctx context.Context, pd db.MapPlayerData) (int, error) {
 	// This is pretty dumb logic, but uh... oh well.
-	state, err := h.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot3)
+	state, err := h.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot3)
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +89,7 @@ func (h *InternalHandler) getTotalSlotsFromPerm(ctx context.Context, pd *model.P
 		return 2, nil
 	}
 
-	state, err = h.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot4)
+	state, err = h.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot4)
 	if err != nil {
 		return 0, err
 	}
@@ -102,7 +97,7 @@ func (h *InternalHandler) getTotalSlotsFromPerm(ctx context.Context, pd *model.P
 		return 3, nil
 	}
 
-	state, err = h.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot5)
+	state, err = h.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot5)
 	if err != nil {
 		return 0, err
 	}

@@ -1,0 +1,1 @@
+alter table player_data add column skin jsonb default null;

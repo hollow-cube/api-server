@@ -13,6 +13,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
+	"github.com/redis/rueidis"
 	"google.golang.org/grpc"
 
 	envoyAuth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -21,6 +22,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
+	posthogProxy "github.com/hollow-cube/hc-services/services/player-service/api/posthog"
 	v2Internal "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	v2Payments "github.com/hollow-cube/hc-services/services/player-service/api/v2/payments"
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
@@ -54,6 +56,7 @@ func main() {
 		}),
 
 		fx.Provide(newPostgresStore),
+		fx.Provide(newRedisClient),
 		fx.Provide(newAuthzSpiceDB),
 
 		kafkafx.ConsumerModule,
@@ -72,6 +75,7 @@ func main() {
 			v2Public.NewServer,
 			v2Internal.NewServer,
 			v2Payments.NewServer,
+			posthogProxy.NewProxy,
 			httpfx.AsRouteProvider(makeV2RouteHandler),
 		),
 		httpfx.Module,
@@ -86,20 +90,23 @@ type v2RouteHandlerImpl struct {
 	public   v2Public.StrictServerInterface
 	internal v2Internal.StrictServerInterface
 	payments v2Payments.ServerInterface
+	posthog  *posthogProxy.Proxy
 }
 
 func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
 	r.Handle("/v2/payments/*", v2Payments.HandlerFromMuxWithBaseURL(v.payments, nil, "/v2/payments"))
+	r.Handle("/posthog/*", v.posthog)
 }
 
 func makeV2RouteHandler(
 	public v2Public.StrictServerInterface,
 	internal v2Internal.StrictServerInterface,
 	payments v2Payments.ServerInterface,
+	posthog *posthogProxy.Proxy,
 ) httpTransport.RouteProvider {
-	return &v2RouteHandlerImpl{public, internal, payments}
+	return &v2RouteHandlerImpl{public, internal, payments, posthog}
 }
 
 func newZapLogger(conf *config.Config) (*zap.Logger, error) {
@@ -178,8 +185,8 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
-		Endpoint:       "https://us.i.posthog.com",
 	})
 	if err != nil {
 		return nil, err
@@ -214,4 +221,27 @@ func newGrpcServer(lc fx.Lifecycle, authServer *auth.Server) {
 			return nil
 		},
 	})
+}
+
+func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {
+	c, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress: []string{conf.Redis.Address},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return c.Do(ctx, c.B().Ping().Build()).Error()
+		},
+		OnStop: func(_ context.Context) error {
+			c.Close()
+			return nil
+		},
+	})
+
+	return c, nil
 }

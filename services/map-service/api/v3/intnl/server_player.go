@@ -2,26 +2,37 @@ package intnl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/redis/rueidis"
 )
 
+func (s *server) GetMapPlayerDataWithIndexedSlots(ctx context.Context, playerId string) (db.MapPlayerData, error) {
+	pd, err := s.store.GetPlayerData(ctx, playerId)
+	if err != nil {
+		return pd, fmt.Errorf("failed to fetch player data: %w", err)
+	}
+
+	// Fill in old indexed map slots
+	indexedSlots, err := s.store.GetIndexedMapSlots(ctx, playerId)
+	if err != nil {
+		return pd, fmt.Errorf("failed to fetch indexed map slots: %w", err)
+	}
+	pd.Map = make([]string, 5)
+	for _, slot := range indexedSlots {
+		pd.Map[slot.Index] = slot.MapID
+	}
+
+	return pd, err
+}
+
 func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error) {
-	pd, err := s.storageClient.GetPlayerData2(ctx, request.PlayerId)
-	if errors.Is(err, storage.ErrNotFound) {
-		// Always return empty player data even if not found
-		pd = &model.PlayerData{
-			Id:   request.PlayerId,
-			Maps: make([]string, 2),
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to fetch player data: %w", err)
+	pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, request.PlayerId)
+	if err != nil {
+		return nil, err
 	}
 
 	return GetMapPlayerData200JSONResponse{playerDataToAPI(pd)}, nil
@@ -41,14 +52,21 @@ func (s *server) GetMapHistory(ctx context.Context, request GetMapHistoryRequest
 		return nil, err
 	}
 
-	maps, hasNextPage, err := s.storageClient.GetRecentMaps(ctx, page, pageSize, request.PlayerId, model.SaveStateTypePlaying)
+	maps, err := s.store.GetRecentMaps(ctx, db.GetRecentMapsParams{
+		PlayerID: request.PlayerId,
+		Type:     db.SaveStateTypePlaying,
+		Page:     page,
+		PageSize: pageSize,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch recent maps: %w", err)
 	}
+	hasNextPage := len(maps) == pageSize+1
+	maps = maps[0:min(pageSize, len(maps))]
 
 	results := make([]MapHistoryEntry, len(maps))
 	for i, m := range maps {
-		results[i].MapId = m.Id
+		results[i].MapId = m
 	}
 	return GetMapHistory200JSONResponse{GetMapHistoryJSONResponse{
 		NextPage: hasNextPage,
@@ -58,7 +76,7 @@ func (s *server) GetMapHistory(ctx context.Context, request GetMapHistoryRequest
 }
 
 func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPlayerStatesRequestObject) (DeleteMapPlayerStatesResponseObject, error) {
-	completedMaps, err := s.storageClient.GetCompletedMaps(ctx, request.PlayerId)
+	completedMaps, err := s.store.GetCompletedMaps(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch completed maps: %w", err)
 	}
@@ -81,10 +99,10 @@ func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPla
 	return DeleteMapPlayerStates200Response{}, nil
 }
 
-func playerDataToAPI(pd *model.PlayerData) GetMapPlayerDataJSONResponse {
+func playerDataToAPI(pd db.MapPlayerData) GetMapPlayerDataJSONResponse {
 	return GetMapPlayerDataJSONResponse{
-		Id:          pd.Id,
-		MapSlots:    pd.Maps,
+		Id:          pd.ID,
+		MapSlots:    pd.Map,
 		ContestSlot: pd.ContestSlot,
 	}
 }

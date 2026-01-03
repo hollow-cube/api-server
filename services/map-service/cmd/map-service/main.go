@@ -23,6 +23,7 @@ import (
 	publicV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/public"
 	terraformV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/terraform"
 	"github.com/hollow-cube/hc-services/services/map-service/config"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
@@ -34,8 +35,6 @@ import (
 
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/handler"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -62,7 +61,7 @@ func main() {
 		}),
 
 		// Storage
-		fx.Provide(newStoragePostgres),
+		fx.Provide(newPostgresStore),
 
 		// Authz
 		fx.Provide(newAuthzSpiceDB),
@@ -115,9 +114,6 @@ func main() {
 			handler.NewInternalHandler,
 			httpfx.AsRouteProvider(v1.NewInternalServerWrapper),
 
-			handler.NewTerraformHandler,
-			httpfx.AsRouteProvider(v1.NewTerraformServerWrapper),
-
 			publicV3.NewServer,
 			intnlV3.NewServer,
 			terraformV3.NewServer,
@@ -140,8 +136,8 @@ func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
 		[]intnlV3.StrictMiddlewareFunc{publicV3.AuthMiddleware}), nil, "/v3/maps"))
 	r.Handle("/v3/internal/*", intnlV3.HandlerFromMuxWithBaseURL(intnlV3.NewStrictHandler(v.intnl,
 		[]intnlV3.StrictMiddlewareFunc{intnlV3.AuthMiddleware}), nil, "/v3/internal"))
-	r.Handle("/v3/terraform/*", terraformV3.HandlerFromMuxWithBaseURL(terraformV3.NewStrictHandler(v.terraform,
-		[]terraformV3.StrictMiddlewareFunc{}), nil, "/v3/terraform"))
+	r.Handle("/v3/internal/terraform/*", terraformV3.HandlerFromMuxWithBaseURL(terraformV3.NewStrictHandler(v.terraform,
+		[]terraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
 	r.Handle("/v3/obungus/*", obungusV3.HandlerFromMuxWithBaseURL(obungusV3.NewStrictHandler(v.obungus,
 		[]obungusV3.StrictMiddlewareFunc{}), nil, "/v3/obungus"))
 }
@@ -191,15 +187,6 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	} else {
 		return tracefx.NewNoopExporter()
 	}
-}
-
-func newStoragePostgres(conf *config.Config, lc fx.Lifecycle) (storage.Client, error) {
-	c, err := storage.NewPostgresClient(conf.Postgres.URI)
-	if err != nil {
-		return nil, err
-	}
-	lc.Append(fx.Hook{OnStart: c.Start, OnStop: c.Shutdown})
-	return c, nil
 }
 
 func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
@@ -256,8 +243,8 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
-		Endpoint:       "https://us.i.posthog.com",
 	})
 	if err != nil {
 		return nil, err
@@ -296,4 +283,18 @@ func newRueidisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, err
 	})
 
 	return c, nil
+}
+
+func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*db.Store, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	store, pool, err := db.NewQuerySet(ctx, metrics, conf.Postgres.URI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return store, nil
 }

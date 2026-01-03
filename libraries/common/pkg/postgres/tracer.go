@@ -3,6 +3,7 @@ package postgresUtil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -43,7 +44,10 @@ func (t *tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.Trac
 	spanName := t.nameExtractor(data.SQL)
 
 	ctx, span := otelTracer.Start(ctx, spanName)
-	span.SetAttributes(attribute.String("db.query", data.SQL))
+	span.SetAttributes(
+		attribute.String("db.query", data.SQL),
+		attribute.String("db.query.args", fmt.Sprintf("%v", data.Args)),
+	)
 	return context.WithValue(ctx, spanKey, span)
 }
 
@@ -69,7 +73,12 @@ func (t *tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQ
 
 func extractSqlCOperationName(sql string) string {
 	if !strings.HasPrefix(sql, "-- name:") {
-		return "db.query"
+		switch sql {
+		case "begin", "commit", "rollback":
+			return "db.tx." + sql
+		default:
+			return "db.query.unknown." + sql
+		}
 	}
 
 	lines := strings.Split(sql, "\n")

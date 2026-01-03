@@ -38,6 +38,7 @@ type Votifier struct {
 }
 
 type Posthog struct {
+	Endpoint       string `mapstructure:"endpoint"`
 	PersonalApiKey string `mapstructure:"personal_api_key"` // Required for feature flags
 }
 
@@ -59,6 +60,10 @@ type PunishmentLadder struct {
 	} `mapstructure:"reasons"`
 }
 
+type Redis struct {
+	Address string `mapstructure:"address"`
+}
+
 type Config struct {
 	Env               string             `mapstructure:"env"`
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
@@ -72,6 +77,7 @@ type Config struct {
 	Posthog           Posthog            `mapstructure:"posthog"`
 	Unleash           Unleash            `mapstructure:"unleash"`
 	PunishmentLadders []PunishmentLadder `mapstructure:"punishment_ladders"`
+	Redis             Redis              `mapstructure:"redis"`
 }
 
 //go:embed default.yaml

@@ -7,6 +7,13 @@ func EmptyToNil(s string) *string {
 	return &s
 }
 
+func NilToEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func Ptr[T any](v T) *T {
 	return &v
 }

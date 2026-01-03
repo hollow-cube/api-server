@@ -36,6 +36,7 @@ type PlayerData struct {
 	Settings    PlayerSettings `json:"settings"`
 	Coins       int            `json:"coins"`
 	Cubits      int            `json:"cubits"`
+	Skin        *PlayerSkin    `json:"skin"`
 }
 
 type PlayerTotp struct {

@@ -1,6 +1,6 @@
 -- name: CreatePlayerData :one
-insert into player_data (id, username, first_join, last_online)
-values ($1, $2, now(), now())
+insert into player_data (id, username, first_join, last_online, skin)
+values ($1, $2, now(), now(), $3)
 returning *;
 
 -- name: GetPlayerData :one
@@ -35,7 +35,8 @@ set username     = coalesce(sqlc.narg('username'), username),
     last_online  = coalesce(sqlc.narg('last_online'), last_online),
     playtime     = coalesce(sqlc.narg('playtime'), playtime),
     beta_enabled = coalesce(sqlc.narg('beta_enabled'), beta_enabled),
-    settings     = coalesce(sqlc.narg('settings'), settings)
+    settings     = coalesce(sqlc.narg('settings'), settings),
+    skin         = sqlc.narg('skin')
 where id = $1;
 
 -- name: addExperience :one

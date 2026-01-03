@@ -9,28 +9,21 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
-var mapSearchTime = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name: "map_service_map_search_time_seconds",
-	Help: "The time it takes to search for maps",
-})
-
 type InternalHandler struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	storageClient   storage.Client
+	store           *db.Store
 	authzClient     authz.Client
 	objectClient    object.Client
 	replayStorage   object.Client
@@ -49,7 +42,7 @@ type InternalHandlerParams struct {
 	Log     *zap.SugaredLogger
 	Metrics metric.Writer
 
-	Storage          storage.Client
+	Store            *db.Store
 	Authz            authz.Client
 	Object           object.Client `name:"object-mapmaker"`
 	ReplayStorage    object.Client `name:"object-mapmaker-replays"`
@@ -68,7 +61,7 @@ func NewInternalHandler(p InternalHandlerParams) (v1.InternalServer, error) {
 		log:     p.Log.With("handler", "internal"),
 		metrics: p.Metrics,
 
-		storageClient:   p.Storage,
+		store:           p.Store,
 		authzClient:     p.Authz,
 		objectClient:    p.Object,
 		replayStorage:   p.ReplayStorage,
@@ -86,62 +79,68 @@ func NewInternalHandler(p InternalHandlerParams) (v1.InternalServer, error) {
 
 func (h *InternalHandler) safeWriteMapToDatabase(
 	ctx context.Context,
-	m *model.Map,
-	optionalPlayerData *model.PlayerData,
-) (err error) {
-	return SafeWriteMapToDatabase(ctx, h.storageClient, h.authzClient, h.producer, m, optionalPlayerData)
+	mapParams db.CreateMapParams,
+	optionalPlayerData *db.MapPlayerData,
+) (db.Map, error) {
+	return SafeWriteMapToDatabase(ctx, h.store, h.authzClient, h.producer, mapParams, optionalPlayerData)
 }
 
 func SafeWriteMapToDatabase(
 	ctx context.Context,
-	storageClient storage.Client,
+	store *db.Store,
 	authzClient authz.Client,
 	producer kafkafx.AsyncProducer,
-	m *model.Map,
-	optionalPlayerData *model.PlayerData,
-) (err error) {
-
+	mapParams db.CreateMapParams,
+	optionalPlayerData *db.MapPlayerData,
+) (db.Map, error) {
 	// Write to DB and permission manager at the same time (2 phase commit)
-	err = storageClient.RunTransaction(ctx, func(ctx context.Context) error {
-		tok, err := authzClient.SetMapOwner(ctx, m.Id, m.Owner)
+	m, err := db.Tx(ctx, store, func(ctx context.Context, tx *db.Store) (db.Map, error) {
+		_, err := authzClient.SetMapOwner(ctx, mapParams.ID, mapParams.Owner)
 		if err != nil {
-			return fmt.Errorf("authz write failed: %w", err)
+			return db.Map{}, fmt.Errorf("authz write failed: %w", err)
 		}
 
-		m.AuthzKey = tok
-		if err := storageClient.CreateMap(ctx, m); err != nil {
-			return fmt.Errorf("db write failed: %w", err)
+		m, err := tx.CreateMap(ctx, mapParams)
+		if err != nil {
+			return db.Map{}, fmt.Errorf("db write failed: %w", err)
 		}
 
 		if optionalPlayerData != nil {
-			err = storageClient.UpdatePlayerData(ctx, optionalPlayerData)
+			err = tx.UpsertPlayerData(ctx, db.UpsertPlayerDataParams{
+				ID:            optionalPlayerData.ID,
+				UnlockedSlots: optionalPlayerData.UnlockedSlots,
+				//Map:           optionalPlayerData.Map,
+				LastPlayedMap: optionalPlayerData.LastPlayedMap,
+				LastEditedMap: optionalPlayerData.LastEditedMap,
+				ContestSlot:   optionalPlayerData.ContestSlot,
+			})
 			if err != nil {
-				return fmt.Errorf("failed to update player data: %w", err)
+				return db.Map{}, fmt.Errorf("failed to update player data: %w", err)
 			}
 		}
 
-		return nil
+		return m, nil
 	})
 	if err != nil {
 		// Rollback authz update
-		if rbErr := authzClient.DeleteMap(ctx, m.Id); rbErr != nil {
+		if rbErr := authzClient.DeleteMap(ctx, mapParams.ID); rbErr != nil {
 			zap.S().Errorw("failed to rollback authz", "err", rbErr)
 		}
 
-		return fmt.Errorf("failed to create map: %w", err)
+		return db.Map{}, fmt.Errorf("failed to create map: %w", err)
 	}
 
 	// Send update to kafka if we updated the player data
 	if optionalPlayerData != nil {
-		if err = writePlayerDataUpdateMessage(ctx, producer, optionalPlayerData); err != nil {
-			return fmt.Errorf("failed to send player data update message: %w", err)
+		if err = writePlayerDataUpdateMessage(ctx, producer, *optionalPlayerData); err != nil {
+			return db.Map{}, fmt.Errorf("failed to send player data update message: %w", err)
 		}
 	}
 
-	return
+	return m, nil
 }
 
-func writePlayerDataUpdateMessage(ctx context.Context, producer kafkafx.AsyncProducer, pd *model.PlayerData) error {
+func writePlayerDataUpdateMessage(ctx context.Context, producer kafkafx.AsyncProducer, pd db.MapPlayerData) error {
 	updateMessageData, err := json.Marshal(&model.PlayerDataUpdateMessage{
 		Action: model.PlayerDataUpdate_Update,
 		Data:   pd,
@@ -159,31 +158,30 @@ func writePlayerDataUpdateMessage(ctx context.Context, producer kafkafx.AsyncPro
 	return nil
 }
 
-// safeUpdatePlayerData updates the player data in the database, and sends an update message to kafka.
-func (h *InternalHandler) safeUpdatePlayerData(ctx context.Context, pd *model.PlayerData) error {
-	if err := h.storageClient.UpdatePlayerData(ctx, pd); err != nil {
-		return fmt.Errorf("failed to update player data: %w", err)
+func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) error {
+	updatedUsers, err := h.store.RemoveMapFromSlots(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to remove map from slots: %w", err)
 	}
 
-	// Send update to kafka
-	if err := writePlayerDataUpdateMessage(ctx, h.producer, pd); err != nil {
-		return err
+	for _, playerId := range updatedUsers {
+		_ = playerId
+		//if err = writePlayerDataUpdateMessage(ctx, h.producer, playerId); err != nil {
+		//	return fmt.Errorf("failed to write player data update message: %w", err)
+		//}
 	}
 
 	return nil
 }
 
-func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) error {
-
-	updatedUsers, err := h.storageClient.RemoveMapFromSlots(ctx, id)
+func (h *InternalHandler) writeMapUpdate(update *model.MapUpdateMessage) error {
+	updateMessageData, err := json.Marshal(update)
 	if err != nil {
-		return fmt.Errorf("failed to remove map from slots: %w", err)
+		return fmt.Errorf("failed to marshal map update message: %w", err)
 	}
-
-	for _, pd := range updatedUsers {
-		if err = writePlayerDataUpdateMessage(ctx, h.producer, pd); err != nil {
-			return fmt.Errorf("failed to write player data update message: %w", err)
-		}
+	h.producer.Input() <- &sarama.ProducerMessage{
+		Topic: model.MapUpdateTopic,
+		Value: sarama.ByteEncoder(updateMessageData),
 	}
 
 	return nil

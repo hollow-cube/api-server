@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
-	"go.uber.org/zap"
 )
 
 func (s *server) ensurePermForMapSize(ctx context.Context, playerId string, size int) (allowed bool, err error) {
@@ -34,78 +34,53 @@ func (s *server) ensurePermForMapSize(ctx context.Context, playerId string, size
 	return true, nil
 }
 
-func (s *server) hasFreeMapSlot(ctx context.Context, pd *model.PlayerData) (bool, error) {
-	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
-	if err != nil {
-		return false, err
-	}
-	if len(pd.Maps) < unlockedSlots {
-		// If the maps array is smaller than unlocked they always have one ready.
-		// The loop below will also fail in this case, so it is double good :)
-		return true, nil
-	}
-
-	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
-			return true, nil
+func (s *server) getMapSlotIndex(ctx context.Context, pd *db.MapPlayerData, mapId string, slot *int) (int, error) {
+	if slot == nil {
+		// First available slot
+		unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
+		if err != nil {
+			return -1, err
 		}
-	}
 
-	return false, nil
-}
-
-func (s *server) addMapToSlot(ctx context.Context, pd *model.PlayerData, mapId string, slot int) (bool, error) {
-	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
-	if err != nil {
-		return false, err
-	}
-	if slot < 0 || slot >= unlockedSlots {
-		return false, nil
-	}
-
-	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
-	}
-
-	// Check if slot is free
-	if pd.Maps[slot] != "" {
-		return false, nil
-	}
-
-	pd.Maps[slot] = mapId
-	return true, nil
-}
-
-func (s *server) addMapToFreeSlot(ctx context.Context, pd *model.PlayerData, mapId string) (int, bool, error) {
-	unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
-	if err != nil {
-		return -1, false, err
-	}
-
-	// Resize slice if necessary
-	if len(pd.Maps) < unlockedSlots {
-		pd.Maps = append(pd.Maps, make([]string, unlockedSlots-len(pd.Maps))...)
-	}
-
-	for i := 0; i < unlockedSlots; i++ {
-		if pd.Maps[i] == "" {
-			pd.Maps[i] = mapId
-			return i, true, nil
+		for i := 0; i < unlockedSlots; i++ {
+			if pd.Map[i] == "" {
+				pd.Map[i] = mapId
+				return i, nil
+			}
 		}
+
+		return -1, fmt.Errorf("no available slots")
+	} else if *slot == -1 {
+		// New system, insert as -1 if they have space
+		existing, err := s.store.GetMapSlots(ctx, pd.ID)
+		if err != nil {
+			return -1, err
+		}
+
+		if len(existing) >= pd.UnlockedSlots {
+			return -1, fmt.Errorf("no free slots")
+		}
+
+		// They have at least one available slot, ok to insert
+		return -1, nil
 	}
 
-	return -1, false, nil
+	// Try to insert into specific given slot (must be free)
+	if pd.Map[*slot] != "" {
+		return -1, fmt.Errorf("slot %d is already occupied", *slot)
+	}
+
+	return *slot, nil
 }
 
 func (s *server) revokeMapFromSlots(ctx context.Context, id string) error {
-	updatedUsers, err := s.storageClient.RemoveMapFromSlots(ctx, id)
+	updatedUsers, err := s.store.RemoveMapFromSlots(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to remove map from slots: %w", err)
 	}
 
-	for _, pd := range updatedUsers {
-		if err = s.writePlayerDataUpdateMessage(pd); err != nil {
+	for _, playerId := range updatedUsers {
+		if err = s.writePlayerDataUpdateMessage(ctx, playerId); err != nil {
 			return fmt.Errorf("failed to write player data update message: %w", err)
 		}
 	}
@@ -113,22 +88,17 @@ func (s *server) revokeMapFromSlots(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *server) getUnlockedSlots(ctx context.Context, pd *model.PlayerData) (int, error) {
-	if pd.Cached.TotalUnlockedSlots != nil {
-		return *pd.Cached.TotalUnlockedSlots, nil
-	}
-
+func (s *server) getUnlockedSlots(ctx context.Context, pd *db.MapPlayerData) (int, error) {
 	slots, err := s.getTotalSlotsFromPerm(ctx, pd)
 	if err != nil {
 		return 0, err
 	}
-	pd.Cached.TotalUnlockedSlots = &slots
 	return slots, nil
 }
 
-func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData) (int, error) {
+func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *db.MapPlayerData) (int, error) {
 	// This is pretty dumb logic, but uh... oh well.
-	state, err := s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot3)
+	state, err := s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot3)
 	if err != nil {
 		return 0, err
 	}
@@ -136,7 +106,7 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 		return 2, nil
 	}
 
-	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot4)
+	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot4)
 	if err != nil {
 		return 0, err
 	}
@@ -144,7 +114,7 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 		return 3, nil
 	}
 
-	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.UMapSlot5)
+	state, err = s.authzClient.CheckPlatformPermission(ctx, pd.ID, authz.NoKey, authz.UMapSlot5)
 	if err != nil {
 		return 0, err
 	}
@@ -155,49 +125,13 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *model.PlayerData
 	return 5, nil
 }
 
-func (s *server) safeWriteMapToDatabase(ctx context.Context, m *model.Map, optionalPlayerData *model.PlayerData) (err error) {
-
-	// Write to DB and permission manager at the same time (2 phase commit)
-	err = s.storageClient.RunTransaction(ctx, func(ctx context.Context) error {
-		tok, err := s.authzClient.SetMapOwner(ctx, m.Id, m.Owner)
-		if err != nil {
-			return fmt.Errorf("authz write failed: %w", err)
-		}
-
-		m.AuthzKey = tok
-		if err := s.storageClient.CreateMap(ctx, m); err != nil {
-			return fmt.Errorf("db write failed: %w", err)
-		}
-
-		if optionalPlayerData != nil {
-			err = s.storageClient.UpdatePlayerData(ctx, optionalPlayerData)
-			if err != nil {
-				return fmt.Errorf("failed to update player data: %w", err)
-			}
-		}
-
-		return nil
-	})
+func (s *server) writePlayerDataUpdateMessage(ctx context.Context, playerId string) error {
+	// Read the current value always
+	pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, playerId)
 	if err != nil {
-		// Rollback authz update
-		if rbErr := s.authzClient.DeleteMap(ctx, m.Id); rbErr != nil {
-			zap.S().Errorw("failed to rollback authz", "err", rbErr)
-		}
-
-		return fmt.Errorf("failed to create map: %w", err)
+		return err
 	}
 
-	// Send update to kafka if we updated the player data
-	if optionalPlayerData != nil {
-		if err = s.writePlayerDataUpdateMessage(optionalPlayerData); err != nil {
-			return fmt.Errorf("failed to send player data update message: %w", err)
-		}
-	}
-
-	return
-}
-
-func (s *server) writePlayerDataUpdateMessage(pd *model.PlayerData) error {
 	updateMessageData, err := json.Marshal(&model.PlayerDataUpdateMessage{
 		Action: model.PlayerDataUpdate_Update,
 		Data:   pd,
@@ -207,7 +141,7 @@ func (s *server) writePlayerDataUpdateMessage(pd *model.PlayerData) error {
 	}
 	go s.producer.WriteMessages(context.Background(), kafka.Message{
 		Topic: model.PlayerDataUpdateTopic,
-		Key:   []byte(pd.Id),
+		Key:   []byte(playerId),
 		Value: updateMessageData,
 	})
 

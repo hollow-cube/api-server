@@ -39,7 +39,7 @@ type CommonConfigResources struct {
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 	return CommonConfigResources{
-		Service: common.ServiceConfig{Name: "session-service"},
+		Service: common.ServiceConfig{Name: "session-service", Env: conf.Env},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
 		Kafka:   conf.Kafka,
@@ -97,15 +97,15 @@ func setupPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifec
 	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
-		Endpoint:       "https://us.i.posthog.com",
 	})
 	if err != nil {
 		return err
 	}
 
 	nonLocalClient, err := posthog.NewWithConfig(apiKey, posthog.Config{
-		Endpoint: "https://us.i.posthog.com",
+		Endpoint: conf.Posthog.Endpoint,
 	})
 	if err != nil {
 		return err

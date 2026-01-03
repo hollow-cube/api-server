@@ -34,4 +34,5 @@ otlp:
 player_service_url: http://localhost:9126
 
 posthog:
+  endpoint: "http://localhost:9126/posthog"
   personal_api_key: ""

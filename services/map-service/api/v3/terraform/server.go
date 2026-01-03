@@ -9,8 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/storage"
+	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -22,29 +21,27 @@ type ServerParams struct {
 
 	Log *zap.SugaredLogger
 
-	Storage storage.Client
+	Store *db.Store
 }
 
 type server struct {
 	log *zap.SugaredLogger
 
-	storageClient storage.Client
+	store *db.Store
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
-		log:           params.Log.With("handler", "obungus"),
-		storageClient: params.Storage,
+		log:   params.Log.With("handler", "terraform"),
+		store: params.Store,
 	}, nil
 }
 
 func (s *server) GetPlayerSession(ctx context.Context, request GetPlayerSessionRequestObject) (GetPlayerSessionResponseObject, error) {
-	data, err := s.storageClient.GetPlayerSession(ctx, request.PlayerId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetPlayerSession404Response{}, nil
-		}
-
+	data, err := s.store.TfGetPlayerSession(ctx, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
+		return GetPlayerSession404Response{}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -59,7 +56,7 @@ func (s *server) UpdatePlayerSession(ctx context.Context, request UpdatePlayerSe
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
-	err = s.storageClient.UpsertPlayerSession(ctx, request.PlayerId, body)
+	err = s.store.TfUpsertPlayerSession(ctx, request.PlayerId, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update player session: %w", err)
 	}
@@ -67,12 +64,10 @@ func (s *server) UpdatePlayerSession(ctx context.Context, request UpdatePlayerSe
 }
 
 func (s *server) GetLocalSession(ctx context.Context, request GetLocalSessionRequestObject) (GetLocalSessionResponseObject, error) {
-	data, err := s.storageClient.GetLocalSession(ctx, request.PlayerId, request.WorldId)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetLocalSession404Response{}, nil
-		}
-
+	data, err := s.store.TfGetLocalSession(ctx, request.PlayerId, request.WorldId)
+	if errors.Is(err, db.ErrNoRows) {
+		return GetLocalSession404Response{}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -87,7 +82,7 @@ func (s *server) UpdateLocalSession(ctx context.Context, request UpdateLocalSess
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
-	err = s.storageClient.UpsertLocalSession(ctx, request.PlayerId, request.WorldId, body)
+	err = s.store.TfUpsertLocalSession(ctx, request.PlayerId, request.WorldId, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update local session: %w", err)
 	}
@@ -95,7 +90,7 @@ func (s *server) UpdateLocalSession(ctx context.Context, request UpdateLocalSess
 }
 
 func (s *server) ListPlayerSchematics(ctx context.Context, request ListPlayerSchematicsRequestObject) (ListPlayerSchematicsResponseObject, error) {
-	headers, err := s.storageClient.GetAllSchematics(ctx, request.PlayerId)
+	headers, err := s.store.TfGetAllSchematics(ctx, request.PlayerId)
 	if err != nil {
 		return nil, err
 	}
@@ -109,12 +104,10 @@ func (s *server) ListPlayerSchematics(ctx context.Context, request ListPlayerSch
 
 func (s *server) GetSchematicData(ctx context.Context, request GetSchematicDataRequestObject) (GetSchematicDataResponseObject, error) {
 	//todo validate schem name
-	data, err := s.storageClient.GetSchematicData(ctx, request.PlayerId, request.SchemName)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return GetSchematicData404Response{}, nil
-		}
-
+	data, err := s.store.TfGetSchematicData(ctx, request.PlayerId, request.SchemName)
+	if errors.Is(err, db.ErrNoRows) {
+		return GetSchematicData404Response{}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -130,17 +123,12 @@ func (s *server) UpdateSchematicHeader(ctx context.Context, request UpdateSchema
 		filetype = *request.Body.FileType
 	}
 
-	header := &model.SchematicHeader{
+	if err := s.store.TfUpdateSchematicHeader(ctx, db.TfUpdateSchematicHeaderParams{
+		PlayerID:   request.PlayerId,
 		Name:       request.SchemName,
-		Dimensions: packCoordinate(int(request.Body.Dimensions.Y), int(request.Body.Dimensions.Y), int(request.Body.Dimensions.Y)),
-		FileType:   filetype,
-	}
-
-	if err := s.storageClient.UpdateSchematicHeader(ctx, request.PlayerId, header); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return UpdateSchematicHeader404Response{}, nil
-		}
-
+		Dimensions: int(packCoordinate(int(request.Body.Dimensions.Y), int(request.Body.Dimensions.Y), int(request.Body.Dimensions.Y))),
+		Filetype:   filetype,
+	}); err != nil {
 		return nil, fmt.Errorf("failed to update schematic header: %w", err)
 	}
 
@@ -168,15 +156,15 @@ func (s *server) CreateSchematic(ctx context.Context, request CreateSchematicReq
 	if request.Params.Dimz != nil {
 		dimz = *request.Params.Dimz
 	}
-	header := &model.SchematicHeader{
-		Name: request.SchemName,
-		Size: len(body),
-		// Both optional
-		Dimensions: packCoordinate(dimx, dimy, dimz),
-		FileType:   fileType,
-	}
 
-	err = s.storageClient.CreateSchematic(ctx, request.PlayerId, header, body)
+	err = s.store.TfCreateSchematic(ctx, db.TfCreateSchematicParams{
+		PlayerID:   request.PlayerId,
+		Name:       request.SchemName,
+		Dimensions: int(packCoordinate(dimx, dimy, dimz)),
+		Size:       len(body),
+		Filetype:   fileType,
+		SchemData:  body,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create schematic: %w", err)
 	}
@@ -185,19 +173,19 @@ func (s *server) CreateSchematic(ctx context.Context, request CreateSchematicReq
 
 func (s *server) DeleteSchematic(ctx context.Context, request DeleteSchematicRequestObject) (DeleteSchematicResponseObject, error) {
 	//todo validate schem name
-	if err := s.storageClient.DeleteSchematic(ctx, request.PlayerId, request.SchemName); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return DeleteSchematic404Response{}, nil
-		}
-
+	deleted, err := s.store.TfDeleteSchematic(ctx, request.PlayerId, request.SchemName)
+	if err != nil {
 		return nil, fmt.Errorf("failed to delete schematic: %w", err)
+	}
+	if deleted == 0 {
+		return DeleteSchematic404Response{}, nil
 	}
 
 	return DeleteSchematic200Response{}, nil
 }
 
-func schematicHeaderToAPI(header *model.SchematicHeader) SchematicHeader {
-	x, y, z := unpackCoordinate(header.Dimensions)
+func schematicHeaderToAPI(header db.TfGetAllSchematicsRow) SchematicHeader {
+	x, y, z := unpackCoordinate(int64(header.Dimensions))
 	return SchematicHeader{
 		Name: header.Name,
 		Size: float32(header.Size),
