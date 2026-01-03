@@ -9,6 +9,7 @@ var falseNegatives = []string{
 }
 
 var falsePositives = []string{
+	"wasset", // it was set at (gets blocked because asset is whitelisted, so itw[asset]at, gives twat. **This MUST be above 'asset' in the array**
 	"abutted",
 	"abutting",
 	"acumen",
