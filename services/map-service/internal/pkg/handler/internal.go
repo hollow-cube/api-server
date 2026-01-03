@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/IBM/sarama"
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
@@ -14,6 +14,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/redis/go-redis/v9"
+	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -30,7 +31,7 @@ type InternalHandler struct {
 
 	redis *redis.Client //todo redis should not be a hard dependency here, i would like to mock it for testing later
 
-	producer sarama.AsyncProducer
+	producer kafkafx.AsyncProducer
 
 	legacyData *legacyDataCache
 }
@@ -49,7 +50,7 @@ type InternalHandlerParams struct {
 	PerfdumpStorage  object.Client `name:"object-mapmaker-perfdumps"`
 	MetricWriter     metric.Writer
 
-	Producer sarama.AsyncProducer
+	Producer kafkafx.AsyncProducer
 
 	Redis *redis.Client
 }
@@ -88,7 +89,7 @@ func SafeWriteMapToDatabase(
 	ctx context.Context,
 	store *db.Store,
 	authzClient authz.Client,
-	producer sarama.AsyncProducer,
+	producer kafkafx.AsyncProducer,
 	mapParams db.CreateMapParams,
 	optionalPlayerData *db.MapPlayerData,
 ) (db.Map, error) {
@@ -131,7 +132,7 @@ func SafeWriteMapToDatabase(
 
 	// Send update to kafka if we updated the player data
 	if optionalPlayerData != nil {
-		if err = writePlayerDataUpdateMessage(producer, *optionalPlayerData); err != nil {
+		if err = writePlayerDataUpdateMessage(ctx, producer, *optionalPlayerData); err != nil {
 			return db.Map{}, fmt.Errorf("failed to send player data update message: %w", err)
 		}
 	}
@@ -139,7 +140,7 @@ func SafeWriteMapToDatabase(
 	return m, nil
 }
 
-func writePlayerDataUpdateMessage(producer sarama.AsyncProducer, pd db.MapPlayerData) error {
+func writePlayerDataUpdateMessage(ctx context.Context, producer kafkafx.AsyncProducer, pd db.MapPlayerData) error {
 	updateMessageData, err := json.Marshal(&model.PlayerDataUpdateMessage{
 		Action: model.PlayerDataUpdate_Update,
 		Data:   pd,
@@ -147,9 +148,11 @@ func writePlayerDataUpdateMessage(producer sarama.AsyncProducer, pd db.MapPlayer
 	if err != nil {
 		return fmt.Errorf("failed to marshal player data update message: %w", err)
 	}
-	producer.Input() <- &sarama.ProducerMessage{
+	if err := producer.WriteMessages(ctx, kafka.Message{
 		Topic: model.PlayerDataUpdateTopic,
-		Value: sarama.ByteEncoder(updateMessageData),
+		Value: updateMessageData,
+	}); err != nil {
+		return fmt.Errorf("failed to write player data update message: %w", err)
 	}
 
 	return nil
@@ -163,7 +166,7 @@ func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) err
 
 	for _, playerId := range updatedUsers {
 		_ = playerId
-		//if err = writePlayerDataUpdateMessage(h.producer, playerId); err != nil {
+		//if err = writePlayerDataUpdateMessage(ctx, h.producer, playerId); err != nil {
 		//	return fmt.Errorf("failed to write player data update message: %w", err)
 		//}
 	}
@@ -171,14 +174,17 @@ func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) err
 	return nil
 }
 
-func (h *InternalHandler) writeMapUpdate(update *model.MapUpdateMessage) error {
+func (h *InternalHandler) writeMapUpdate(ctx context.Context, update *model.MapUpdateMessage) error {
 	updateMessageData, err := json.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map update message: %w", err)
 	}
-	h.producer.Input() <- &sarama.ProducerMessage{
+
+	if err := h.producer.WriteMessages(ctx, kafka.Message{
 		Topic: model.MapUpdateTopic,
-		Value: sarama.ByteEncoder(updateMessageData),
+		Value: updateMessageData,
+	}); err != nil {
+		return fmt.Errorf("failed to write map update message: %w", err)
 	}
 
 	return nil

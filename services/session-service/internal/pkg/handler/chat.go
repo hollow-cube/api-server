@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/services/session-service/config"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
@@ -35,17 +34,14 @@ var (
 )
 
 type ChatHandler struct {
-	log       *zap.SugaredLogger
-	ctx       context.Context
-	cancelCtx func()
+	log *zap.SugaredLogger
 
 	contentFilter text.Filter
 
 	authzClient authz.Client
 	queries     *db.Queries
 	redis       rueidis.Client
-	consumer    *kafka.Reader
-	producer    *kafka.Writer
+	producer    kafkafx.SyncProducer
 
 	playerTracker *player.Tracker
 }
@@ -53,84 +49,39 @@ type ChatHandler struct {
 type ChatHandlerParams struct {
 	fx.In
 
-	Log    *zap.SugaredLogger
-	Config *config.Config
+	Log *zap.SugaredLogger
 
 	AuthzClient      authz.Client
 	Queries          *db.Queries
 	KubernetesClient *kubernetes.Clientset
 	Redis            rueidis.Client
 	PlayerTracker    *player.Tracker
+	Consumer         kafkafx.Consumer
+	Producer         kafkafx.SyncProducer
 }
 
 func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 	//hostname, _ := os.Hostname()
-	brokers := strings.Split(p.Config.Kafka.Brokers, ",")
 
-	consumer := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        brokers,
-		GroupID:        "session-service-chat",
-		Topic:          chatTopicId,
-		ErrorLogger:    kafka.LoggerFunc(p.Log.Errorf),
-		IsolationLevel: kafka.ReadCommitted,
-		ReadBackoffMin: 50,
-		ReadBackoffMax: 50,
-	})
-
-	producer := &kafka.Writer{
-		Addr:                   kafka.TCP(brokers...),
-		Topic:                  outChatTopicId,
-		BatchSize:              1, // Send all messages immediately
-		Async:                  true,
-		ErrorLogger:            kafka.LoggerFunc(p.Log.Errorf),
-		AllowAutoTopicCreation: true,
-		Completion: func(messages []kafka.Message, err error) {
-			if err != nil {
-				p.Log.Errorw("failed to write chat message", "error", err)
-			}
-
-			for _, m := range messages {
-				p.Log.Infow("sent chat message", "offset", m.Offset, "data", string(m.Value))
-			}
-		},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	return &ChatHandler{
+	handler := &ChatHandler{
 		log: p.Log.With("handler", "chat"),
-		ctx: ctx, cancelCtx: cancel,
 
 		contentFilter: text.NewStaticFilter(),
 
 		authzClient: p.AuthzClient,
 		queries:     p.Queries,
 		redis:       p.Redis,
-		consumer:    consumer,
-		producer:    producer,
+		producer:    p.Producer,
 
 		playerTracker: p.PlayerTracker,
-	}, nil
-}
-
-func (h *ChatHandler) Start(ctx context.Context) error {
-	go h.consumerReadLoop()
-	return nil
-}
-
-func (h *ChatHandler) Stop(ctx context.Context) error {
-	h.cancelCtx()
-	if err := h.consumer.Close(); err != nil {
-		h.log.Errorw("failed to close consumer", "error", err)
 	}
-	if err := h.producer.Close(); err != nil {
-		h.log.Errorw("failed to close producer", "error", err)
-	}
-	return nil
+
+	p.Consumer.Subscribe(chatTopicId, "session-service-chat", handler.handleConsumerMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
+
+	return handler, nil
 }
 
 func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.ClientChatMessage) error {
-
 	// Sanitize the message for invalid characters
 	text := text.StripSpecial(msg.Message)
 	if len(text) == 0 {
@@ -273,7 +224,7 @@ func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMe
 		return
 	}
 
-	if err = h.producer.WriteMessages(ctx, kafka.Message{Value: raw}); err != nil {
+	if err = h.producer.WriteMessages(ctx, kafka.Message{Topic: outChatTopicId, Value: raw}); err != nil {
 		h.log.Errorw("failed to write chat message", "error", err)
 		return
 	}
@@ -324,28 +275,24 @@ func mapMessageParts(current []model.MessagePart, mapper func(part model.Message
 	return result
 }
 
-func (h *ChatHandler) consumerReadLoop() {
-	for {
-		m, err := h.consumer.ReadMessage(context.Background())
-		if err != nil {
-			break
-		}
+func (h *ChatHandler) handleConsumerMessage(ctx context.Context, m kafka.Message) error {
+	h.log.Infow("new message", "offset", m.Offset, "lag", m.HighWaterMark-m.Offset-1)
 
-		h.log.Infow("new message", "offset", m.Offset, "lag", m.HighWaterMark-m.Offset-1)
-
-		// Parse the message
-		var msg model.ClientChatMessage
-		if err = json.Unmarshal(m.Value, &msg); err != nil {
-			h.log.Errorw("failed to parse message", "error", err)
-			continue
-		}
-
-		// Handle the message
-		switch msg.Type {
-		case model.ChatUnsigned:
-			err = h.HandleUnsignedChatMessage(h.ctx, &msg)
-		default:
-			h.log.Errorw("unknown message type", "type", msg.Type)
-		}
+	// Parse the message
+	var msg model.ClientChatMessage
+	if err := json.Unmarshal(m.Value, &msg); err != nil {
+		return fmt.Errorf("failed to unmarshal chat message: %w", err)
 	}
+
+	// Handle the message
+	switch msg.Type {
+	case model.ChatUnsigned:
+		if err := h.HandleUnsignedChatMessage(ctx, &msg); err != nil {
+			return fmt.Errorf("failed to handle unsigned chat message: %w", err)
+		}
+	default:
+		h.log.Errorw("unknown message type", "type", msg.Type)
+	}
+
+	return nil
 }

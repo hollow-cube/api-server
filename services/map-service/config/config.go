@@ -38,28 +38,23 @@ type Redis struct {
 	Address string `mapstructure:"address"`
 }
 
-type Kafka struct {
-	Brokers           string `mapstructure:"brokers"`
-	SchemaRegistryUrl string `mapstructure:"schema_registry_url"`
-}
-
 type Posthog struct {
 	Endpoint       string `mapstructure:"endpoint"`
 	PersonalApiKey string `mapstructure:"personal_api_key"` // Required for feature flags
 }
 
 type Config struct {
-	Env              string            `mapstructure:"env"`
-	HTTP             common.HTTPConfig `mapstructure:"http"`
-	Metrics          Metrics           `mapstructure:"metrics"`
-	PlayerServiceUrl string            `mapstructure:"player_service_url"`
-	Postgres         Postgres          `mapstructure:"postgres"`
-	SpiceDB          SpiceDB           `mapstructure:"spicedb"`
-	S3               S3                `mapstructure:"s3"`
-	Redis            Redis             `mapstructure:"redis"`
-	Kafka            Kafka             `mapstructure:"kafka"`
-	OTLP             common.OtlpConfig `mapstructure:"otlp"`
-	Posthog          Posthog           `mapstructure:"posthog"`
+	Env              string             `mapstructure:"env"`
+	HTTP             common.HTTPConfig  `mapstructure:"http"`
+	Metrics          Metrics            `mapstructure:"metrics"`
+	PlayerServiceUrl string             `mapstructure:"player_service_url"`
+	Postgres         Postgres           `mapstructure:"postgres"`
+	SpiceDB          SpiceDB            `mapstructure:"spicedb"`
+	S3               S3                 `mapstructure:"s3"`
+	Redis            Redis              `mapstructure:"redis"`
+	Kafka            common.KafkaConfig `mapstructure:"kafka"`
+	OTLP             common.OtlpConfig  `mapstructure:"otlp"`
+	Posthog          Posthog            `mapstructure:"posthog"`
 }
 
 //go:embed default.yaml

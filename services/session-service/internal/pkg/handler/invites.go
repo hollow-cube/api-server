@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/wkafka"
 	"github.com/redis/rueidis"
 	"github.com/segmentio/kafka-go"
 	"github.com/vmihailenco/msgpack/v5"
@@ -21,7 +21,7 @@ type InviteManager struct {
 	log *zap.SugaredLogger
 
 	redis         rueidis.Client
-	producer      wkafka.SyncWriter
+	producer      kafkafx.SyncProducer
 	playerTracker *player.Tracker
 }
 
@@ -41,7 +41,7 @@ type InviteManagerParams struct {
 	Log *zap.SugaredLogger
 
 	Redis         rueidis.Client
-	Producer      wkafka.SyncWriter
+	Producer      kafkafx.SyncProducer
 	PlayerTracker *player.Tracker
 }
 

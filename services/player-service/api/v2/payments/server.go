@@ -10,18 +10,17 @@
 package payments
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/wkafka"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
@@ -39,11 +38,11 @@ type ServerParams struct {
 	Log        *zap.SugaredLogger
 	Config     *config.Config
 
-	ReaderFactory wkafka.ReaderFactory
-	Producer      wkafka.SyncWriter
-	Store         *db.Store
-	Authz         authz.Client
-	Posthog       posthog.Client
+	Consumer kafkafx.Consumer
+	Producer kafkafx.SyncProducer
+	Store    *db.Store
+	Authz    authz.Client
+	Posthog  posthog.Client
 }
 
 func NewServer(params ServerParams) (ServerInterface, error) {
@@ -66,24 +65,7 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		posthog:     params.Posthog,
 	}
 
-	params.Lifecycle.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			ctx, cancel := context.WithCancel(context.Background())
-			s.cancelConsumerCtx = cancel
-			go s.processStoredEventStream(ctx, params.ReaderFactory.NewReader(payments.TebexMessageTopic), func() {
-				// Shutdown used in very bad cases where we have a really major problem
-				// (ie kafka totally down will send this service into a restart loop)
-				// Not sure this is good behavior it would be better if it just stopped processing kafka messages but idk.
-				s.log.Info("shutting down via tebex message failure")
-				_ = params.Shutdowner.Shutdown()
-			})
-			return nil
-		},
-		OnStop: func(_ context.Context) error {
-			s.cancelConsumerCtx()
-			return nil
-		},
-	})
+	s.processStoredEventStream(params.Consumer)
 
 	return s, nil
 }
@@ -94,7 +76,7 @@ type server struct {
 
 	cancelConsumerCtx func()
 
-	producer   wkafka.SyncWriter
+	producer   kafkafx.SyncProducer
 	store      *db.Store
 	authClient authz.Client
 	posthog    posthog.Client

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
@@ -10,10 +9,8 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	posthog2 "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/wkafka"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -36,6 +33,7 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
+	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -43,42 +41,8 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "session-service", Env: conf.Env},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
+		Kafka:   conf.Kafka,
 	}
-}
-
-func newSyncKafkaWriter(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.SyncWriter {
-	w := &kafka.Writer{
-		Addr:                   kafka.TCP(strings.Split(conf.Kafka.Brokers, ",")...),
-		Balancer:               &kafka.Hash{},
-		Async:                  false,
-		AllowAutoTopicCreation: true,
-
-		WriteBackoffMin: 20 * time.Millisecond,
-		WriteBackoffMax: 100 * time.Millisecond,
-		BatchTimeout:    100 * time.Millisecond,
-
-		//Logger:                 kafka.LoggerFunc(log.Infof),
-		ErrorLogger: kafka.LoggerFunc(log.Errorf),
-	}
-
-	lc.Append(fx.StopHook(w.Close))
-	return w
-}
-
-func newKafkaReaderFactory(conf *config.Config, lc fx.Lifecycle, log *zap.SugaredLogger) wkafka.ReaderFactory {
-	brokers := strings.Split(conf.Kafka.Brokers, ",")
-	return wkafka.ReaderFactoryFunc(func(topic string) wkafka.Reader {
-		r := kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  brokers,
-			GroupID:  "session-service",
-			Topic:    topic,
-			MaxBytes: 10e6, // 10mb
-			//Logger:      kafka.LoggerFunc(log.Infof),
-			ErrorLogger: kafka.LoggerFunc(log.Errorf),
-		})
-		lc.Append(fx.StopHook(r.Close))
-		return r
-	})
 }
 
 func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error) {

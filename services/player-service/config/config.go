@@ -26,10 +26,6 @@ type SpiceDB struct {
 	TLS      bool   `mapstructure:"tls"`
 }
 
-type Kafka struct {
-	Brokers string `mapstructure:"brokers"`
-}
-
 type Tebex struct {
 	PrivateKey            string `mapstructure:"private_key"`
 	Secret                string `mapstructure:"secret"`
@@ -74,7 +70,7 @@ type Config struct {
 	Metrics           Metrics            `mapstructure:"metrics"`
 	Postgres          Postgres           `mapstructure:"postgres"`
 	SpiceDB           SpiceDB            `mapstructure:"spicedb"`
-	Kafka             Kafka              `mapstructure:"kafka"`
+	Kafka             common.KafkaConfig `mapstructure:"kafka"`
 	Tebex             Tebex              `mapstructure:"tebex"`
 	Votifier          Votifier           `mapstructure:"votifier"`
 	OTLP              common.OtlpConfig  `mapstructure:"otlp"`
