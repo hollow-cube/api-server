@@ -36,6 +36,7 @@ func (p *posthogWriter) Write(metric any) {
 		playerId = "00000000-0000-0000-0000-000000000000"
 	}
 
+	properties["$geoip_disable"] = true
 	err = p.client.Enqueue(posthog.Capture{
 		Event:      name,
 		DistinctId: playerId,
