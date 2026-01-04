@@ -13,6 +13,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
+	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
@@ -91,7 +92,7 @@ func (t *Tracker) CreateSession(
 	skinTexture, skinSignature string, connectedHost *string,
 	playerIP string, protocolVersion int, version string,
 ) (*db.PlayerSession, error) {
-	isHidden, _ := pd.Settings[SettingKey_Hidden].(bool)
+	isHidden, _ := pd.Settings[kafkaModel.SettingKey_Hidden].(bool)
 
 	// Upsert the session into the table
 	s, err := t.queries.UpsertPlayerSession(ctx, db.UpsertPlayerSessionParams{
@@ -107,17 +108,17 @@ func (t *Tracker) CreateSession(
 		return nil, fmt.Errorf("failed to record session: %w", err)
 	}
 
-	go t.sendSessionUpdate(SessionUpdateMessage{
-		Action:   Session_Create,
+	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+		Action:   kafkaModel.Session_Create,
 		PlayerId: s.PlayerID,
-		Session: &Session{
+		Session: &kafkaModel.Session{
 			PlayerId:        s.PlayerID,
 			CreatedAt:       s.CreatedAt,
 			ProxyId:         s.ProxyID,
 			Hidden:          s.Hidden,
 			Username:        *s.Username,
 			ProtocolVersion: int64(protocolVersion),
-			Skin: Skin{
+			Skin: kafkaModel.Skin{
 				Texture:   s.SkinTexture,
 				Signature: s.SkinSignature,
 			},
@@ -168,8 +169,8 @@ func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLe
 	}
 
 	sessionLength = int(time.Since(s.CreatedAt).Milliseconds())
-	go t.sendSessionUpdate(SessionUpdateMessage{
-		Action:   Session_Delete,
+	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+		Action:   kafkaModel.Session_Delete,
 		PlayerId: playerId,
 	})
 	posthog.Enqueue(posthog.Capture{
@@ -183,7 +184,7 @@ func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLe
 	return sessionLength, nil
 }
 
-func (t *Tracker) TransferSession(ctx context.Context, playerId string, newPresence *Presence) (*db.PlayerSession, bool, error) {
+func (t *Tracker) TransferSession(ctx context.Context, playerId string, newPresence *kafkaModel.Presence) (*db.PlayerSession, bool, error) {
 	if newPresence == nil || newPresence.Type == "" {
 		panic("newPresence must not be nil") // Sanity, but would get us into a bad state if set.
 	}
@@ -256,10 +257,10 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 		return fmt.Errorf("failed to update session: %w", err)
 	}
 
-	var presence *Presence
+	var presence *kafkaModel.Presence
 	if s.PType != nil {
-		presence = &Presence{
-			Type:       PresenceType(*s.PType),
+		presence = &kafkaModel.Presence{
+			Type:       kafkaModel.PresenceType(*s.PType),
 			State:      *s.PState,
 			InstanceId: *s.PInstanceID,
 			MapId:      *s.PMapID,
@@ -267,17 +268,17 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 		}
 	}
 
-	go t.sendSessionUpdate(SessionUpdateMessage{
-		Action:   Session_Update,
+	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+		Action:   kafkaModel.Session_Update,
 		PlayerId: s.PlayerID,
-		Session: &Session{
+		Session: &kafkaModel.Session{
 			PlayerId:        s.PlayerID,
 			CreatedAt:       s.CreatedAt,
 			ProxyId:         s.ProxyID,
 			Hidden:          s.Hidden,
 			Username:        *s.Username,
 			ProtocolVersion: int64(s.ProtocolVersion),
-			Skin: Skin{
+			Skin: kafkaModel.Skin{
 				Texture:   s.SkinTexture,
 				Signature: s.SkinSignature,
 			},
@@ -289,7 +290,7 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 	return nil
 }
 
-func (t *Tracker) sendSessionUpdate(msg SessionUpdateMessage) {
+func (t *Tracker) sendSessionUpdate(msg kafkaModel.SessionUpdateMessage) {
 	msgContent, err := json.Marshal(msg)
 	if err != nil {
 		zap.S().Errorw("failed to marshal session update message", "error", err)

@@ -251,16 +251,20 @@ func (q *Queries) GetPlayerFriendUsage(ctx context.Context, playerID string) (Ge
 
 const getPlayerFriends = `-- name: GetPlayerFriends :many
 
-select pf.target_id, pd.username, pf.created_at, count(*) over () as total_count
+select pf.target_id, pd.username, pd.online, pd.last_online, pf.created_at, count(*) over () as total_count
 from player_friends pf
          join player_data pd on pd.id = pf.target_id
 where pf.player_id = $1
+order by pd.online desc,    -- ensure online friends are listed first
+         pf.created_at desc -- just here for consistency in ordering
 limit $2 offset $3
 `
 
 type GetPlayerFriendsRow struct {
 	TargetID   string    `json:"targetId"`
 	Username   string    `json:"username"`
+	Online     bool      `json:"online"`
+	LastOnline time.Time `json:"lastOnline"`
 	CreatedAt  time.Time `json:"createdAt"`
 	TotalCount int64     `json:"totalCount"`
 }
@@ -278,6 +282,8 @@ func (q *Queries) GetPlayerFriends(ctx context.Context, playerID string, limit i
 		if err := rows.Scan(
 			&i.TargetID,
 			&i.Username,
+			&i.Online,
+			&i.LastOnline,
 			&i.CreatedAt,
 			&i.TotalCount,
 		); err != nil {

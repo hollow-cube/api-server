@@ -30,9 +30,9 @@ const addTOTP = `-- name: AddTOTP :execrows
 insert into player_totp (player_id, active, key, recovery_codes)
 values ($1, $2, $3, $4)
 on conflict (player_id)
-  do update set key            = excluded.key,
-                recovery_codes = excluded.recovery_codes,
-                created_at     = now()
+    do update set key            = excluded.key,
+                  recovery_codes = excluded.recovery_codes,
+                  created_at     = now()
 where player_totp.active = false
 `
 
@@ -59,7 +59,7 @@ func (q *Queries) AddTOTP(ctx context.Context, arg AddTOTPParams) (int64, error)
 const createPlayerData = `-- name: CreatePlayerData :one
 insert into player_data (id, username, first_join, last_online, skin)
 values ($1, $2, now(), now(), $3)
-returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin
+returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online
 `
 
 func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string, skin *PlayerSkin) (PlayerData, error) {
@@ -77,6 +77,7 @@ func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username stri
 		&i.Coins,
 		&i.Cubits,
 		&i.Skin,
+		&i.Online,
 	)
 	return i, err
 }
@@ -93,7 +94,7 @@ func (q *Queries) DeleteTOTP(ctx context.Context, playerID string) error {
 }
 
 const getPlayerData = `-- name: GetPlayerData :one
-select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online
 from player_data
 where id = $1
 limit 1
@@ -114,6 +115,7 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (PlayerData, err
 		&i.Coins,
 		&i.Cubits,
 		&i.Skin,
+		&i.Online,
 	)
 	return i, err
 }
@@ -232,10 +234,11 @@ const updatePlayerData = `-- name: UpdatePlayerData :exec
 update public.player_data
 set username     = coalesce($2, username),
     last_online  = coalesce($3, last_online),
-    playtime     = coalesce($4, playtime),
-    beta_enabled = coalesce($5, beta_enabled),
-    settings     = coalesce($6, settings),
-    skin         = $7
+    online       = coalesce($4, online),
+    playtime     = coalesce($5, playtime),
+    beta_enabled = coalesce($6, beta_enabled),
+    settings     = coalesce($7, settings),
+    skin         = $8
 where id = $1
 `
 
@@ -243,6 +246,7 @@ type UpdatePlayerDataParams struct {
 	ID          string         `json:"id"`
 	Username    *string        `json:"username"`
 	LastOnline  *time.Time     `json:"lastOnline"`
+	Online      *bool          `json:"online"`
 	Playtime    *int           `json:"playtime"`
 	BetaEnabled *bool          `json:"betaEnabled"`
 	Settings    PlayerSettings `json:"settings"`
@@ -254,6 +258,7 @@ func (q *Queries) UpdatePlayerData(ctx context.Context, arg UpdatePlayerDataPara
 		arg.ID,
 		arg.Username,
 		arg.LastOnline,
+		arg.Online,
 		arg.Playtime,
 		arg.BetaEnabled,
 		arg.Settings,

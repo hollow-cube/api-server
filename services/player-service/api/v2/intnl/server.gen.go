@@ -130,6 +130,8 @@ type PlayerDataUpdateRequest struct {
 // PlayerFriend defines model for PlayerFriend.
 type PlayerFriend struct {
 	FriendsSince time.Time `json:"friendsSince"`
+	LastOnline   time.Time `json:"lastOnline"`
+	Online       bool      `json:"online"`
 	PlayerId     string    `json:"playerId"`
 	Username     string    `json:"username"`
 }

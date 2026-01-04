@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	dto "github.com/prometheus/client_model/go"
 
 	"github.com/google/go-github/v56/github"
@@ -171,8 +172,8 @@ func (s *serverImpl) TransferSession(ctx context.Context, request TransferSessio
 			pdResp.StatusCode(), pdResp.Body)
 	}
 
-	session, isFirstTransfer, err := s.playerTracker.TransferSession(ctx, request.PlayerId, &player.Presence{
-		Type:       player.PresenceType(request.Body.Type),
+	session, isFirstTransfer, err := s.playerTracker.TransferSession(ctx, request.PlayerId, &kafkaModel.Presence{
+		Type:       kafkaModel.PresenceType(request.Body.Type),
 		State:      request.Body.State,
 		InstanceId: request.Body.Server,
 		MapId:      request.Body.Map,

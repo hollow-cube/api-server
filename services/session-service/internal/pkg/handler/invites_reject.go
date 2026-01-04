@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
+	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 )
 
 func (i *InviteManager) Reject(ctx context.Context, senderId string, recipientId string) (*model.MapInvite, error) {
@@ -103,7 +103,7 @@ func (i *InviteManager) rejectInvite(ctx context.Context, invite *model.MapInvit
 	if senderSession == nil || senderSession.PType == nil {
 		inviteErr = ErrInviteSenderOffline
 	} else {
-		if *senderSession.PType != string(player.PresenceTypeMapMakerMap) || *senderSession.PMapID != invite.MapId {
+		if *senderSession.PType != string(kafkaModel.PresenceTypeMapMakerMap) || *senderSession.PMapID != invite.MapId {
 			inviteErr = ErrInviteSenderLeftMap
 		}
 	}
@@ -141,7 +141,7 @@ func (i *InviteManager) rejectRequest(ctx context.Context, request *model.MapInv
 	if targetSession == nil {
 		inviteErr = ErrRequestTargetOffline
 	} else {
-		if *targetSession.PType != string(player.PresenceTypeMapMakerMap) || *targetSession.PMapID != request.MapId {
+		if *targetSession.PType != string(kafkaModel.PresenceTypeMapMakerMap) || *targetSession.PMapID != request.MapId {
 			inviteErr = ErrRequestTargetLeftMap
 		}
 	}

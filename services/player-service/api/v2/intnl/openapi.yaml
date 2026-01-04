@@ -1443,10 +1443,12 @@ components:
 
     PlayerFriend:
       type: object
-      required: [ playerId, username, friendsSince ]
+      required: [ playerId, username, online, lastOnline, friendsSince ]
       properties:
         playerId: { type: string }
         username: { type: string }
+        online: { type: boolean }
+        lastOnline: { type: string, format: date-time }
         friendsSince:
           type: string
           format: date-time

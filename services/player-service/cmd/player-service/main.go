@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/consumers"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/tebex-go"
@@ -79,6 +80,9 @@ func main() {
 			httpfx.AsRouteProvider(makeV2RouteHandler),
 		),
 		httpfx.Module,
+
+		// Generic consumer (e.g., denormalized data from other services)
+		fx.Invoke(consumers.NewConsumerSet),
 
 		// GRPC server (for Envoy)
 		fx.Provide(auth.NewServer),

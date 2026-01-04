@@ -129,6 +129,8 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 			FriendsSince: row.CreatedAt,
 			PlayerId:     row.TargetID,
 			Username:     row.Username,
+			Online:       row.Online,
+			LastOnline:   row.LastOnline,
 		}
 	}
 

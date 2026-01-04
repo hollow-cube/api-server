@@ -33,6 +33,7 @@ from public.player_data;
 update public.player_data
 set username     = coalesce(sqlc.narg('username'), username),
     last_online  = coalesce(sqlc.narg('last_online'), last_online),
+    online       = coalesce(sqlc.narg('online'), online),
     playtime     = coalesce(sqlc.narg('playtime'), playtime),
     beta_enabled = coalesce(sqlc.narg('beta_enabled'), beta_enabled),
     settings     = coalesce(sqlc.narg('settings'), settings),
@@ -62,9 +63,9 @@ where player_id = $1;
 insert into player_totp (player_id, active, key, recovery_codes)
 values ($1, $2, $3, $4)
 on conflict (player_id)
-  do update set key            = excluded.key,
-                recovery_codes = excluded.recovery_codes,
-                created_at     = now()
+    do update set key            = excluded.key,
+                  recovery_codes = excluded.recovery_codes,
+                  created_at     = now()
 where player_totp.active = false;
 
 -- name: ActivateTOTP :one

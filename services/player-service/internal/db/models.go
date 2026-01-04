@@ -37,6 +37,8 @@ type PlayerData struct {
 	Coins       int            `json:"coins"`
 	Cubits      int            `json:"cubits"`
 	Skin        *PlayerSkin    `json:"skin"`
+	// Updated by observing session status messages from the session-service
+	Online bool `json:"online"`
 }
 
 type PlayerTotp struct {
