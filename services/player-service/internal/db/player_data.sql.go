@@ -57,8 +57,8 @@ func (q *Queries) AddTOTP(ctx context.Context, arg AddTOTPParams) (int64, error)
 }
 
 const createPlayerData = `-- name: CreatePlayerData :one
-insert into player_data (id, username, first_join, last_online, skin)
-values ($1, $2, now(), now(), $3)
+insert into player_data (id, username, first_join, last_online, skin, online)
+values ($1, $2, now(), now(), $3, false)
 returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online
 `
 
