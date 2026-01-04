@@ -398,6 +398,7 @@ var (
 		/* Devilsta */ "e7b2bef3-7c97-4446-9657-fdbf4f09a0fd": "mod_2",
 		/* kimoi_ */ "8df33c65-09a3-4d89-8096-d220ec97a416": "mod_2",
 		/* TuxedoLemon */ "e7a98851-920a-49cc-a644-a880f638d14e": "mod_2",
+		/* ZuckerFreaks */ "b35a731e-c205-40da-833f-474cbb79d5b5": "mod_2",
 		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56": "ct_1",
 		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",
 		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",

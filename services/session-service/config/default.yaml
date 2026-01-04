@@ -40,9 +40,9 @@ unleash:
 map_isolate:
   instances:
     micro: { memory: 200 }
-    mini: { memory: 300 }
-    medium: { memory: 400 }
-    large: { memory: 500 }
+    mini: { memory: 350 }
+    medium: { memory: 500 }
+    large: { memory: 600 }
     xlarge: { memory: 1000 }
   default_size: medium
   world_size_mapping:

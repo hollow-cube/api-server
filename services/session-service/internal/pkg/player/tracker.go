@@ -152,7 +152,8 @@ func (t *Tracker) CreateSession(
 		Event:      "session_start",
 		DistinctId: pd.Id,
 		Properties: properties.
-			Set("protocol_version", version),
+			Set("protocol_version", version).
+			Set("$ip", playerIP),
 	})
 
 	return s, nil
