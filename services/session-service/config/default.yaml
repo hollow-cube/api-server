@@ -43,7 +43,7 @@ map_isolate:
     mini: { memory: 350 }
     medium: { memory: 500 }
     large: { memory: 600 }
-    xlarge: { memory: 1000 }
+    xlarge: { memory: 800 }
   default_size: medium
   world_size_mapping:
     normal: micro
