@@ -497,6 +497,24 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/GetMapPlayerData'
+  /map-players/{playerId}/slots:
+    get:
+      operationId: getMapPlayerSlots
+      tags: [ players ]
+      summary: Get map slots for a player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Map slots successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapSlot' }
   /map-players/{playerId}/history:
     get:
       operationId: getMapHistory
@@ -617,13 +635,20 @@ components:
         likes: { type: integer }
 
         contest: { type: string }
+    MapSlot:
+      type: object
+      required: [ map, index, createdAt ]
+      properties:
+        map: { $ref: '#/components/schemas/MapData' }
+        index: { type: integer }
+        createdAt: { type: string, format: date-time }
 
     MapSortType:
       type: string
-      enum: [best, published]
+      enum: [ best, published ]
     MapSortOrder:
       type: string
-      enum: [asc, desc]
+      enum: [ asc, desc ]
     MapSearchParams:
       type: object
       properties:
@@ -682,7 +707,7 @@ components:
 
     SaveStateType:
       type: string
-      enum: [editing, playing, verifying]
+      enum: [ editing, playing, verifying ]
     SaveState:
       type: object
       required: [ id, mapId, playerId, type, created, lastModified, protocolVersion, completed, playtime, dataVersion ]
@@ -725,7 +750,7 @@ components:
 
     MapHistoryEntry:
       type: object
-      required: [mapId]
+      required: [ mapId ]
       properties:
         mapId: { type: string }
 
@@ -795,10 +820,10 @@ components:
           schema:
             type: string
             format: binary
-#        application/vnd.hollowcube.anvil:
-#          schema: { $ref: '#/components/schemas/AnvilData' }
-#        application/vnd.hollowcube.anvil-legacy:
-#          schema: { $ref: '#/components/schemas/Anvil2Data' }
+    #        application/vnd.hollowcube.anvil:
+    #          schema: { $ref: '#/components/schemas/AnvilData' }
+    #        application/vnd.hollowcube.anvil-legacy:
+    #          schema: { $ref: '#/components/schemas/Anvil2Data' }
     MapReportRequest:
       content:
         application/json:
@@ -954,7 +979,7 @@ components:
         application/json:
           schema:
             type: object
-            required: [page, nextPage, results]
+            required: [ page, nextPage, results ]
             properties:
               page: { type: integer }
               nextPage: { type: boolean }

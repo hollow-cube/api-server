@@ -38,6 +38,58 @@ func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataR
 	return GetMapPlayerData200JSONResponse{playerDataToAPI(pd)}, nil
 }
 
+func (s *server) GetMapPlayerSlots(ctx context.Context, request GetMapPlayerSlotsRequestObject) (GetMapPlayerSlotsResponseObject, error) {
+	// Get maps from existing slots
+	slots, err := s.store.GetMapSlots(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch map slots: %w", err)
+	}
+	mapIds := make([]string, len(slots))
+	for i, slot := range slots {
+		mapIds[i] = slot.MapID
+	}
+	maps, err := s.store.MultiGetMapWithTagsById(ctx, mapIds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch maps: %w", err)
+	}
+
+	// Get all published maps
+	published, err := s.store.SearchMaps(ctx, db.SearchMapsParams{
+		Variants:  []string{"parkour", "building"},
+		Owner:     &request.PlayerId,
+		Sort:      "published",
+		SortOrder: "desc",
+		Page:      0,
+		PageSize:  1000000, // we have no limit at home
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch published maps: %w", err)
+	}
+
+	result := make(GetMapPlayerSlots200JSONResponse, len(slots)+len(published))
+	for i, slot := range slots {
+		for _, m := range maps {
+			if m.Map.ID != slot.MapID {
+				continue
+			}
+
+			result[i] = MapSlot{
+				Map:       MapData(s.hydrateMap(m.Map, m.Tags)),
+				CreatedAt: slot.CreatedAt,
+				Index:     slot.Index,
+			}
+		}
+	}
+	for i, m := range published {
+		result[i+len(slots)] = MapSlot{
+			Map:       MapData(s.hydratePublishedMap(m.PublishedMap)),
+			CreatedAt: *m.PublishedMap.PublishedAt,
+			Index:     -1,
+		}
+	}
+	return result, nil
+}
+
 func (s *server) GetMapHistory(ctx context.Context, request GetMapHistoryRequestObject) (GetMapHistoryResponseObject, error) {
 	var err error
 	page, pageSize := 0, 10

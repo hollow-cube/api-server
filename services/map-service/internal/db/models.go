@@ -29,6 +29,29 @@ const (
 	MapTagTerrain        MapTag = "terrain"
 	MapTagTrivia         MapTag = "trivia"
 	MapTagTwodimensional MapTag = "twodimensional"
+	MapTagMusic          MapTag = "music"
+	MapTagCoop           MapTag = "coop"
+	MapTagMinigame       MapTag = "minigame"
+	MapTagSpeedrun       MapTag = "speedrun"
+	MapTagSectioned      MapTag = "sectioned"
+	MapTagRankup         MapTag = "rankup"
+	MapTagGauntlet       MapTag = "gauntlet"
+	MapTagDropper        MapTag = "dropper"
+	MapTagOneJump        MapTag = "one_jump"
+	MapTagTutorial       MapTag = "tutorial"
+	MapTagTimed          MapTag = "timed"
+	MapTagOnlySprint     MapTag = "only_sprint"
+	MapTagNoSprint       MapTag = "no_sprint"
+	MapTagNoSneak        MapTag = "no_sneak"
+	MapTagNoJump         MapTag = "no_jump"
+	MapTagNoTurning      MapTag = "no_turning"
+	MapTagBlockPlacing   MapTag = "block_placing"
+	MapTagElytra         MapTag = "elytra"
+	MapTagTrident        MapTag = "trident"
+	MapTagMace           MapTag = "mace"
+	MapTagSpear          MapTag = "spear"
+	MapTagEnderPearl     MapTag = "ender_pearl"
+	MapTagWindCharge     MapTag = "wind_charge"
 )
 
 func (e *MapTag) Scan(src interface{}) error {
@@ -191,6 +214,7 @@ type MapStats struct {
 type MapTags struct {
 	MapID string `json:"mapId"`
 	Tag   MapTag `json:"tag"`
+	Index int    `json:"index"`
 }
 
 type ObungusBoxRatings struct {
