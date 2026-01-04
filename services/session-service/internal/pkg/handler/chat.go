@@ -22,11 +22,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const (
-	chatTopicId    = "chat"
-	outChatTopicId = "chat-messages"
-)
-
 var (
 	emojiRegex = regexp.MustCompile(`:([a-zA-Z0-9\-_]+):`)
 	mapRegex   = regexp.MustCompile(`\[map]`)
@@ -76,7 +71,7 @@ func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 		playerTracker: p.PlayerTracker,
 	}
 
-	p.Consumer.Subscribe(chatTopicId, "session-service-chat", handler.handleConsumerMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
+	p.Consumer.Subscribe(kafkafx.TopicChatInput, "session-service-chat", handler.handleConsumerMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
 
 	return handler, nil
 }
@@ -224,7 +219,7 @@ func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMe
 		return
 	}
 
-	if err = h.producer.WriteMessages(ctx, kafka.Message{Topic: outChatTopicId, Value: raw}); err != nil {
+	if err = h.producer.WriteMessages(ctx, kafka.Message{Topic: kafkafx.TopicChatOutput, Value: raw}); err != nil {
 		h.log.Errorw("failed to write chat message", "error", err)
 		return
 	}

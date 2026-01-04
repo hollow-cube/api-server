@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
@@ -140,7 +141,7 @@ func (s *server) writePlayerDataUpdateMessage(ctx context.Context, playerId stri
 		return fmt.Errorf("failed to marshal player data update message: %w", err)
 	}
 	go s.producer.WriteMessages(context.Background(), kafka.Message{
-		Topic: model.PlayerDataUpdateTopic,
+		Topic: kafkafx.TopicMapPlayerDataUpdate,
 		Key:   []byte(playerId),
 		Value: updateMessageData,
 	})
@@ -154,7 +155,7 @@ func (s *server) writeMapUpdate(update *model.MapUpdateMessage) error {
 		return fmt.Errorf("failed to marshal map update message: %w", err)
 	}
 	go s.producer.WriteMessages(context.Background(), kafka.Message{
-		Topic: model.MapUpdateTopic,
+		Topic: kafkafx.TopicMapUpdate,
 		Key:   []byte(update.ID),
 		Value: updateMessageData,
 	})

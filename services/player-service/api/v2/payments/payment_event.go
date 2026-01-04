@@ -18,7 +18,7 @@ import (
 )
 
 func (s *server) processStoredEventStream(c kafkafx.Consumer) {
-	c.Subscribe(payments.TebexMessageTopic, "session-service", func(ctx context.Context, m kafka.Message) error {
+	c.Subscribe(kafkafx.TopicTebexMessages, "session-service", func(ctx context.Context, m kafka.Message) error {
 		s.log.Infow("read tebex message", "key", string(m.Key), "offset", m.Offset)
 		event, err := tebex.ParseEvent(m.Value)
 		if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
@@ -55,7 +55,7 @@ func (s *server) processStoredEventStream(c kafkafx.Consumer) {
 		if err != nil {
 			s.log.Errorw("failed to process tebex event", "error", err)
 			dlqMessage := kafka.Message{
-				Topic: payments.TebexMessageDlqTopic,
+				Topic: kafkafx.TopicTebexDlqMessages,
 				Key:   m.Key,
 				Value: m.Value,
 			}
@@ -381,7 +381,7 @@ func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg 
 	}
 
 	kafkaRecord := kafka.Message{
-		Topic: "player_data_updates",
+		Topic: kafkafx.TopicPlayerDataUpdate,
 		Key:   []byte(msg.Id),
 		Value: content,
 	}

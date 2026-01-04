@@ -302,7 +302,7 @@ func (t *Tracker) sendSessionUpdate(msg SessionUpdateMessage) {
 	defer cancel()
 
 	err = t.producer.WriteMessages(ctx, kafka.Message{
-		Topic: SessionUpdateTopic,
+		Topic: kafkafx.TopicSessionUpdates,
 		Key:   []byte(msg.PlayerId),
 		Value: msgContent,
 	})

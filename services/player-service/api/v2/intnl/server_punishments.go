@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
@@ -281,7 +282,7 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 	}
 
 	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: model.PunishmentUpdateTopic,
+		Topic: kafkafx.TopicPunishmentUpdate,
 		Value: raw,
 	})
 }

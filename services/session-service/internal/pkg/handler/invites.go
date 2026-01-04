@@ -25,11 +25,6 @@ type InviteManager struct {
 	playerTracker *player.Tracker
 }
 
-const (
-	inviteTopic             = "invites"
-	inviteAcceptRejectTopic = "invite-accept-reject"
-)
-
 var (
 	inviteExpiryTime  = 5 * time.Minute
 	requestExpiryTime = 1 * time.Minute
@@ -161,7 +156,7 @@ func (i *InviteManager) sendInviteMessage(ctx context.Context, invite *model.Map
 	}
 
 	return i.producer.WriteMessages(ctx, kafka.Message{
-		Topic: inviteTopic,
+		Topic: kafkafx.TopicInvites,
 		Value: raw,
 	})
 }
@@ -181,7 +176,7 @@ func (i *InviteManager) sendAcceptedOrRejectedMessage(ctx context.Context, invit
 	}
 
 	return i.producer.WriteMessages(ctx, kafka.Message{
-		Topic: inviteAcceptRejectTopic,
+		Topic: kafkafx.TopicInviteAcceptReject,
 		Value: raw,
 	})
 }

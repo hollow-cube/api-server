@@ -4,11 +4,6 @@ import (
 	"time"
 )
 
-const (
-	TebexMessageTopic    = "tebex_messages"
-	TebexMessageDlqTopic = "tebex_messages_dlq"
-)
-
 var (
 	tbWebstoreId = "tc32-b931f31ef8a34e3b5e2b9ec6ea9669d2114e8075"
 	// Tebex package IDs for hypercubes and cubits

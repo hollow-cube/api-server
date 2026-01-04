@@ -74,8 +74,6 @@ type server struct {
 	log         *zap.SugaredLogger
 	tebexSecret []byte
 
-	cancelConsumerCtx func()
-
 	producer   kafkafx.SyncProducer
 	store      *db.Store
 	authClient authz.Client
@@ -119,7 +117,7 @@ func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params O
 	}
 
 	kafkaRecord := kafka.Message{
-		Topic: payments.TebexMessageTopic,
+		Topic: kafkafx.TopicTebexMessages,
 		Time:  event.Date,
 		Key:   []byte(payments.GetEventTarget(event.Subject)),
 		Value: body,

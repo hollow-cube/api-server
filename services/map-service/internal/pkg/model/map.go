@@ -208,8 +208,6 @@ type MapSettings struct {
 	Tags []string `json:"tags"`
 }
 
-const MapUpdateTopic = "map_mgmt"
-
 type MapUpdateAction int
 
 const (

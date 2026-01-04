@@ -16,8 +16,6 @@ type PlayerData struct {
 	} `json:"-"`
 }
 
-const PlayerDataUpdateTopic = "map_player_data_mgmt"
-
 type PlayerDataUpdateAction int
 
 const (

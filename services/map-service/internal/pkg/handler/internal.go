@@ -149,7 +149,7 @@ func writePlayerDataUpdateMessage(ctx context.Context, producer kafkafx.AsyncPro
 		return fmt.Errorf("failed to marshal player data update message: %w", err)
 	}
 	if err := producer.WriteMessages(ctx, kafka.Message{
-		Topic: model.PlayerDataUpdateTopic,
+		Topic: kafkafx.TopicMapPlayerDataUpdate,
 		Value: updateMessageData,
 	}); err != nil {
 		return fmt.Errorf("failed to write player data update message: %w", err)
@@ -181,7 +181,7 @@ func (h *InternalHandler) writeMapUpdate(ctx context.Context, update *model.MapU
 	}
 
 	if err := h.producer.WriteMessages(ctx, kafka.Message{
-		Topic: model.MapUpdateTopic,
+		Topic: kafkafx.TopicMapUpdate,
 		Value: updateMessageData,
 	}); err != nil {
 		return fmt.Errorf("failed to write map update message: %w", err)

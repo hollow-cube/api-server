@@ -1,8 +1,6 @@
 package model
 
 const (
-	NotificationUpdateTopic = "notification_update"
-
 	NotificationCreateAction = "create"
 )
 

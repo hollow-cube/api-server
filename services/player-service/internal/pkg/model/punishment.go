@@ -51,10 +51,6 @@ type PunishmentLadderEntry struct {
 	Duration int64
 }
 
-const (
-	PunishmentUpdateTopic = "punishments"
-)
-
 type PunishmentUpdateAction int
 
 const (

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
@@ -137,7 +138,7 @@ func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlay
 	}
 
 	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: model.NotificationUpdateTopic,
+		Topic: kafkafx.TopicNotificationUpdate,
 		Key:   []byte(request.PlayerId),
 		Value: raw,
 	})

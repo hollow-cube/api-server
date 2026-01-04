@@ -1,7 +1,5 @@
 package player
 
-const SessionUpdateTopic = "session-updates"
-
 type SessionUpdateAction int
 
 const (

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
@@ -308,7 +309,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 					zap.S().Errorw("failed to marshal message", "err", err)
 				}
 				go s.producer.WriteMessages(context.Background(), kafka.Message{
-					Topic: "chat_announcements",
+					Topic: kafkafx.TopicChatAnnouncements,
 					Value: raw,
 				})
 			}

@@ -349,7 +349,7 @@ func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg 
 	}
 
 	kafkaRecord := kafka.Message{
-		Topic: "player_data_updates",
+		Topic: kafkafx.TopicPlayerDataUpdate,
 		Key:   []byte(msg.Id),
 		Value: content,
 	}

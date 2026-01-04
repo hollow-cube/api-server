@@ -501,7 +501,7 @@ func (s *serverImpl) sendMapJoinMessage(ctx context.Context, msg model.MapJoinIn
 	}
 
 	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: "map-join",
+		Topic: kafkafx.TopicMapJoin,
 		Value: raw,
 	})
 }
