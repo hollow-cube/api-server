@@ -324,7 +324,7 @@ func (s *serverImpl) GetServerStats(ctx context.Context, request GetServerStatsR
 		return GetServerStats404Response{}, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.ClusterIp+"/metrics", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+srv.ClusterIp+"/metrics", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
