@@ -237,6 +237,9 @@ type ServerInterface interface {
 	// An endpoint for a starting server to sync its session state
 	// (POST /server/sync)
 	SyncServer(w http.ResponseWriter, r *http.Request)
+
+	// (GET /servers/{serverId}/stats)
+	GetServerStats(w http.ResponseWriter, r *http.Request, serverId string)
 	// Delete a session for the given player id
 	// (DELETE /session/{playerId})
 	DeleteSession(w http.ResponseWriter, r *http.Request, playerId string)
@@ -363,6 +366,31 @@ func (siw *ServerInterfaceWrapper) SyncServer(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncServer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetServerStats operation middleware
+func (siw *ServerInterfaceWrapper) GetServerStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "serverId" -------------
+	var serverId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serverId", r.PathValue("serverId"), &serverId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serverId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetServerStats(w, r, serverId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -600,6 +628,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/join_map", wrapper.JoinMap)
 	m.HandleFunc("GET "+options.BaseURL+"/server/isolate-overrides", wrapper.GetIsolateOverrides)
 	m.HandleFunc("POST "+options.BaseURL+"/server/sync", wrapper.SyncServer)
+	m.HandleFunc("GET "+options.BaseURL+"/servers/{serverId}/stats", wrapper.GetServerStats)
 	m.HandleFunc("DELETE "+options.BaseURL+"/session/{playerId}", wrapper.DeleteSession)
 	m.HandleFunc("PATCH "+options.BaseURL+"/session/{playerId}", wrapper.UpdateSessionProperties)
 	m.HandleFunc("POST "+options.BaseURL+"/session/{playerId}", wrapper.CreateSession)
@@ -858,6 +887,38 @@ func (response SyncServer200JSONResponse) VisitSyncServerResponse(w http.Respons
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetServerStatsRequestObject struct {
+	ServerId string `json:"serverId"`
+}
+
+type GetServerStatsResponseObject interface {
+	VisitGetServerStatsResponse(w http.ResponseWriter) error
+}
+
+type GetServerStats200JSONResponse struct {
+	ContainerUsed *int     `json:"containerUsed,omitempty"`
+	OffHeap       *int     `json:"offHeap,omitempty"`
+	VmCommitted   *int     `json:"vmCommitted,omitempty"`
+	VmMax         *int     `json:"vmMax,omitempty"`
+	VmPercent     *float32 `json:"vmPercent,omitempty"`
+	VmUsed        *int     `json:"vmUsed,omitempty"`
+}
+
+func (response GetServerStats200JSONResponse) VisitGetServerStatsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetServerStats404Response struct {
+}
+
+func (response GetServerStats404Response) VisitGetServerStatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type DeleteSessionRequestObject struct {
 	PlayerId string `json:"playerId"`
 }
@@ -1027,6 +1088,9 @@ type StrictServerInterface interface {
 	// An endpoint for a starting server to sync its session state
 	// (POST /server/sync)
 	SyncServer(ctx context.Context, request SyncServerRequestObject) (SyncServerResponseObject, error)
+
+	// (GET /servers/{serverId}/stats)
+	GetServerStats(ctx context.Context, request GetServerStatsRequestObject) (GetServerStatsResponseObject, error)
 	// Delete a session for the given player id
 	// (DELETE /session/{playerId})
 	DeleteSession(ctx context.Context, request DeleteSessionRequestObject) (DeleteSessionResponseObject, error)
@@ -1297,6 +1361,32 @@ func (sh *strictHandler) SyncServer(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SyncServerResponseObject); ok {
 		if err := validResponse.VisitSyncServerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetServerStats operation middleware
+func (sh *strictHandler) GetServerStats(w http.ResponseWriter, r *http.Request, serverId string) {
+	var request GetServerStatsRequestObject
+
+	request.ServerId = serverId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetServerStats(ctx, request.(GetServerStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetServerStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetServerStatsResponseObject); ok {
+		if err := validResponse.VisitGetServerStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

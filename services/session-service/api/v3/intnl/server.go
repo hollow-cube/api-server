@@ -11,8 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/google/go-github/v56/github"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
@@ -22,6 +25,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
+	"github.com/prometheus/common/expfmt"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -310,6 +314,85 @@ func (s *serverImpl) findServerForMap(ctx context.Context, request JoinMapReques
 	}
 
 	return s.worldTracker.FindServerForMap(ctx, request.Body.Map)
+}
+
+func (s *serverImpl) GetServerStats(ctx context.Context, request GetServerStatsRequestObject) (GetServerStatsResponseObject, error) {
+	srv, err := s.serverTracker.GetState(ctx, request.ServerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server state: %w", err)
+	} else if srv == nil {
+		return GetServerStats404Response{}, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.ClusterIp+"/metrics", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	res, err := tracefx.DefaultHTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metrics: %w", err)
+	}
+	defer res.Body.Close()
+
+	parser := expfmt.TextParser{}
+	metrics, err := parser.TextToMetricFamilies(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metrics: %w", err)
+	}
+
+	containerUsed := int(getMetricValue(metrics, "process_resident_memory_bytes", nil))
+	vmUsed := int(getMetricValue(metrics, "jvm_memory_bytes_used", map[string]string{"area": "heap"}))
+	vmCommitted := int(getMetricValue(metrics, "jvm_memory_bytes_committed", map[string]string{"area": "heap"}))
+	vmMax := int(getMetricValue(metrics, "jvm_memory_bytes_max", map[string]string{"area": "heap"}))
+	vmPercent := float32(float64(vmUsed) / float64(vmCommitted) * 100)
+	offHeap := containerUsed - vmCommitted
+
+	return &GetServerStats200JSONResponse{
+		ContainerUsed: &containerUsed,
+		OffHeap:       &offHeap,
+		VmCommitted:   &vmCommitted,
+		VmMax:         &vmMax,
+		VmPercent:     &vmPercent,
+		VmUsed:        &vmUsed,
+	}, nil
+}
+
+func getMetricValue(families map[string]*dto.MetricFamily, name string, labels map[string]string) float64 {
+	family, ok := families[name]
+	if !ok {
+		return 0
+	}
+
+	for _, metric := range family.Metric {
+		if matchLabels(metric.Label, labels) {
+			if metric.Gauge != nil {
+				return metric.Gauge.GetValue()
+			}
+			if metric.Counter != nil {
+				return metric.Counter.GetValue()
+			}
+			if metric.Untyped != nil {
+				return metric.Untyped.GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func matchLabels(metricLabels []*dto.LabelPair, want map[string]string) bool {
+	if want == nil {
+		return true
+	}
+	labelMap := make(map[string]string)
+	for _, lp := range metricLabels {
+		labelMap[lp.GetName()] = lp.GetValue()
+	}
+	for k, v := range want {
+		if labelMap[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *serverImpl) findExistingMapState(ctx context.Context, mapId string) bool {

@@ -160,6 +160,31 @@ paths:
         '503':
           $ref: '#/components/responses/NoServerAvailable'
 
+  /servers/{serverId}/stats:
+    get:
+      operationId: getServerStats
+      parameters:
+        - in: path
+          name: serverId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Server stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containerUsed: { type: integer }
+                  vmUsed: { type: integer }
+                  vmCommitted: { type: integer }
+                  vmMax: { type: integer }
+                  vmPercent: { type: number }
+                  offHeap: { type: integer }
+        '404':
+          description: Server not found
+
   /invites/map/invite:
     post:
       operationId: inviteToMap
