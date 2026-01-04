@@ -111,7 +111,7 @@ func (q *Queries) DeleteMapTagsNotIn(ctx context.Context, mapID string, tags []M
 const getMapById = `-- name: GetMapById :one
 select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
 from maps
-where id = $1
+where deleted_at is null and id = $1
 `
 
 func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
@@ -157,7 +157,7 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 const getMapWithTagsById = `-- name: GetMapWithTagsById :one
 select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
 from maps
-where id = $1
+where deleted_at is null and id = $1
 `
 
 type GetMapWithTagsByIdRow struct {

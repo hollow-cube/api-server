@@ -7,12 +7,12 @@ where deleted_at is null
 -- name: GetMapById :one
 select *
 from maps
-where id = $1;
+where deleted_at is null and id = $1;
 
 -- name: GetMapWithTagsById :one
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
 from maps
-where id = $1;
+where deleted_at is null and id = $1;
 
 -- name: GetPublishedMapById :one
 select *
