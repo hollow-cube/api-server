@@ -34,8 +34,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            **/go.sum
+            go.work.sum
       - name: detect-services
         id: detect-services
         env:
