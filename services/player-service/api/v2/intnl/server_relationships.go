@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/jackc/pgx/v5"
@@ -253,7 +254,25 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 			return nil, fmt.Errorf("failed to create friendship: %w", err)
 		}
 
-		// todo use new Notification service once implemented to notify of friendship
+		notifReq := CreatePlayerNotificationRequestObject{
+			PlayerId: request.TargetId,
+			Params:   CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(false)},
+			Body: &CreatePlayerNotificationJSONRequestBody{
+				Type:      "friend_added",
+				ExpiresIn: util.Ptr(0), // expire immediately, just for the toast
+				Key:       request.PlayerId,
+			},
+		}
+		// Send notification of friend request (to both players)
+		if err := s.createPlayerNotification(ctx, notifReq); err != nil {
+			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
+		}
+
+		notifReq.PlayerId = request.PlayerId
+		notifReq.Body.Key = request.TargetId
+		if err := s.createPlayerNotification(ctx, notifReq); err != nil {
+			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
+		}
 		return SendFriendRequest201JSONResponse{IsRequest: false}, nil
 	}
 
@@ -295,7 +314,17 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 		return nil, fmt.Errorf("failed to create friend request: %w", err)
 	}
 
-	// todo use new Notification service once implemented to notify of request
+	// Send notification of friend request
+	if err := s.createPlayerNotification(ctx, CreatePlayerNotificationRequestObject{
+		PlayerId: request.TargetId,
+		Params:   CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(true)},
+		Body: &CreatePlayerNotificationJSONRequestBody{
+			Type: "friend_request",
+			Key:  request.PlayerId, // Use the player ID as the key for a friend_request type
+		},
+	}); err != nil {
+		s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
+	}
 
 	return SendFriendRequest201JSONResponse{IsRequest: true}, nil
 }
@@ -315,7 +344,6 @@ func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRe
 			SentAt:   row.CreatedAt,
 			Username: row.Username,
 		}
-
 	} else {
 		row, err := s.store.DeleteFriendRequest(ctx, request.PlayerId, request.TargetId)
 		if err != nil {
@@ -330,6 +358,8 @@ func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRe
 			Username: row.Username,
 		}
 	}
+
+	// todo delete notification
 
 	return DeleteFriendRequest200JSONResponse(deletedReq), nil
 }

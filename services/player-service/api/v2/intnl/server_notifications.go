@@ -3,10 +3,11 @@ package intnl
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/segmentio/kafka-go"
-	"time"
 )
 
 const notificationsPerPage = 21
@@ -86,6 +87,15 @@ func (s *server) UpdatePlayerNotification(ctx context.Context, request UpdatePla
 }
 
 func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error) {
+	if err := s.createPlayerNotification(ctx, request); err != nil {
+		return nil, err
+	}
+
+	return CreatePlayerNotification201Response{}, nil
+}
+
+// createPlayerNotification exists to allow local creation of notifications without an HTTP request to itself.
+func (s *server) createPlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
 	var replace = request.Params.ReplaceUnread != nil && *request.Params.ReplaceUnread
 	var expiresAt *time.Time = nil
 	if request.Body.ExpiresIn != nil {
@@ -93,7 +103,7 @@ func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePla
 		expiresAt = &t
 	}
 
-	err := s.store.AddNotification(
+	if err := s.store.AddNotification(
 		ctx,
 		request.PlayerId,
 		request.Body.Type,
@@ -101,17 +111,15 @@ func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePla
 		request.Body.Data,
 		expiresAt,
 		replace,
-	)
-
-	if err != nil {
-		return nil, err
+	); err != nil {
+		return err
 	}
 
-	if err = s.sendNotificationMessage(ctx, request); err != nil {
-		return nil, err
+	if err := s.sendNotificationMessage(ctx, request); err != nil {
+		return err
 	}
 
-	return CreatePlayerNotification201Response{}, nil
+	return nil
 }
 
 func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
