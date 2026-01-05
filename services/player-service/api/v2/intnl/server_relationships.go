@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
@@ -107,6 +108,37 @@ func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequest
 	}
 
 	return UnblockPlayer204Response{}, nil
+}
+
+func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksBetweenPlayersRequestObject) (GetBlocksBetweenPlayersResponseObject, error) {
+	blocks, err := s.store.GetBlocksBetween(ctx, request.PlayerId, request.TargetId, request.Params.Bidirectional)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blocks between players: %w", err)
+	}
+
+	if len(blocks) == 0 {
+		return GetBlocksBetweenPlayers200JSONResponse(make([]BlockedPlayer, 0)), nil
+	}
+
+	// filter out any blocks that are staff members (they became staff after they were already blocked)
+	staffStates, err := s.authzClient.MultiCheckPlatformPermission(ctx, []string{request.TargetId, request.PlayerId}, authz.NoKey, authz.PlatformBanPlayer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if blocked players are staff members: %w", err)
+	}
+
+	blocksToReturn := make([]BlockedPlayer, 0, len(blocks))
+	for _, block := range blocks {
+		staffState := staffStates[block.TargetID]
+		if staffState != authz.Allow && staffState != authz.Conditional { // not staff, so a valid block
+			blocksToReturn = append(blocksToReturn, BlockedPlayer{
+				BlockedAt: block.CreatedAt,
+				PlayerId:  block.TargetID,
+				Username:  block.Username,
+			})
+		}
+	}
+
+	return GetBlocksBetweenPlayers200JSONResponse(blocksToReturn), nil
 }
 
 func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {

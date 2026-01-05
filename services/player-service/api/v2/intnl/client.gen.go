@@ -143,6 +143,9 @@ type ClientInterface interface {
 	// GetBlockedPlayers request
 	GetBlockedPlayers(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetBlocksBetweenPlayers request
+	GetBlocksBetweenPlayers(ctx context.Context, playerId string, targetId string, params *GetBlocksBetweenPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UnblockPlayer request
 	UnblockPlayer(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -479,6 +482,18 @@ func (c *Client) GivePlayerItems(ctx context.Context, playerId string, body Give
 
 func (c *Client) GetBlockedPlayers(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBlockedPlayersRequest(c.Server, playerId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetBlocksBetweenPlayers(ctx context.Context, playerId string, targetId string, params *GetBlocksBetweenPlayersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBlocksBetweenPlayersRequest(c.Server, playerId, targetId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1493,6 +1508,65 @@ func NewGetBlockedPlayersRequest(server string, playerId string, params *GetBloc
 		}
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "pageSize", runtime.ParamLocationQuery, params.PageSize); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetBlocksBetweenPlayersRequest generates requests for GetBlocksBetweenPlayers
+func NewGetBlocksBetweenPlayersRequest(server string, playerId string, targetId string, params *GetBlocksBetweenPlayersParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "targetId", runtime.ParamLocationPath, targetId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/blocks/player/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "bidirectional", runtime.ParamLocationQuery, params.Bidirectional); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -3030,6 +3104,9 @@ type ClientWithResponsesInterface interface {
 	// GetBlockedPlayersWithResponse request
 	GetBlockedPlayersWithResponse(ctx context.Context, playerId string, params *GetBlockedPlayersParams, reqEditors ...RequestEditorFn) (*GetBlockedPlayersResponse, error)
 
+	// GetBlocksBetweenPlayersWithResponse request
+	GetBlocksBetweenPlayersWithResponse(ctx context.Context, playerId string, targetId string, params *GetBlocksBetweenPlayersParams, reqEditors ...RequestEditorFn) (*GetBlocksBetweenPlayersResponse, error)
+
 	// UnblockPlayerWithResponse request
 	UnblockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*UnblockPlayerResponse, error)
 
@@ -3452,6 +3529,28 @@ func (r GetBlockedPlayersResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetBlockedPlayersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetBlocksBetweenPlayersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]BlockedPlayer
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBlocksBetweenPlayersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBlocksBetweenPlayersResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4296,6 +4395,15 @@ func (c *ClientWithResponses) GetBlockedPlayersWithResponse(ctx context.Context,
 	return ParseGetBlockedPlayersResponse(rsp)
 }
 
+// GetBlocksBetweenPlayersWithResponse request returning *GetBlocksBetweenPlayersResponse
+func (c *ClientWithResponses) GetBlocksBetweenPlayersWithResponse(ctx context.Context, playerId string, targetId string, params *GetBlocksBetweenPlayersParams, reqEditors ...RequestEditorFn) (*GetBlocksBetweenPlayersResponse, error) {
+	rsp, err := c.GetBlocksBetweenPlayers(ctx, playerId, targetId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBlocksBetweenPlayersResponse(rsp)
+}
+
 // UnblockPlayerWithResponse request returning *UnblockPlayerResponse
 func (c *ClientWithResponses) UnblockPlayerWithResponse(ctx context.Context, playerId string, targetId string, reqEditors ...RequestEditorFn) (*UnblockPlayerResponse, error) {
 	rsp, err := c.UnblockPlayer(ctx, playerId, targetId, reqEditors...)
@@ -4979,6 +5087,32 @@ func ParseGetBlockedPlayersResponse(rsp *http.Response) (*GetBlockedPlayersRespo
 			Page       int32           `json:"page"`
 			TotalItems int64           `json:"totalItems"`
 		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBlocksBetweenPlayersResponse parses an HTTP response from a GetBlocksBetweenPlayersWithResponse call
+func ParseGetBlocksBetweenPlayersResponse(rsp *http.Response) (*GetBlocksBetweenPlayersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBlocksBetweenPlayersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []BlockedPlayer
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -547,6 +547,39 @@ paths:
                     items:
                       $ref: '#/components/schemas/BlockedPlayer'
 
+  /players/{playerId}/blocks/player/{targetId}:
+    get:
+      summary: Check if a player is blocked by another player
+      operationId: getBlocksBetweenPlayers
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID checking block status for
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          description: The target player to check (so if playerId has blocked targetId, this will return true)
+          required: true
+          schema:
+            type: string
+        - name: bidirectional
+          in: query
+          description: Whether to check both directions of the block
+          required: true
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockedPlayer'
+
   /players/{playerId}/blocks/{targetId}:
     post:
       summary: Block a player

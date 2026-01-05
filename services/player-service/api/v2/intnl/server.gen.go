@@ -253,6 +253,12 @@ type GetBlockedPlayersParams struct {
 	PageSize int32 `form:"pageSize" json:"pageSize"`
 }
 
+// GetBlocksBetweenPlayersParams defines parameters for GetBlocksBetweenPlayers.
+type GetBlocksBetweenPlayersParams struct {
+	// Bidirectional Whether to check both directions of the block
+	Bidirectional bool `form:"bidirectional" json:"bidirectional"`
+}
+
 // BuyCosmeticJSONBody defines parameters for BuyCosmetic.
 type BuyCosmeticJSONBody struct {
 	Coins      *int                    `json:"coins,omitempty"`
@@ -492,6 +498,9 @@ type ServerInterface interface {
 	// Get players blocked by this player - automatically filters out staff members
 	// (GET /players/{playerId}/blocks)
 	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string, params GetBlockedPlayersParams)
+	// Check if a player is blocked by another player
+	// (GET /players/{playerId}/blocks/player/{targetId})
+	GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params GetBlocksBetweenPlayersParams)
 	// Unblock a player
 	// (DELETE /players/{playerId}/blocks/{targetId})
 	UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
@@ -938,6 +947,58 @@ func (siw *ServerInterfaceWrapper) GetBlockedPlayers(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetBlockedPlayers(w, r, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBlocksBetweenPlayers operation middleware
+func (siw *ServerInterfaceWrapper) GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "targetId" -------------
+	var targetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetBlocksBetweenPlayersParams
+
+	// ------------- Required query parameter "bidirectional" -------------
+
+	if paramValue := r.URL.Query().Get("bidirectional"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "bidirectional"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "bidirectional", r.URL.Query(), &params.Bidirectional)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bidirectional", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBlocksBetweenPlayers(w, r, playerId, targetId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2051,6 +2112,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GetPlayerBackpack)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GivePlayerItems)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/blocks", wrapper.GetBlockedPlayers)
+	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/blocks/player/{targetId}", wrapper.GetBlocksBetweenPlayers)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/blocks/{targetId}", wrapper.UnblockPlayer)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/blocks/{targetId}", wrapper.BlockPlayer)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.GetPlayerCosmetics)
@@ -2472,6 +2534,25 @@ type GetBlockedPlayers200JSONResponse struct {
 }
 
 func (response GetBlockedPlayers200JSONResponse) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetBlocksBetweenPlayersRequestObject struct {
+	PlayerId string `json:"playerId"`
+	TargetId string `json:"targetId"`
+	Params   GetBlocksBetweenPlayersParams
+}
+
+type GetBlocksBetweenPlayersResponseObject interface {
+	VisitGetBlocksBetweenPlayersResponse(w http.ResponseWriter) error
+}
+
+type GetBlocksBetweenPlayers200JSONResponse []BlockedPlayer
+
+func (response GetBlocksBetweenPlayers200JSONResponse) VisitGetBlocksBetweenPlayersResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -3321,6 +3402,9 @@ type StrictServerInterface interface {
 	// Get players blocked by this player - automatically filters out staff members
 	// (GET /players/{playerId}/blocks)
 	GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error)
+	// Check if a player is blocked by another player
+	// (GET /players/{playerId}/blocks/player/{targetId})
+	GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksBetweenPlayersRequestObject) (GetBlocksBetweenPlayersResponseObject, error)
 	// Unblock a player
 	// (DELETE /players/{playerId}/blocks/{targetId})
 	UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error)
@@ -3833,6 +3917,34 @@ func (sh *strictHandler) GetBlockedPlayers(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetBlockedPlayersResponseObject); ok {
 		if err := validResponse.VisitGetBlockedPlayersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBlocksBetweenPlayers operation middleware
+func (sh *strictHandler) GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params GetBlocksBetweenPlayersParams) {
+	var request GetBlocksBetweenPlayersRequestObject
+
+	request.PlayerId = playerId
+	request.TargetId = targetId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBlocksBetweenPlayers(ctx, request.(GetBlocksBetweenPlayersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBlocksBetweenPlayers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBlocksBetweenPlayersResponseObject); ok {
+		if err := validResponse.VisitGetBlocksBetweenPlayersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

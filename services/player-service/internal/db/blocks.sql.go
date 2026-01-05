@@ -39,7 +39,8 @@ const getBlockedPlayers = `-- name: GetBlockedPlayers :many
 select pb.target_id, pd.username, pb.created_at, count(*) over () as total
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
-where pb.player_id = $1 limit $2 offset $3
+where pb.player_id = $1
+limit $2 offset $3
 `
 
 type GetBlockedPlayersRow struct {
@@ -63,6 +64,46 @@ func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit 
 			&i.Username,
 			&i.CreatedAt,
 			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBlocksBetween = `-- name: GetBlocksBetween :many
+select pb.player_id, pb.target_id, pd.username, pb.created_at
+from player_blocks pb
+         join player_data pd on pd.id = pb.target_id
+where (player_id = $1 and target_id = $2)
+   or ($3 and player_id = $2 and target_id = $1)
+`
+
+type GetBlocksBetweenRow struct {
+	PlayerID  string    `json:"playerId"`
+	TargetID  string    `json:"targetId"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (q *Queries) GetBlocksBetween(ctx context.Context, playerID string, targetID string, column3 interface{}) ([]GetBlocksBetweenRow, error) {
+	rows, err := q.db.Query(ctx, getBlocksBetween, playerID, targetID, column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetBlocksBetweenRow{}
+	for rows.Next() {
+		var i GetBlocksBetweenRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.TargetID,
+			&i.Username,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
