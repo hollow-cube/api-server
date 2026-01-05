@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
