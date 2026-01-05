@@ -25,7 +25,7 @@ import (
 var (
 	emojiRegex = regexp.MustCompile(`:([a-zA-Z0-9\-_]+):`)
 	mapRegex   = regexp.MustCompile(`\[map]`)
-	urlRegex   = regexp.MustCompile(`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`)
+	urlRegex   = regexp.MustCompile(`(?:https?://)?[a-zA-Z0-9@:%._+~#=-]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)`)
 )
 
 type ChatHandler struct {
