@@ -669,7 +669,7 @@ components:
 
     MapReportCategory:
       type: string
-      enum: [ cheated, discrimination, explicit_content, spam, dmca, troll ]
+      enum: [ cheated, discrimination, explicit_content, spam, dmca, troll, unplayable ]
     MapRatingState:
       type: string
       enum: [ unrated, liked, disliked ]

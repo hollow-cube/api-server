@@ -259,12 +259,13 @@ const (
 	MapReportSpam            = 3
 	MapReportDCMA            = 4
 	MapReportTroll           = 5
+	MapReportUnplayable      = 6
 )
 
 var ReportCategoryNameMap = []string{
 	"Cheated Verification", "Discrimination",
 	"Inappropriate/Explicit Content",
-	"Spam", "Troll Map",
+	"Spam", "Troll Map", "Crashes/Unloadable",
 }
 
 type MapSortOrder = string

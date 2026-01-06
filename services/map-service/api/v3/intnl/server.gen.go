@@ -59,6 +59,7 @@ const (
 	ExplicitContent MapReportCategory = "explicit_content"
 	Spam            MapReportCategory = "spam"
 	Troll           MapReportCategory = "troll"
+	Unplayable      MapReportCategory = "unplayable"
 )
 
 // Defines values for MapSize.

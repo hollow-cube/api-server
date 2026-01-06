@@ -1198,6 +1198,8 @@ func mapReportCategoryFromAPI(category MapReportCategory) int {
 		return model.MapReportDCMA
 	case Troll:
 		return model.MapReportTroll
+	case Unplayable:
+		return model.MapReportUnplayable
 	default:
 		return model.MapReportTroll
 	}
