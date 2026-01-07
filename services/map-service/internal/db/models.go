@@ -109,6 +109,14 @@ func (ns NullSaveStateType) Value() (driver.Value, error) {
 	return string(ns.SaveStateType), nil
 }
 
+type HeadDb struct {
+	ID       int      `json:"id"`
+	Category string   `json:"category"`
+	Name     string   `json:"name"`
+	Tags     []string `json:"tags"`
+	Texture  string   `json:"texture"`
+}
+
 type Map struct {
 	ID              string     `json:"id"`
 	Owner           string     `json:"owner"`
