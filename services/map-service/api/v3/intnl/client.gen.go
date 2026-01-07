@@ -89,6 +89,12 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// SearchHeadDatabase request
+	SearchHeadDatabase(ctx context.Context, params *SearchHeadDatabaseParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetHeadDatabaseCategory request
+	GetHeadDatabaseCategory(ctx context.Context, category string, params *GetHeadDatabaseCategoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMapPlayerData request
 	GetMapPlayerData(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -185,6 +191,30 @@ type ClientInterface interface {
 
 	// UpdateMapWorldWithBody request with any body
 	UpdateMapWorldWithBody(ctx context.Context, mapId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) SearchHeadDatabase(ctx context.Context, params *SearchHeadDatabaseParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchHeadDatabaseRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetHeadDatabaseCategory(ctx context.Context, category string, params *GetHeadDatabaseCategoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetHeadDatabaseCategoryRequest(c.Server, category, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) GetMapPlayerData(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -605,6 +635,159 @@ func (c *Client) UpdateMapWorldWithBody(ctx context.Context, mapId string, conte
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewSearchHeadDatabaseRequest generates requests for SearchHeadDatabase
+func NewSearchHeadDatabaseRequest(server string, params *SearchHeadDatabaseParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hdb/search")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query", runtime.ParamLocationQuery, *params.Query); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "pageSize", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetHeadDatabaseCategoryRequest generates requests for GetHeadDatabaseCategory
+func NewGetHeadDatabaseCategoryRequest(server string, category string, params *GetHeadDatabaseCategoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "category", runtime.ParamLocationPath, category)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hdb/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "pageSize", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewGetMapPlayerDataRequest generates requests for GetMapPlayerData
@@ -1932,6 +2115,12 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// SearchHeadDatabaseWithResponse request
+	SearchHeadDatabaseWithResponse(ctx context.Context, params *SearchHeadDatabaseParams, reqEditors ...RequestEditorFn) (*SearchHeadDatabaseResponse, error)
+
+	// GetHeadDatabaseCategoryWithResponse request
+	GetHeadDatabaseCategoryWithResponse(ctx context.Context, category string, params *GetHeadDatabaseCategoryParams, reqEditors ...RequestEditorFn) (*GetHeadDatabaseCategoryResponse, error)
+
 	// GetMapPlayerDataWithResponse request
 	GetMapPlayerDataWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetMapPlayerDataResponse, error)
 
@@ -2028,6 +2217,56 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateMapWorldWithBodyWithResponse request with any body
 	UpdateMapWorldWithBodyWithResponse(ctx context.Context, mapId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMapWorldResponse, error)
+}
+
+type SearchHeadDatabaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Pages   *int          `json:"pages,omitempty"`
+		Results []HeadDbEntry `json:"results"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchHeadDatabaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchHeadDatabaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetHeadDatabaseCategoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Pages   *int          `json:"pages,omitempty"`
+		Results []HeadDbEntry `json:"results"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetHeadDatabaseCategoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetHeadDatabaseCategoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type GetMapPlayerDataResponse struct {
@@ -2622,6 +2861,24 @@ func (r UpdateMapWorldResponse) StatusCode() int {
 	return 0
 }
 
+// SearchHeadDatabaseWithResponse request returning *SearchHeadDatabaseResponse
+func (c *ClientWithResponses) SearchHeadDatabaseWithResponse(ctx context.Context, params *SearchHeadDatabaseParams, reqEditors ...RequestEditorFn) (*SearchHeadDatabaseResponse, error) {
+	rsp, err := c.SearchHeadDatabase(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchHeadDatabaseResponse(rsp)
+}
+
+// GetHeadDatabaseCategoryWithResponse request returning *GetHeadDatabaseCategoryResponse
+func (c *ClientWithResponses) GetHeadDatabaseCategoryWithResponse(ctx context.Context, category string, params *GetHeadDatabaseCategoryParams, reqEditors ...RequestEditorFn) (*GetHeadDatabaseCategoryResponse, error) {
+	rsp, err := c.GetHeadDatabaseCategory(ctx, category, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetHeadDatabaseCategoryResponse(rsp)
+}
+
 // GetMapPlayerDataWithResponse request returning *GetMapPlayerDataResponse
 func (c *ClientWithResponses) GetMapPlayerDataWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetMapPlayerDataResponse, error) {
 	rsp, err := c.GetMapPlayerData(ctx, playerId, reqEditors...)
@@ -2927,6 +3184,64 @@ func (c *ClientWithResponses) UpdateMapWorldWithBodyWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseUpdateMapWorldResponse(rsp)
+}
+
+// ParseSearchHeadDatabaseResponse parses an HTTP response from a SearchHeadDatabaseWithResponse call
+func ParseSearchHeadDatabaseResponse(rsp *http.Response) (*SearchHeadDatabaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchHeadDatabaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Pages   *int          `json:"pages,omitempty"`
+			Results []HeadDbEntry `json:"results"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetHeadDatabaseCategoryResponse parses an HTTP response from a GetHeadDatabaseCategoryWithResponse call
+func ParseGetHeadDatabaseCategoryResponse(rsp *http.Response) (*GetHeadDatabaseCategoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetHeadDatabaseCategoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Pages   *int          `json:"pages,omitempty"`
+			Results []HeadDbEntry `json:"results"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseGetMapPlayerDataResponse parses an HTTP response from a GetMapPlayerDataWithResponse call

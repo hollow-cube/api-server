@@ -105,6 +105,15 @@ const (
 	Verifying SaveStateType = "verifying"
 )
 
+// HeadDbEntry defines model for HeadDbEntry.
+type HeadDbEntry struct {
+	Category string   `json:"category"`
+	Id       string   `json:"id"`
+	Name     string   `json:"name"`
+	Tags     []string `json:"tags"`
+	Texture  string   `json:"texture"`
+}
+
 // LeaderboardEntry defines model for LeaderboardEntry.
 type LeaderboardEntry struct {
 	Player string `json:"player"`
@@ -386,6 +395,19 @@ type SaveStateUpdateRequest struct {
 	Type            *SaveStateType          `json:"type,omitempty"`
 }
 
+// SearchHeadDatabaseParams defines parameters for SearchHeadDatabase.
+type SearchHeadDatabaseParams struct {
+	Query    *string `form:"query,omitempty" json:"query,omitempty"`
+	Page     *int    `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int    `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// GetHeadDatabaseCategoryParams defines parameters for GetHeadDatabaseCategory.
+type GetHeadDatabaseCategoryParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
 // GetMapHistoryParams defines parameters for GetMapHistory.
 type GetMapHistoryParams struct {
 	Params *MapHistoryParams `form:"params,omitempty" json:"params,omitempty"`
@@ -528,6 +550,12 @@ type UpdateSaveStateJSONRequestBody UpdateSaveStateJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Search the head database
+	// (GET /hdb/search)
+	SearchHeadDatabase(w http.ResponseWriter, r *http.Request, params SearchHeadDatabaseParams)
+	// Search the head database
+	// (GET /hdb/{category})
+	GetHeadDatabaseCategory(w http.ResponseWriter, r *http.Request, category string, params GetHeadDatabaseCategoryParams)
 	// Get map player data for a player
 	// (GET /map-players/{playerId})
 	GetMapPlayerData(w http.ResponseWriter, r *http.Request, playerId string)
@@ -619,6 +647,93 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// SearchHeadDatabase operation middleware
+func (siw *ServerInterfaceWrapper) SearchHeadDatabase(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchHeadDatabaseParams
+
+	// ------------- Optional query parameter "query" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "query", r.URL.Query(), &params.Query)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "query", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchHeadDatabase(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHeadDatabaseCategory operation middleware
+func (siw *ServerInterfaceWrapper) GetHeadDatabaseCategory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "category" -------------
+	var category string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "category", r.PathValue("category"), &category, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: false})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHeadDatabaseCategoryParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHeadDatabaseCategory(w, r, category, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetMapPlayerData operation middleware
 func (siw *ServerInterfaceWrapper) GetMapPlayerData(w http.ResponseWriter, r *http.Request) {
@@ -1613,6 +1728,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/hdb/search", wrapper.SearchHeadDatabase)
+	m.HandleFunc("GET "+options.BaseURL+"/hdb/{category}", wrapper.GetHeadDatabaseCategory)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}", wrapper.GetMapPlayerData)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/history", wrapper.GetMapHistory)
 	m.HandleFunc("DELETE "+options.BaseURL+"/map-players/{playerId}/states", wrapper.DeleteMapPlayerStates)
@@ -1702,6 +1819,47 @@ type SaveStateNotFoundResponse struct {
 type SaveStateUpdateJSONResponse struct {
 	NewPlacement *int    `json:"newPlacement,omitempty"`
 	Rewards      *string `json:"rewards,omitempty"`
+}
+
+type SearchHeadDatabaseRequestObject struct {
+	Params SearchHeadDatabaseParams
+}
+
+type SearchHeadDatabaseResponseObject interface {
+	VisitSearchHeadDatabaseResponse(w http.ResponseWriter) error
+}
+
+type SearchHeadDatabase200JSONResponse struct {
+	Pages   *int          `json:"pages,omitempty"`
+	Results []HeadDbEntry `json:"results"`
+}
+
+func (response SearchHeadDatabase200JSONResponse) VisitSearchHeadDatabaseResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHeadDatabaseCategoryRequestObject struct {
+	Category string `json:"category,omitempty"`
+	Params   GetHeadDatabaseCategoryParams
+}
+
+type GetHeadDatabaseCategoryResponseObject interface {
+	VisitGetHeadDatabaseCategoryResponse(w http.ResponseWriter) error
+}
+
+type GetHeadDatabaseCategory200JSONResponse struct {
+	Pages   *int          `json:"pages,omitempty"`
+	Results []HeadDbEntry `json:"results"`
+}
+
+func (response GetHeadDatabaseCategory200JSONResponse) VisitGetHeadDatabaseCategoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type GetMapPlayerDataRequestObject struct {
@@ -2470,6 +2628,12 @@ func (response UpdateMapWorld404Response) VisitUpdateMapWorldResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Search the head database
+	// (GET /hdb/search)
+	SearchHeadDatabase(ctx context.Context, request SearchHeadDatabaseRequestObject) (SearchHeadDatabaseResponseObject, error)
+	// Search the head database
+	// (GET /hdb/{category})
+	GetHeadDatabaseCategory(ctx context.Context, request GetHeadDatabaseCategoryRequestObject) (GetHeadDatabaseCategoryResponseObject, error)
 	// Get map player data for a player
 	// (GET /map-players/{playerId})
 	GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error)
@@ -2580,6 +2744,59 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// SearchHeadDatabase operation middleware
+func (sh *strictHandler) SearchHeadDatabase(w http.ResponseWriter, r *http.Request, params SearchHeadDatabaseParams) {
+	var request SearchHeadDatabaseRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchHeadDatabase(ctx, request.(SearchHeadDatabaseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchHeadDatabase")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchHeadDatabaseResponseObject); ok {
+		if err := validResponse.VisitSearchHeadDatabaseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetHeadDatabaseCategory operation middleware
+func (sh *strictHandler) GetHeadDatabaseCategory(w http.ResponseWriter, r *http.Request, category string, params GetHeadDatabaseCategoryParams) {
+	var request GetHeadDatabaseCategoryRequestObject
+
+	request.Category = category
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHeadDatabaseCategory(ctx, request.(GetHeadDatabaseCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHeadDatabaseCategory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetHeadDatabaseCategoryResponseObject); ok {
+		if err := validResponse.VisitGetHeadDatabaseCategoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetMapPlayerData operation middleware

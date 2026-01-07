@@ -13,6 +13,8 @@ tags:
     description: Map player data management
   - name: legacy
     description: Legacy map management
+  - name: building
+    description: Building map management
 paths:
   /maps:
     get:
@@ -531,6 +533,64 @@ paths:
           description: Save states successfully deleted
         '404':
           $ref: '#/components/responses/MapPlayerNotFound'
+
+  /hdb/search:
+    get:
+      operationId: searchHeadDatabase
+      tags: [ building ]
+      summary: Search the head database
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: pageSize
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A selection of head database entries matching the query or random if no query given
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ results ]
+                properties:
+                  pages: { type: integer }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/HeadDbEntry' }
+
+  /hdb/{category}:
+    get:
+      operationId: getHeadDatabaseCategory
+      tags: [ building ]
+      summary: Search the head database
+      parameters:
+        - name: category
+          in: path
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: pageSize
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A selection of head database entries matching the category
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ results ]
+                properties:
+                  pages: { type: integer }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/HeadDbEntry' }
 components:
   schemas:
     Point:
@@ -666,6 +726,16 @@ components:
         playtime:
           description: Current playtime on the map, or -1 if not started.
           type: integer
+
+    HeadDbEntry:
+      type: object
+      required: [ id, category, name, tags, texture ]
+      properties:
+        id: { type: string }
+        category: { type: string }
+        name: { type: string }
+        tags: { type: array, items: { type: string } }
+        texture: { type: string }
 
     MapReportCategory:
       type: string
