@@ -10,6 +10,19 @@ import (
 	"time"
 )
 
+const countBlockedPlayers = `-- name: CountBlockedPlayers :one
+select count(*)
+from player_blocks
+where player_id = $1
+`
+
+func (q *Queries) CountBlockedPlayers(ctx context.Context, playerID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countBlockedPlayers, playerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPlayerBlock = `-- name: CreatePlayerBlock :exec
 insert into player_blocks (player_id, target_id)
 values ($1, $2)
@@ -36,7 +49,7 @@ func (q *Queries) DeletePlayerBlock(ctx context.Context, playerID string, target
 }
 
 const getBlockedPlayers = `-- name: GetBlockedPlayers :many
-select pb.target_id, pd.username, pb.created_at, count(*) over () as total
+select pb.target_id, pd.username, pb.created_at
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
 where pb.player_id = $1
@@ -47,7 +60,6 @@ type GetBlockedPlayersRow struct {
 	TargetID  string    `json:"targetId"`
 	Username  string    `json:"username"`
 	CreatedAt time.Time `json:"createdAt"`
-	Total     int64     `json:"total"`
 }
 
 func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit int32, offset int32) ([]GetBlockedPlayersRow, error) {
@@ -59,12 +71,7 @@ func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit 
 	items := []GetBlockedPlayersRow{}
 	for rows.Next() {
 		var i GetBlockedPlayersRow
-		if err := rows.Scan(
-			&i.TargetID,
-			&i.Username,
-			&i.CreatedAt,
-			&i.Total,
-		); err != nil {
+		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

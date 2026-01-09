@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
@@ -12,8 +13,21 @@ import (
 )
 
 func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
+	page := request.Params.Page
 	pageSize := request.Params.PageSize
-	offset := (request.Params.Page - 1) * pageSize
+
+	totalItems, err := s.store.CountBlockedPlayers(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count blocked players: %w", err)
+	}
+
+	if totalItems == 0 {
+		return GetBlockedPlayers200JSONResponse{Page: 1, TotalItems: 0, Items: make([]BlockedPlayer, 0)}, nil
+	}
+
+	maxPage := int32(math.Ceil(float64(totalItems) / float64(pageSize)))
+	page = int32(math.Min(float64(page), float64(maxPage)))
+	offset := (page - 1) * pageSize
 
 	rows, err := s.store.GetBlockedPlayers(ctx, request.PlayerId, pageSize, offset)
 	if err != nil {
@@ -53,8 +67,8 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 
 	return GetBlockedPlayers200JSONResponse{
 		Items:      blocks,
-		Page:       request.Params.Page,
-		TotalItems: rows[0].Total,
+		Page:       page,
+		TotalItems: totalItems,
 	}, nil
 }
 
@@ -141,17 +155,29 @@ func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksB
 }
 
 func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {
+	page := request.Params.Page
 	pageSize := request.Params.PageSize
-	offset := (request.Params.Page - 1) * pageSize
+
+	totalItems, err := s.store.CountPlayerFriends(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count friends: %w", err)
+	}
+
+	if totalItems == 0 {
+		return GetPlayerFriends200JSONResponse{Page: 1, TotalItems: 0, Items: make([]PlayerFriend, 0)}, nil
+	}
+
+	maxPage := int32(math.Ceil(float64(totalItems) / float64(pageSize)))
+	page = int32(math.Min(float64(page), float64(maxPage)))
+	offset := (page - 1) * pageSize
 
 	rows, err := s.store.GetPlayerFriends(ctx, request.PlayerId, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get friends: %w", err)
 	}
 
-	totalItems := int64(0)
-	if len(rows) > 0 {
-		totalItems = rows[0].TotalCount
+	if len(rows) == 0 {
+		return GetPlayerFriends200JSONResponse{Page: 1, TotalItems: 0, Items: make([]PlayerFriend, 0)}, nil
 	}
 
 	friends := make([]PlayerFriend, len(rows))
@@ -166,7 +192,7 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 	}
 
 	return GetPlayerFriends200JSONResponse{
-		Page:       request.Params.Page,
+		Page:       page,
 		TotalItems: totalItems,
 		Items:      friends,
 	}, nil
@@ -174,18 +200,35 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 
 func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error) {
 	outgoing := request.Params.Direction == Outgoing
+	page := request.Params.Page
 	pageSize := request.Params.PageSize
-	offset := (request.Params.Page - 1) * pageSize
 
-	totalItems := int64(0)
+	var totalItems int64
+	var err error
+	if outgoing {
+		totalItems, err = s.store.CountFriendRequests(ctx, &request.PlayerId, nil)
+	} else {
+		totalItems, err = s.store.CountFriendRequests(ctx, nil, &request.PlayerId)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to count friend requests: %w", err)
+	}
+
+	if totalItems == 0 {
+		return GetFriendRequests200JSONResponse{Page: 1, TotalItems: 0, Items: make([]FriendRequest, 0)}, nil
+	}
+
+	maxPage := int32(math.Ceil(float64(totalItems) / float64(pageSize)))
+	if page > maxPage && maxPage > 0 {
+		page = maxPage
+	}
+	offset := (page - 1) * pageSize
+
 	var friendRequests []FriendRequest
 	if outgoing {
 		rows, err := s.store.GetOutgoingFriendRequests(ctx, request.PlayerId, pageSize, offset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get friend requests: %w", err)
-		}
-		if len(rows) > 0 {
-			totalItems = rows[0].TotalCount
 		}
 
 		friendRequests = make([]FriendRequest, len(rows))
@@ -201,9 +244,6 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 		if err != nil {
 			return nil, fmt.Errorf("failed to get friend requests: %w", err)
 		}
-		if len(rows) > 0 {
-			totalItems = rows[0].TotalCount
-		}
 
 		friendRequests = make([]FriendRequest, len(rows))
 		for i, row := range rows {
@@ -216,7 +256,7 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 	}
 
 	return GetFriendRequests200JSONResponse{
-		Page:       request.Params.Page,
+		Page:       page,
 		TotalItems: totalItems,
 		Items:      friendRequests,
 	}, nil

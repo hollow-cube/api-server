@@ -1,7 +1,12 @@
 -- Friends
 
+-- name: CountPlayerFriends :one
+select count(*) as total
+from player_friends
+where player_id = $1;
+
 -- name: GetPlayerFriends :many
-select pf.target_id, pd.username, pd.online, pd.last_online, pf.created_at, count(*) over () as total_count
+select pf.target_id, pd.username, pd.online, pd.last_online, pf.created_at
 from player_friends pf
          join player_data pd on pd.id = pf.target_id
 where pf.player_id = $1
@@ -39,15 +44,21 @@ where (player_id = $1 and target_id = $2)
 
 -- Friend Requests
 
+-- name: CountFriendRequests :one
+select count(*) as total
+from player_friend_requests
+where (player_id = sqlc.narg(player_id) or sqlc.narg(player_id) is null)
+  and (target_id = sqlc.narg(target_id) or sqlc.narg(target_id) is null);
+
 -- name: GetIncomingFriendRequests :many
-select pfr.player_id, pd.username, pfr.created_at, count(*) over () as total_count
+select pfr.player_id, pd.username, pfr.created_at
 from player_friend_requests pfr
          join player_data pd on pd.id = pfr.player_id
 where pfr.target_id = $1
 limit $2 offset $3;
 
 -- name: GetOutgoingFriendRequests :many
-select pfr.target_id, pd.username, pfr.created_at, count(*) over () as total_count
+select pfr.target_id, pd.username, pfr.created_at
 from player_friend_requests pfr
          join player_data pd on pd.id = pfr.target_id
 where pfr.player_id = $1
