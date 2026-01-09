@@ -32,3 +32,10 @@ type MapCompletedEvent struct {
 	Playtime   int    `mapstructure:"playtime"`
 	Difficulty string `mapstructure:"difficulty"`
 }
+
+type MapReportedEvent struct {
+	PlayerId   string   `mapstructure:"player_id"`
+	MapId      string   `mapstructure:"map_id"`
+	Categories []string `mapstructure:"reason"`
+	Comment    *string  `mapstructure:"comment"`
+}

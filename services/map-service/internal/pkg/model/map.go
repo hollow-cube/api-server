@@ -268,6 +268,14 @@ var ReportCategoryNameMap = []string{
 	"Spam", "Troll Map", "Crashes/Unloadable",
 }
 
+var ReportCategoriesToDislike = map[int]bool{
+	MapReportDiscrimination:  true,
+	MapReportExplicitContent: true,
+	MapReportSpam:            true,
+	MapReportTroll:           true,
+	MapReportDCMA:            true,
+}
+
 type MapSortOrder = string
 
 const (

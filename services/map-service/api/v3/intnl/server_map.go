@@ -715,6 +715,7 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
 
+	var shouldDislike = false
 	reportParams := db.InsertMapReportParams{
 		MapID:      request.MapId,
 		PlayerID:   request.Body.Reporter,
@@ -723,6 +724,10 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 	}
 	for i, category := range request.Body.Categories {
 		reportParams.Categories[i] = mapReportCategoryFromAPI(category)
+
+		if model.ReportCategoriesToDislike[reportParams.Categories[i]] == true {
+			shouldDislike = true
+		}
 	}
 
 	// Save the report to the database immediately for future lookup
@@ -732,12 +737,25 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 	}
 	s.log.Infow("created map report #"+strconv.Itoa(report.ID), "report", report)
 
-	// Submitting a report always results in disliking the map
-	err = s.store.UpsertMapRating(ctx, report.MapID, report.PlayerID, int(model.RatingStateDisliked))
-	if err != nil {
-		// This is non fatal, just log it
-		s.log.Errorw("failed to dislike map during report", "error", err)
+	if shouldDislike {
+		// Submitting a report that is dislikable should always results in disliking the map
+		err = s.store.UpsertMapRating(ctx, report.MapID, report.PlayerID, int(model.RatingStateDisliked))
+		if err != nil {
+			// This is non fatal, just log it
+			s.log.Errorw("failed to dislike map during report", "error", err)
+		}
 	}
+
+	reportEvent := model.MapReportedEvent{
+		PlayerId:   request.Body.Reporter,
+		MapId:      request.MapId,
+		Categories: make([]string, len(request.Body.Categories)),
+		Comment:    request.Body.Comment,
+	}
+	for i, category := range request.Body.Categories {
+		reportEvent.Categories[i] = string(category)
+	}
+	go s.metrics.Write(reportEvent)
 
 	return ReportMap200Response{}, nil
 }
