@@ -46,7 +46,7 @@ func (t *tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.Trac
 	ctx, span := otelTracer.Start(ctx, spanName)
 	span.SetAttributes(
 		attribute.String("db.query", data.SQL),
-		attribute.String("db.query.args", fmt.Sprintf("%v", data.Args)),
+		attribute.String("db.query.args", formatArgs(data.Args)),
 	)
 	return context.WithValue(ctx, spanKey, span)
 }
@@ -69,6 +69,21 @@ func (t *tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQ
 			attribute.Int64("db.rows_affected", data.CommandTag.RowsAffected()),
 		)
 	}
+}
+
+func formatArgs(args []any) string {
+	if len(args) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	for i, arg := range args {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(fmt.Sprintf("$%d=%v", i+1, arg))
+	}
+	return b.String()
 }
 
 func extractSqlCOperationName(sql string) string {
