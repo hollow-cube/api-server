@@ -32,11 +32,9 @@ func (s *server) GetActivePunishment(ctx context.Context, request GetActivePunis
 }
 
 func (s *server) GetPunishments(ctx context.Context, request GetPunishmentsRequestObject) (GetPunishmentsResponseObject, error) {
-	var punishmentType model.PunishmentType
-	if request.Params.PunishmentType != nil && *request.Params.PunishmentType != "" {
-		punishmentType = model.PunishmentType(*request.Params.PunishmentType)
-	} else {
-		punishmentType = ""
+	punishmentType := ""
+	if request.Params.PunishmentType != nil {
+		punishmentType = string(*request.Params.PunishmentType)
 	}
 
 	var executorId string
@@ -44,7 +42,7 @@ func (s *server) GetPunishments(ctx context.Context, request GetPunishmentsReque
 		executorId = *request.Params.ExecutorId
 	}
 	punishments, err := s.store.SearchPunishments(ctx, db.SearchPunishmentsParams{
-		Type:       string(punishmentType),
+		Type:       punishmentType,
 		PlayerID:   request.Params.PlayerId,
 		ExecutorID: executorId,
 	})
