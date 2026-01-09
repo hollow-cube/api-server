@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -113,8 +114,9 @@ func PrometheusMiddleware() MiddlewareFunc {
 	}
 }
 
-// TraceNameMiddleware sets the span name to the METHOD + routePattern
-// Necessary as we can't set it inside the otelR as that is before it hits the chiR, meaning the pattern isn't parsed yet.
+// TraceNameMiddleware adds additional information that is not available until after the req is processed by Chi.
+// - sets the span name to the METHOD + routePattern
+// - adds span attributes for path and query parameters.
 func TraceNameMiddleware() MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +125,25 @@ func TraceNameMiddleware() MiddlewareFunc {
 
 			span := trace.SpanFromContext(r.Context())
 			span.SetName(r.Method + " " + extractRoutePattern(r))
+
+			// Add path parameters as span attributes
+			rctx := chi.RouteContext(r.Context())
+			if rctx != nil {
+				for i, key := range rctx.URLParams.Keys {
+					if key != "*" && i < len(rctx.URLParams.Values) {
+						span.SetAttributes(attribute.String("http.request.path_param."+key, rctx.URLParams.Values[i]))
+					}
+				}
+			}
+
+			// Add query parameters as span attributes
+			for key, values := range r.URL.Query() {
+				if len(values) == 1 {
+					span.SetAttributes(attribute.String("http.request.query_param."+key, values[0]))
+				} else {
+					span.SetAttributes(attribute.StringSlice("http.request.query_param."+key, values))
+				}
+			}
 
 			// Don't log an error for NotFound and BadRequest as they are expected in our CRUD use-case
 			if ww.Status() == 404 || ww.Status() == 409 {
