@@ -12,7 +12,7 @@ limit 1;
 -- name: SearchPunishments :many
 select *
 from punishments
-where type = $1
+where (type = $1 or $1 = '')
   and player_id = $2
   and (executor_id = $3 or $3 = '')
   and (ladder_id = $4 or $4 = '' or $4 is null);

@@ -128,7 +128,7 @@ func (q *Queries) RevokePunishment(ctx context.Context, arg RevokePunishmentPara
 const searchPunishments = `-- name: SearchPunishments :many
 select id, player_id, executor_id, type, created_at, ladder_id, comment, expires_at, revoked_by, revoked_at, revoked_reason
 from punishments
-where type = $1
+where (type = $1 or $1 = '')
   and player_id = $2
   and (executor_id = $3 or $3 = '')
   and (ladder_id = $4 or $4 = '' or $4 is null)
