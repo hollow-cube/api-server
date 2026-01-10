@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
@@ -308,6 +309,13 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 	reqAlreadyExists, err := s.store.FriendRequestExists(ctx, request.TargetId, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if opposite friend request exists: %w", err)
+	}
+
+	// check if the target has the feature flag, if not we block it
+	if !posthog.IsFeatureEnabledRemote(ctx, "relationship_commands", request.TargetId) {
+		return SendFriendRequest409JSONResponse{
+			Code: "feature_disabled", Message: "relationship features are disabled for the target player",
+		}, nil
 	}
 
 	if reqAlreadyExists {

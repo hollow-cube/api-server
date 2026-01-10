@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	dto "github.com/prometheus/client_model/go"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/handler"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
 	"github.com/prometheus/common/expfmt"

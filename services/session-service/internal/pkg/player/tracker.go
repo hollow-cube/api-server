@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/jackc/pgx/v5"

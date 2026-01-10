@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
-	posthog2 "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"

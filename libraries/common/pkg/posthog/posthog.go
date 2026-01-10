@@ -17,7 +17,7 @@ import (
 // associated with a user/map/etc
 const InternalID = "cccccccb-57f7-45fc-98ef-b4d2f51f5ea6"
 
-var otelTracer = otel.Tracer("github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog")
+var otelTracer = otel.Tracer("github.com/hollow-cube/hc-services/libraries/common/pkg/posthog")
 var localClient, nonLocalClient posthog.Client
 var defaultValue bool
 
