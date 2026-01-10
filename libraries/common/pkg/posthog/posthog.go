@@ -5,10 +5,12 @@ package posthog
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/posthog/posthog-go"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 )
@@ -104,11 +106,16 @@ func IsFeatureEnabledRemote(ctx context.Context, key string, distinctId string) 
 	}
 
 	span.SetStatus(codes.Ok, "")
+	var result bool
 	if s, ok := value.(string); ok {
-		return s != "false" // This handles feature flag payload response
+		result = s != "false" // This handles feature flag payload response
 	} else if b, ok := value.(bool); ok {
-		return b
+		result = b
 	} else {
-		return false // something else idk
+		result = false // something else idk
 	}
+
+	span.SetAttributes(attribute.String("result.raw", fmt.Sprintf("%v", value)))
+	span.SetAttributes(attribute.Bool("result", result))
+	return result
 }
