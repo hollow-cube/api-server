@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/consumers"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
@@ -181,6 +182,7 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
 	if conf.Env == "tilt" {
 		log.Info("dropping posthog client because tilt is enabled")
+		posthog2.InitFixedValue(true)
 		apiKey = ""
 	}
 
@@ -192,7 +194,16 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 		return nil, err
 	}
 
+	nonLocalClient, err := posthog.NewWithConfig(apiKey, posthog.Config{
+		Endpoint: conf.Posthog.Endpoint,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	lc.Append(fx.StopHook(client.Close))
+	lc.Append(fx.StopHook(nonLocalClient.Close))
+	posthog2.Init(client, nonLocalClient)
 	return client, nil
 }
 
