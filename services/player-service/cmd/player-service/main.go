@@ -180,11 +180,6 @@ func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
 
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
 	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
-	if conf.Env == "tilt" {
-		log.Info("dropping posthog client because tilt is enabled")
-		posthog2.InitFixedValue(true)
-		apiKey = ""
-	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
 		Endpoint:       conf.Posthog.Endpoint,
@@ -192,6 +187,13 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if conf.Env == "tilt" {
+		log.Info("dropping posthog client because tilt is enabled")
+		posthog2.InitFixedValue(true)
+		apiKey = ""
+		return client, nil
 	}
 
 	nonLocalClient, err := posthog.NewWithConfig(apiKey, posthog.Config{
