@@ -27,6 +27,11 @@ const mapContestSlot = 1_000_000
 
 var mapContestId = "c9354e33-96c2-414a-9f4a-8c2ff4669086"
 
+const (
+	mapSlotOwned   = -1 // for v2 maps
+	mapSlotInvited = -2
+)
+
 func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error) {
 	if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
 		// TODO: re-implement
@@ -833,20 +838,43 @@ func (s *server) UpdateMapBuilder(ctx context.Context, request UpdateMapBuilderR
 		return UpdateMapBuilder200Response{}, nil
 	}
 
-	m, err := s.store.GetMapById(ctx, request.MapId)
-	if errors.Is(err, db.ErrNoRows) {
-		return MapNotFoundResponse{}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to fetch map: %w", err)
-	}
+	m, err := db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (m db.Map, err error) {
+		m, err = s.store.GetMapById(ctx, request.MapId)
+		if err != nil {
+			return m, fmt.Errorf("failed to fetch map: %w", err)
+		}
 
-	_, err = s.store.ApproveMapBuilder(ctx, request.MapId, request.PlayerId)
+		_, err = s.store.ApproveMapBuilder(ctx, request.MapId, request.PlayerId)
+		if err != nil {
+			return m, fmt.Errorf("failed to approve map builder: %w", err)
+		}
+
+		err = s.store.InsertMapSlot(ctx, db.InsertMapSlotParams{
+			PlayerID:  request.PlayerId,
+			MapID:     request.MapId,
+			Index:     mapSlotInvited,
+			CreatedAt: time.Now(),
+		})
+		if err != nil {
+			return m, fmt.Errorf("failed to insert map slot: %w", err)
+		}
+
+		return
+	})
 	if errors.Is(err, db.ErrNoRows) {
 		return UpdateMapBuilder404Response{}, nil
 	} else if err != nil {
-		return nil, fmt.Errorf("failed to approve map builder: %w", err)
+		return nil, err
 	}
 
+	// Remove the accepted notification
+	_, err = s.playerService.DeletePlayerNotificationsWithResponse(ctx, request.PlayerId, &playerService2.DeletePlayerNotificationsParams{
+		Type: mapBuilderInviteNotificationType,
+		Key:  request.MapId,
+	})
+	if err != nil {
+		return nil, err
+	}
 	// New notification telling the author the person accepted.
 	_, err = s.playerService.CreatePlayerNotificationWithResponse(ctx, m.Owner,
 		&playerService2.CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(true)},
