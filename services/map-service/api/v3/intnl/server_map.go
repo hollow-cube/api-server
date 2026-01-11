@@ -17,6 +17,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
+	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/redis/rueidis"
 	"go.uber.org/zap"
@@ -791,14 +792,77 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 	return RateMap200Response{}, nil
 }
 
+const (
+	mapBuilderInviteNotificationType = "map_builder_invite"
+	mapBuilderAcceptNotificationType = "map_builder_accept"
+)
+
 func (s *server) InviteMapBuilder(ctx context.Context, request InviteMapBuilderRequestObject) (InviteMapBuilderResponseObject, error) {
-	//TODO implement me
-	panic("implement me")
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	if err := s.store.CreatePendingMapBuilder(ctx, request.MapId, request.PlayerId); err != nil {
+		return nil, fmt.Errorf("failed to create pending map builder: %w", err)
+	}
+
+	_, err = s.playerService.CreatePlayerNotificationWithResponse(ctx, request.PlayerId,
+		&playerService2.CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(true)},
+		playerService2.CreatePlayerNotificationJSONRequestBody{
+			Type: mapBuilderInviteNotificationType,
+			Key:  request.MapId,
+			Data: util.Ptr(map[string]interface{}{
+				// Technically the client can get this itself from the key, but in case others are
+				// allowed to invite in the future or other changes its better not to rely on key.
+				"inviterId": m.Owner,
+				"mapId":     m.ID,
+			}),
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create map builder invite notification: %w", err)
+	}
+
+	return InviteMapBuilder200Response{}, nil
 }
 
 func (s *server) UpdateMapBuilder(ctx context.Context, request UpdateMapBuilderRequestObject) (UpdateMapBuilderResponseObject, error) {
-	//TODO implement me
-	panic("implement me")
+	if request.Body.Approved == nil || !*request.Body.Approved {
+		return UpdateMapBuilder200Response{}, nil
+	}
+
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, db.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	_, err = s.store.ApproveMapBuilder(ctx, request.MapId, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
+		return UpdateMapBuilder404Response{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to approve map builder: %w", err)
+	}
+
+	// New notification telling the author the person accepted.
+	_, err = s.playerService.CreatePlayerNotificationWithResponse(ctx, m.Owner,
+		&playerService2.CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(true)},
+		playerService2.CreatePlayerNotificationJSONRequestBody{
+			Type: mapBuilderAcceptNotificationType,
+			Key:  request.MapId,
+			Data: util.Ptr(map[string]interface{}{
+				"mapId":      m.ID,
+				"accepterId": request.PlayerId,
+			}),
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create map builder accept notification: %w", err)
+	}
+
+	return UpdateMapBuilder200Response{}, nil
 }
 
 func (s *server) RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderRequestObject) (RemoveMapBuilderResponseObject, error) {
@@ -808,7 +872,13 @@ func (s *server) RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderR
 	}
 
 	// Revoke the notification
-	s.playerService.DeletePlayerNotificationWithResponse()
+	_, err = s.playerService.DeletePlayerNotificationsWithResponse(ctx, request.PlayerId, &playerService2.DeletePlayerNotificationsParams{
+		Type: mapBuilderInviteNotificationType,
+		Key:  request.MapId,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return RemoveMapBuilder200Response{}, nil
 }

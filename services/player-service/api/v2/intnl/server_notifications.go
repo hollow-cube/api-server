@@ -175,10 +175,14 @@ func (s *server) sendNotificationDeleteMessages(ctx context.Context, playerId st
 			return err
 		}
 
-		return s.producer.WriteMessages(ctx, kafka.Message{
+		if err = s.producer.WriteMessages(ctx, kafka.Message{
 			Topic: kafkafx.TopicNotificationUpdate,
 			Key:   []byte(playerId),
 			Value: raw,
-		})
+		}); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
