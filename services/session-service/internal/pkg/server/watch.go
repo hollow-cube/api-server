@@ -120,6 +120,7 @@ func (t *Tracker) podWatchReadLoop(ctx context.Context) {
 func (t *Tracker) fullPodSync(ctx context.Context) (string, error) {
 	ctx, span := otelTracer.Start(ctx, "server.fullPodSync")
 	defer span.End()
+	defer t.updateMapIsolateMetrics(ctx)
 
 	// Fetch all matching pods and the server keys from storage
 	listOptions := metaV1.ListOptions{LabelSelector: anyServerLabelSelector}
@@ -376,4 +377,22 @@ func getPodStatus(pod *coreV1.Pod) Status {
 		}
 	}
 	return NotReady
+}
+
+func (t *Tracker) updateMapIsolateMetrics(ctx context.Context) {
+	counts, err := t.queries.CountMapIsolatesByStatus(ctx)
+	if err != nil {
+		t.log.Errorw("failed to count map isolates by status", "error", err)
+		return
+	}
+
+	// Reset all states to 0 first - they may not be in the row counts
+	mapIsolateCount.WithLabelValues(string(Starting)).Set(0)
+	mapIsolateCount.WithLabelValues(string(Active)).Set(0)
+	mapIsolateCount.WithLabelValues(string(Draining)).Set(0)
+
+	// Set actual counts
+	for _, row := range counts {
+		mapIsolateCount.WithLabelValues(row.StatusV2).Set(float64(row.Count))
+	}
 }

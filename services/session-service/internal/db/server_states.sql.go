@@ -10,6 +10,38 @@ import (
 	"time"
 )
 
+const countMapIsolatesByStatus = `-- name: CountMapIsolatesByStatus :many
+select status_v2, count(*) as count
+from server_states
+where role = 'map-isolate'
+group by status_v2
+`
+
+type CountMapIsolatesByStatusRow struct {
+	StatusV2 string
+	Count    int64
+}
+
+func (q *Queries) CountMapIsolatesByStatus(ctx context.Context) ([]*CountMapIsolatesByStatusRow, error) {
+	rows, err := q.db.Query(ctx, countMapIsolatesByStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*CountMapIsolatesByStatusRow
+	for rows.Next() {
+		var i CountMapIsolatesByStatusRow
+		if err := rows.Scan(&i.StatusV2, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteServerState = `-- name: DeleteServerState :exec
 delete
 from server_states

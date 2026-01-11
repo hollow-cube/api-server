@@ -167,6 +167,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		return existing, nil
 	}
 
+	creationStart := time.Now()
 	podName, resourceVersion, err := t.allocMapServerPod(ctx, mapId, isolateOverride)
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate map server pod: %w", err)
@@ -247,6 +248,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		return nil, fmt.Errorf("server failed to become ready")
 	}
 
+	mapIsolateCreationDuration.Observe(time.Since(creationStart).Seconds())
 	return server, nil
 }
 

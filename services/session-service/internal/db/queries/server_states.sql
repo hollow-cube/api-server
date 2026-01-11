@@ -44,3 +44,9 @@ where id = $1;
 delete
 from server_states
 where id = $1;
+
+-- name: CountMapIsolatesByStatus :many
+select status_v2, count(*) as count
+from server_states
+where role = 'map-isolate'
+group by status_v2;
