@@ -13,16 +13,6 @@ import (
 
 const notificationsPerPage = 21
 
-func (s *server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
-	rows, err := s.store.DeleteNotification(ctx, request.PlayerId, request.NotificationId)
-	if rows == 0 {
-		return DeletePlayerNotification404Response{}, nil
-	} else if err != nil {
-		return nil, err
-	}
-	return DeletePlayerNotification200Response{}, nil
-}
-
 func (s *server) GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error) {
 	var unreadOnly = request.Params.Unread != nil && *request.Params.Unread
 
@@ -95,6 +85,34 @@ func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePla
 	return CreatePlayerNotification201Response{}, nil
 }
 
+func (s *server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
+	deleted, err := s.store.DeleteNotification(ctx, request.PlayerId, request.NotificationId)
+	if len(deleted) == 0 {
+		return DeletePlayerNotification404Response{}, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	if err = s.sendNotificationDeleteMessages(ctx, request.PlayerId, deleted); err != nil {
+		return nil, err
+	}
+
+	return DeletePlayerNotification200Response{}, nil
+}
+
+func (s *server) DeletePlayerNotifications(ctx context.Context, request DeletePlayerNotificationsRequestObject) (DeletePlayerNotificationsResponseObject, error) {
+	deleted, err := s.store.DeleteNotifications(ctx, request.PlayerId, request.Params.Type, request.Params.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.sendNotificationDeleteMessages(ctx, request.PlayerId, deleted); err != nil {
+		return nil, err
+	}
+
+	return DeletePlayerNotifications200Response{}, nil
+}
+
 // createPlayerNotification exists to allow local creation of notifications without an HTTP request to itself.
 func (s *server) createPlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
 	var replace = request.Params.ReplaceUnread != nil && *request.Params.ReplaceUnread
@@ -116,14 +134,14 @@ func (s *server) createPlayerNotification(ctx context.Context, request CreatePla
 		return err
 	}
 
-	if err := s.sendNotificationMessage(ctx, request); err != nil {
+	if err := s.sendNotificationCreateMessage(ctx, request); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
+func (s *server) sendNotificationCreateMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
 	msg := model.NotificationUpdateMessage{
 		Action:   model.NotificationCreateAction,
 		PlayerId: request.PlayerId,
@@ -142,4 +160,25 @@ func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlay
 		Key:   []byte(request.PlayerId),
 		Value: raw,
 	})
+}
+
+func (s *server) sendNotificationDeleteMessages(ctx context.Context, playerId string, notificationIds []string) error {
+	for _, notificationId := range notificationIds {
+		msg := model.NotificationUpdateMessage{
+			Action:         model.NotificationDeleteAction,
+			PlayerId:       playerId,
+			NotificationId: notificationId,
+		}
+
+		raw, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+
+		return s.producer.WriteMessages(ctx, kafka.Message{
+			Topic: kafkafx.TopicNotificationUpdate,
+			Key:   []byte(playerId),
+			Value: raw,
+		})
+	}
 }

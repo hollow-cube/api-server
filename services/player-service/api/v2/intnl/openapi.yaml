@@ -1228,6 +1228,32 @@ paths:
       responses:
         '201':
           description: Notification successfully created
+    delete:
+      tags: [ "notifications" ]
+      summary: Delete notifications for a player by type/key
+      operationId: deletePlayerNotifications
+      parameters:
+        - name: playerId
+          in: path
+          description: The player ID to get notifications for
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: The notification type to match.
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: query
+          description: The notification key to match.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notifications successfully deleted
 
   /players/{playerId}/notifications/{notificationId}:
     delete:

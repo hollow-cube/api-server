@@ -181,6 +181,9 @@ type ClientInterface interface {
 	// GetPlayerHypercube request
 	GetPlayerHypercube(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeletePlayerNotifications request
+	DeletePlayerNotifications(ctx context.Context, playerId string, params *DeletePlayerNotificationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetPlayerNotifications request
 	GetPlayerNotifications(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -638,6 +641,18 @@ func (c *Client) RemoveFriend(ctx context.Context, playerId string, targetId str
 
 func (c *Client) GetPlayerHypercube(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetPlayerHypercubeRequest(c.Server, playerId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeletePlayerNotifications(ctx context.Context, playerId string, params *DeletePlayerNotificationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeletePlayerNotificationsRequest(c.Server, playerId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2117,6 +2132,70 @@ func NewGetPlayerHypercubeRequest(server string, playerId string) (*http.Request
 	return req, nil
 }
 
+// NewDeletePlayerNotificationsRequest generates requests for DeletePlayerNotifications
+func NewDeletePlayerNotificationsRequest(server string, playerId string, params *DeletePlayerNotificationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/players/%s/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "type", runtime.ParamLocationQuery, params.Type); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "key", runtime.ParamLocationQuery, params.Key); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetPlayerNotificationsRequest generates requests for GetPlayerNotifications
 func NewGetPlayerNotificationsRequest(server string, playerId string, params *GetPlayerNotificationsParams) (*http.Request, error) {
 	var err error
@@ -3158,6 +3237,9 @@ type ClientWithResponsesInterface interface {
 	// GetPlayerHypercubeWithResponse request
 	GetPlayerHypercubeWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetPlayerHypercubeResponse, error)
 
+	// DeletePlayerNotificationsWithResponse request
+	DeletePlayerNotificationsWithResponse(ctx context.Context, playerId string, params *DeletePlayerNotificationsParams, reqEditors ...RequestEditorFn) (*DeletePlayerNotificationsResponse, error)
+
 	// GetPlayerNotificationsWithResponse request
 	GetPlayerNotificationsWithResponse(ctx context.Context, playerId string, params *GetPlayerNotificationsParams, reqEditors ...RequestEditorFn) (*GetPlayerNotificationsResponse, error)
 
@@ -3827,6 +3909,27 @@ func (r GetPlayerHypercubeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetPlayerHypercubeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeletePlayerNotificationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeletePlayerNotificationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeletePlayerNotificationsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4525,6 +4628,15 @@ func (c *ClientWithResponses) GetPlayerHypercubeWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseGetPlayerHypercubeResponse(rsp)
+}
+
+// DeletePlayerNotificationsWithResponse request returning *DeletePlayerNotificationsResponse
+func (c *ClientWithResponses) DeletePlayerNotificationsWithResponse(ctx context.Context, playerId string, params *DeletePlayerNotificationsParams, reqEditors ...RequestEditorFn) (*DeletePlayerNotificationsResponse, error) {
+	rsp, err := c.DeletePlayerNotifications(ctx, playerId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeletePlayerNotificationsResponse(rsp)
 }
 
 // GetPlayerNotificationsWithResponse request returning *GetPlayerNotificationsResponse
@@ -5414,6 +5526,22 @@ func ParseGetPlayerHypercubeResponse(rsp *http.Response) (*GetPlayerHypercubeRes
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseDeletePlayerNotificationsResponse parses an HTTP response from a DeletePlayerNotificationsWithResponse call
+func ParseDeletePlayerNotificationsResponse(rsp *http.Response) (*DeletePlayerNotificationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeletePlayerNotificationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
