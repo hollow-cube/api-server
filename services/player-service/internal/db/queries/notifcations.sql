@@ -28,12 +28,22 @@ set read_at = null
 where player_id = $1
   and id = $2;
 
--- name: DeleteNotification :execrows
+-- name: DeleteNotification :many
 update player_notifications
 set deleted_at = now()
 where player_id = $1
   and id = $2
-  and deleted_at is null;
+  and deleted_at is null
+returning id;
+
+-- name: DeleteNotifications :many
+update player_notifications
+set deleted_at = now()
+where player_id = $1
+  and type = $2
+  and key = $3
+  and deleted_at is null
+returning id;
 
 -- name: Unsafe_DeleteNotification :exec
 delete

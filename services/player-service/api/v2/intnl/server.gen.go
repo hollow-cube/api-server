@@ -287,6 +287,15 @@ type GetPlayerFriendsParams struct {
 	PageSize int32 `form:"pageSize" json:"pageSize"`
 }
 
+// DeletePlayerNotificationsParams defines parameters for DeletePlayerNotifications.
+type DeletePlayerNotificationsParams struct {
+	// Type The notification type to match.
+	Type string `form:"type" json:"type"`
+
+	// Key The notification key to match.
+	Key string `form:"key" json:"key"`
+}
+
 // GetPlayerNotificationsParams defines parameters for GetPlayerNotifications.
 type GetPlayerNotificationsParams struct {
 	// Page The page of results to get, starting at 0
@@ -534,6 +543,9 @@ type ServerInterface interface {
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(w http.ResponseWriter, r *http.Request, playerId string)
+	// Delete notifications for a player by type/key
+	// (DELETE /players/{playerId}/notifications)
+	DeletePlayerNotifications(w http.ResponseWriter, r *http.Request, playerId string, params DeletePlayerNotificationsParams)
 	// Get notifications for a player
 	// (GET /players/{playerId}/notifications)
 	GetPlayerNotifications(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerNotificationsParams)
@@ -1427,6 +1439,64 @@ func (siw *ServerInterfaceWrapper) GetPlayerHypercube(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// DeletePlayerNotifications operation middleware
+func (siw *ServerInterfaceWrapper) DeletePlayerNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeletePlayerNotificationsParams
+
+	// ------------- Required query parameter "type" -------------
+
+	if paramValue := r.URL.Query().Get("type"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "type", r.URL.Query(), &params.Type)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "key" -------------
+
+	if paramValue := r.URL.Query().Get("key"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "key"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "key", r.URL.Query(), &params.Key)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePlayerNotifications(w, r, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPlayerNotifications operation middleware
 func (siw *ServerInterfaceWrapper) GetPlayerNotifications(w http.ResponseWriter, r *http.Request) {
 
@@ -2124,6 +2194,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends", wrapper.GetPlayerFriends)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/{targetId}", wrapper.RemoveFriend)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/hypercube", wrapper.GetPlayerHypercube)
+	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/notifications", wrapper.DeletePlayerNotifications)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/notifications", wrapper.GetPlayerNotifications)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/notifications", wrapper.CreatePlayerNotification)
 	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/notifications/{notificationId}", wrapper.DeletePlayerNotification)
@@ -2881,6 +2952,23 @@ func (response GetPlayerHypercube404Response) VisitGetPlayerHypercubeResponse(w 
 	return nil
 }
 
+type DeletePlayerNotificationsRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Params   DeletePlayerNotificationsParams
+}
+
+type DeletePlayerNotificationsResponseObject interface {
+	VisitDeletePlayerNotificationsResponse(w http.ResponseWriter) error
+}
+
+type DeletePlayerNotifications200Response struct {
+}
+
+func (response DeletePlayerNotifications200Response) VisitDeletePlayerNotificationsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
 type GetPlayerNotificationsRequestObject struct {
 	PlayerId string `json:"playerId"`
 	Params   GetPlayerNotificationsParams
@@ -3438,6 +3526,9 @@ type StrictServerInterface interface {
 	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error)
+	// Delete notifications for a player by type/key
+	// (DELETE /players/{playerId}/notifications)
+	DeletePlayerNotifications(ctx context.Context, request DeletePlayerNotificationsRequestObject) (DeletePlayerNotificationsResponseObject, error)
 	// Get notifications for a player
 	// (GET /players/{playerId}/notifications)
 	GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error)
@@ -4246,6 +4337,33 @@ func (sh *strictHandler) GetPlayerHypercube(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlayerHypercubeResponseObject); ok {
 		if err := validResponse.VisitGetPlayerHypercubeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePlayerNotifications operation middleware
+func (sh *strictHandler) DeletePlayerNotifications(w http.ResponseWriter, r *http.Request, playerId string, params DeletePlayerNotificationsParams) {
+	var request DeletePlayerNotificationsRequestObject
+
+	request.PlayerId = playerId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePlayerNotifications(ctx, request.(DeletePlayerNotificationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePlayerNotifications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePlayerNotificationsResponseObject); ok {
+		if err := validResponse.VisitDeletePlayerNotificationsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
