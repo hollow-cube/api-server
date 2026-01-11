@@ -791,6 +791,28 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 	return RateMap200Response{}, nil
 }
 
+func (s *server) InviteMapBuilder(ctx context.Context, request InviteMapBuilderRequestObject) (InviteMapBuilderResponseObject, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *server) UpdateMapBuilder(ctx context.Context, request UpdateMapBuilderRequestObject) (UpdateMapBuilderResponseObject, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *server) RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderRequestObject) (RemoveMapBuilderResponseObject, error) {
+	err := s.store.RemoveMapBuilder(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to remove map builder: %w", err)
+	}
+
+	// Revoke the notification
+	s.playerService.DeletePlayerNotificationWithResponse()
+
+	return RemoveMapBuilder200Response{}, nil
+}
+
 var (
 	mapSortMap = map[MapSortType]model.MapSortType{
 		Best:      model.MapSortBest,

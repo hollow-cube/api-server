@@ -26,6 +26,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
+	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/go-redis/v9"
@@ -71,6 +72,8 @@ func main() {
 
 		// Metrics
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
+
+		fx.Provide(newPlayerSvc2),
 
 		fx.Provide(
 			newS3Client,
@@ -289,4 +292,8 @@ func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycl
 	lc.Append(fx.StopHook(pool.Close))
 
 	return store, nil
+}
+
+func newPlayerSvc2(conf *config.Config) (playerService2.ClientWithResponsesInterface, error) {
+	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(tracefx.DefaultHTTPClient))
 }

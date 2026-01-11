@@ -175,6 +175,13 @@ type Map struct {
 	Listed          bool       `json:"listed"`
 }
 
+type MapBuilders struct {
+	MapID     string    `json:"mapId"`
+	PlayerID  string    `json:"playerId"`
+	CreatedAt time.Time `json:"createdAt"`
+	IsPending *bool     `json:"isPending"`
+}
+
 type MapOrgs struct {
 	ID         string  `json:"id"`
 	WebhookUrl *string `json:"webhookUrl"`

@@ -287,6 +287,75 @@ paths:
           description: Rating successfully updated
         '400':
           $ref: '#/components/responses/BadRequest'
+  /maps/{mapId}/builders/{playerId}:
+    post:
+      operationId: inviteMapBuilder
+      tags: [ map ]
+      summary: Invite a player to build on a map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Invite successfully sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    patch:
+      operationId: updateMapBuilder
+      tags: [ map ]
+      summary: Update a players ability (or pending invite) to build on a map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approved: { type: boolean }
+      responses:
+        '200':
+          description: Player ability updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    delete:
+      operationId: removeMapBuilder
+      tags: [ map ]
+      summary: Remove a players ability (or pending invite) to build on a map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Player removed from builders list
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
 
   /maps/{mapId}/savestates/{playerId}:
     post:

@@ -9,6 +9,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
+	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -28,6 +29,8 @@ type ServerParams struct {
 	Metrics  metric.Writer
 
 	Object object.Client `name:"object-mapmaker"`
+
+	PlayerService playerService2.ClientWithResponsesInterface
 }
 
 type server struct {
@@ -40,16 +43,19 @@ type server struct {
 	metrics     metric.Writer
 
 	objectClient object.Client
+
+	playerService playerService2.ClientWithResponsesInterface
 }
 
 func NewServer(params ServerParams) StrictServerInterface {
 	return &server{
-		log:          params.Log,
-		store:        params.Store,
-		authzClient:  params.Authz,
-		redis:        params.Redis,
-		producer:     params.Producer,
-		metrics:      params.Metrics,
-		objectClient: params.Object,
+		log:           params.Log,
+		store:         params.Store,
+		authzClient:   params.Authz,
+		redis:         params.Redis,
+		producer:      params.Producer,
+		metrics:       params.Metrics,
+		objectClient:  params.Object,
+		playerService: params.PlayerService,
 	}
 }

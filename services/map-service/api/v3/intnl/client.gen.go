@@ -137,6 +137,17 @@ type ClientInterface interface {
 
 	UpdateMap(ctx context.Context, mapId string, body UpdateMapJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RemoveMapBuilder request
+	RemoveMapBuilder(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMapBuilderWithBody request with any body
+	UpdateMapBuilderWithBody(ctx context.Context, mapId string, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateMapBuilder(ctx context.Context, mapId string, playerId string, body UpdateMapBuilderJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InviteMapBuilder request
+	InviteMapBuilder(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteMapLeaderboard request
 	DeleteMapLeaderboard(ctx context.Context, mapId string, leaderboardName string, params *DeleteMapLeaderboardParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -390,6 +401,54 @@ func (c *Client) UpdateMapWithBody(ctx context.Context, mapId string, contentTyp
 
 func (c *Client) UpdateMap(ctx context.Context, mapId string, body UpdateMapJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateMapRequest(c.Server, mapId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RemoveMapBuilder(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveMapBuilderRequest(c.Server, mapId, playerId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateMapBuilderWithBody(ctx context.Context, mapId string, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMapBuilderRequestWithBody(c.Server, mapId, playerId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateMapBuilder(ctx context.Context, mapId string, playerId string, body UpdateMapBuilderJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMapBuilderRequest(c.Server, mapId, playerId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InviteMapBuilder(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInviteMapBuilderRequest(c.Server, mapId, playerId)
 	if err != nil {
 		return nil, err
 	}
@@ -733,40 +792,6 @@ func NewSearchHeadDatabaseRequest(server string, params *SearchHeadDatabaseParam
 	return req, nil
 }
 
-// NewGetMapPlayerSlotsRequest generates requests for GetMapPlayerSlots
-func NewGetMapPlayerSlotsRequest(server string, playerId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/map-players/%s/slots", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetHeadDatabaseCategoryRequest generates requests for GetHeadDatabaseCategory
 func NewGetHeadDatabaseCategoryRequest(server string, category string, params *GetHeadDatabaseCategoryParams) (*http.Request, error) {
 	var err error
@@ -919,6 +944,40 @@ func NewGetMapHistoryRequest(server string, playerId string, params *GetMapHisto
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetMapPlayerSlotsRequest generates requests for GetMapPlayerSlots
+func NewGetMapPlayerSlotsRequest(server string, playerId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/map-players/%s/slots", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -1334,6 +1393,142 @@ func NewUpdateMapRequestWithBody(server string, mapId string, contentType string
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveMapBuilderRequest generates requests for RemoveMapBuilder
+func NewRemoveMapBuilderRequest(server string, mapId string, playerId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "mapId", runtime.ParamLocationPath, mapId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/maps/%s/builders/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMapBuilderRequest calls the generic UpdateMapBuilder builder with application/json body
+func NewUpdateMapBuilderRequest(server string, mapId string, playerId string, body UpdateMapBuilderJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMapBuilderRequestWithBody(server, mapId, playerId, "application/json", bodyReader)
+}
+
+// NewUpdateMapBuilderRequestWithBody generates requests for UpdateMapBuilder with any type of body
+func NewUpdateMapBuilderRequestWithBody(server string, mapId string, playerId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "mapId", runtime.ParamLocationPath, mapId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/maps/%s/builders/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInviteMapBuilderRequest generates requests for InviteMapBuilder
+func NewInviteMapBuilderRequest(server string, mapId string, playerId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "mapId", runtime.ParamLocationPath, mapId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/maps/%s/builders/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2212,6 +2407,17 @@ type ClientWithResponsesInterface interface {
 
 	UpdateMapWithResponse(ctx context.Context, mapId string, body UpdateMapJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMapResponse, error)
 
+	// RemoveMapBuilderWithResponse request
+	RemoveMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*RemoveMapBuilderResponse, error)
+
+	// UpdateMapBuilderWithBodyWithResponse request with any body
+	UpdateMapBuilderWithBodyWithResponse(ctx context.Context, mapId string, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMapBuilderResponse, error)
+
+	UpdateMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, body UpdateMapBuilderJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMapBuilderResponse, error)
+
+	// InviteMapBuilderWithResponse request
+	InviteMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*InviteMapBuilderResponse, error)
+
 	// DeleteMapLeaderboardWithResponse request
 	DeleteMapLeaderboardWithResponse(ctx context.Context, mapId string, leaderboardName string, params *DeleteMapLeaderboardParams, reqEditors ...RequestEditorFn) (*DeleteMapLeaderboardResponse, error)
 
@@ -2581,6 +2787,72 @@ func (r UpdateMapResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateMapResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RemoveMapBuilderResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveMapBuilderResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveMapBuilderResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateMapBuilderResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMapBuilderResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMapBuilderResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InviteMapBuilderResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+}
+
+// Status returns HTTPResponse.Status
+func (r InviteMapBuilderResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InviteMapBuilderResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3085,6 +3357,41 @@ func (c *ClientWithResponses) UpdateMapWithResponse(ctx context.Context, mapId s
 	return ParseUpdateMapResponse(rsp)
 }
 
+// RemoveMapBuilderWithResponse request returning *RemoveMapBuilderResponse
+func (c *ClientWithResponses) RemoveMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*RemoveMapBuilderResponse, error) {
+	rsp, err := c.RemoveMapBuilder(ctx, mapId, playerId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveMapBuilderResponse(rsp)
+}
+
+// UpdateMapBuilderWithBodyWithResponse request with arbitrary body returning *UpdateMapBuilderResponse
+func (c *ClientWithResponses) UpdateMapBuilderWithBodyWithResponse(ctx context.Context, mapId string, playerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMapBuilderResponse, error) {
+	rsp, err := c.UpdateMapBuilderWithBody(ctx, mapId, playerId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMapBuilderResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, body UpdateMapBuilderJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMapBuilderResponse, error) {
+	rsp, err := c.UpdateMapBuilder(ctx, mapId, playerId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMapBuilderResponse(rsp)
+}
+
+// InviteMapBuilderWithResponse request returning *InviteMapBuilderResponse
+func (c *ClientWithResponses) InviteMapBuilderWithResponse(ctx context.Context, mapId string, playerId string, reqEditors ...RequestEditorFn) (*InviteMapBuilderResponse, error) {
+	rsp, err := c.InviteMapBuilder(ctx, mapId, playerId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInviteMapBuilderResponse(rsp)
+}
+
 // DeleteMapLeaderboardWithResponse request returning *DeleteMapLeaderboardResponse
 func (c *ClientWithResponses) DeleteMapLeaderboardWithResponse(ctx context.Context, mapId string, leaderboardName string, params *DeleteMapLeaderboardParams, reqEditors ...RequestEditorFn) (*DeleteMapLeaderboardResponse, error) {
 	rsp, err := c.DeleteMapLeaderboard(ctx, mapId, leaderboardName, params, reqEditors...)
@@ -3298,32 +3605,6 @@ func ParseSearchHeadDatabaseResponse(rsp *http.Response) (*SearchHeadDatabaseRes
 	return response, nil
 }
 
-// ParseGetMapPlayerSlotsResponse parses an HTTP response from a GetMapPlayerSlotsWithResponse call
-func ParseGetMapPlayerSlotsResponse(rsp *http.Response) (*GetMapPlayerSlotsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetMapPlayerSlotsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []MapSlot
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetHeadDatabaseCategoryResponse parses an HTTP response from a GetHeadDatabaseCategoryWithResponse call
 func ParseGetHeadDatabaseCategoryResponse(rsp *http.Response) (*GetHeadDatabaseCategoryResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3395,6 +3676,32 @@ func ParseGetMapHistoryResponse(rsp *http.Response) (*GetMapHistoryResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest GetMapHistory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMapPlayerSlotsResponse parses an HTTP response from a GetMapPlayerSlotsWithResponse call
+func ParseGetMapPlayerSlotsResponse(rsp *http.Response) (*GetMapPlayerSlotsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMapPlayerSlotsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []MapSlot
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3633,6 +3940,84 @@ func ParseUpdateMapResponse(rsp *http.Response) (*UpdateMapResponse, error) {
 	}
 
 	response := &UpdateMapResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveMapBuilderResponse parses an HTTP response from a RemoveMapBuilderWithResponse call
+func ParseRemoveMapBuilderResponse(rsp *http.Response) (*RemoveMapBuilderResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveMapBuilderResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMapBuilderResponse parses an HTTP response from a UpdateMapBuilderWithResponse call
+func ParseUpdateMapBuilderResponse(rsp *http.Response) (*UpdateMapBuilderResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMapBuilderResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseInviteMapBuilderResponse parses an HTTP response from a InviteMapBuilderWithResponse call
+func ParseInviteMapBuilderResponse(rsp *http.Response) (*InviteMapBuilderResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InviteMapBuilderResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -478,6 +478,11 @@ type UpdateMapJSONBody struct {
 	Variant         *MapVariant             `json:"variant,omitempty"`
 }
 
+// UpdateMapBuilderJSONBody defines parameters for UpdateMapBuilder.
+type UpdateMapBuilderJSONBody struct {
+	Approved *bool `json:"approved,omitempty"`
+}
+
 // DeleteMapLeaderboardParams defines parameters for DeleteMapLeaderboard.
 type DeleteMapLeaderboardParams struct {
 	PlayerId *string `form:"playerId,omitempty" json:"playerId,omitempty"`
@@ -540,6 +545,9 @@ type DeleteMapJSONRequestBody DeleteMapJSONBody
 // UpdateMapJSONRequestBody defines body for UpdateMap for application/json ContentType.
 type UpdateMapJSONRequestBody UpdateMapJSONBody
 
+// UpdateMapBuilderJSONRequestBody defines body for UpdateMapBuilder for application/json ContentType.
+type UpdateMapBuilderJSONRequestBody UpdateMapBuilderJSONBody
+
 // PublishMapJSONRequestBody defines body for PublishMap for application/json ContentType.
 type PublishMapJSONRequestBody PublishMapJSONBody
 
@@ -599,6 +607,15 @@ type ServerInterface interface {
 	// Update map info
 	// (PATCH /maps/{mapId})
 	UpdateMap(w http.ResponseWriter, r *http.Request, mapId string)
+	// Remove a players ability (or pending invite) to build on a map
+	// (DELETE /maps/{mapId}/builders/{playerId})
+	RemoveMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string)
+	// Update a players ability (or pending invite) to build on a map
+	// (PATCH /maps/{mapId}/builders/{playerId})
+	UpdateMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string)
+	// Invite a player to build on a map
+	// (POST /maps/{mapId}/builders/{playerId})
+	InviteMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string)
 	// Delete a map leaderboard entirely or for a particular player
 	// (DELETE /maps/{mapId}/leaderboard/{leaderboardName})
 	DeleteMapLeaderboard(w http.ResponseWriter, r *http.Request, mapId string, leaderboardName string, params DeleteMapLeaderboardParams)
@@ -1082,6 +1099,108 @@ func (siw *ServerInterfaceWrapper) UpdateMap(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMap(w, r, mapId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveMapBuilder operation middleware
+func (siw *ServerInterfaceWrapper) RemoveMapBuilder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "mapId" -------------
+	var mapId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveMapBuilder(w, r, mapId, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMapBuilder operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMapBuilder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "mapId" -------------
+	var mapId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMapBuilder(w, r, mapId, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InviteMapBuilder operation middleware
+func (siw *ServerInterfaceWrapper) InviteMapBuilder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "mapId" -------------
+	var mapId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InviteMapBuilder(w, r, mapId, playerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1777,6 +1896,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/maps/{mapId}", wrapper.DeleteMap)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/{mapId}", wrapper.GetMap)
 	m.HandleFunc("PATCH "+options.BaseURL+"/maps/{mapId}", wrapper.UpdateMap)
+	m.HandleFunc("DELETE "+options.BaseURL+"/maps/{mapId}/builders/{playerId}", wrapper.RemoveMapBuilder)
+	m.HandleFunc("PATCH "+options.BaseURL+"/maps/{mapId}/builders/{playerId}", wrapper.UpdateMapBuilder)
+	m.HandleFunc("POST "+options.BaseURL+"/maps/{mapId}/builders/{playerId}", wrapper.InviteMapBuilder)
 	m.HandleFunc("DELETE "+options.BaseURL+"/maps/{mapId}/leaderboard/{leaderboardName}", wrapper.DeleteMapLeaderboard)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/{mapId}/leaderboard/{leaderboardName}", wrapper.GetMapLeaderboard)
 	m.HandleFunc("POST "+options.BaseURL+"/maps/{mapId}/leaderboard/{leaderboardName}/restore", wrapper.RestoreMapLeaderboard)
@@ -2186,6 +2308,106 @@ func (response UpdateMap400JSONResponse) VisitUpdateMapResponse(w http.ResponseW
 type UpdateMap404Response = MapNotFoundResponse
 
 func (response UpdateMap404Response) VisitUpdateMapResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type RemoveMapBuilderRequestObject struct {
+	MapId    string `json:"mapId"`
+	PlayerId string `json:"playerId"`
+}
+
+type RemoveMapBuilderResponseObject interface {
+	VisitRemoveMapBuilderResponse(w http.ResponseWriter) error
+}
+
+type RemoveMapBuilder200Response struct {
+}
+
+func (response RemoveMapBuilder200Response) VisitRemoveMapBuilderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type RemoveMapBuilder400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RemoveMapBuilder400JSONResponse) VisitRemoveMapBuilderResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemoveMapBuilder404Response = MapNotFoundResponse
+
+func (response RemoveMapBuilder404Response) VisitRemoveMapBuilderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type UpdateMapBuilderRequestObject struct {
+	MapId    string `json:"mapId"`
+	PlayerId string `json:"playerId"`
+	Body     *UpdateMapBuilderJSONRequestBody
+}
+
+type UpdateMapBuilderResponseObject interface {
+	VisitUpdateMapBuilderResponse(w http.ResponseWriter) error
+}
+
+type UpdateMapBuilder200Response struct {
+}
+
+func (response UpdateMapBuilder200Response) VisitUpdateMapBuilderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type UpdateMapBuilder400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateMapBuilder400JSONResponse) VisitUpdateMapBuilderResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMapBuilder404Response = MapNotFoundResponse
+
+func (response UpdateMapBuilder404Response) VisitUpdateMapBuilderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type InviteMapBuilderRequestObject struct {
+	MapId    string `json:"mapId"`
+	PlayerId string `json:"playerId"`
+}
+
+type InviteMapBuilderResponseObject interface {
+	VisitInviteMapBuilderResponse(w http.ResponseWriter) error
+}
+
+type InviteMapBuilder200Response struct {
+}
+
+func (response InviteMapBuilder200Response) VisitInviteMapBuilderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type InviteMapBuilder400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response InviteMapBuilder400JSONResponse) VisitInviteMapBuilderResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type InviteMapBuilder404Response = MapNotFoundResponse
+
+func (response InviteMapBuilder404Response) VisitInviteMapBuilderResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -2723,6 +2945,15 @@ type StrictServerInterface interface {
 	// Update map info
 	// (PATCH /maps/{mapId})
 	UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error)
+	// Remove a players ability (or pending invite) to build on a map
+	// (DELETE /maps/{mapId}/builders/{playerId})
+	RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderRequestObject) (RemoveMapBuilderResponseObject, error)
+	// Update a players ability (or pending invite) to build on a map
+	// (PATCH /maps/{mapId}/builders/{playerId})
+	UpdateMapBuilder(ctx context.Context, request UpdateMapBuilderRequestObject) (UpdateMapBuilderResponseObject, error)
+	// Invite a player to build on a map
+	// (POST /maps/{mapId}/builders/{playerId})
+	InviteMapBuilder(ctx context.Context, request InviteMapBuilderRequestObject) (InviteMapBuilderResponseObject, error)
 	// Delete a map leaderboard entirely or for a particular player
 	// (DELETE /maps/{mapId}/leaderboard/{leaderboardName})
 	DeleteMapLeaderboard(ctx context.Context, request DeleteMapLeaderboardRequestObject) (DeleteMapLeaderboardResponseObject, error)
@@ -3181,6 +3412,94 @@ func (sh *strictHandler) UpdateMap(w http.ResponseWriter, r *http.Request, mapId
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateMapResponseObject); ok {
 		if err := validResponse.VisitUpdateMapResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveMapBuilder operation middleware
+func (sh *strictHandler) RemoveMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string) {
+	var request RemoveMapBuilderRequestObject
+
+	request.MapId = mapId
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveMapBuilder(ctx, request.(RemoveMapBuilderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveMapBuilder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveMapBuilderResponseObject); ok {
+		if err := validResponse.VisitRemoveMapBuilderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMapBuilder operation middleware
+func (sh *strictHandler) UpdateMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string) {
+	var request UpdateMapBuilderRequestObject
+
+	request.MapId = mapId
+	request.PlayerId = playerId
+
+	var body UpdateMapBuilderJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMapBuilder(ctx, request.(UpdateMapBuilderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMapBuilder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMapBuilderResponseObject); ok {
+		if err := validResponse.VisitUpdateMapBuilderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// InviteMapBuilder operation middleware
+func (sh *strictHandler) InviteMapBuilder(w http.ResponseWriter, r *http.Request, mapId string, playerId string) {
+	var request InviteMapBuilderRequestObject
+
+	request.MapId = mapId
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.InviteMapBuilder(ctx, request.(InviteMapBuilderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InviteMapBuilder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(InviteMapBuilderResponseObject); ok {
+		if err := validResponse.VisitInviteMapBuilderResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

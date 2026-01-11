@@ -7,12 +7,14 @@ where deleted_at is null
 -- name: GetMapById :one
 select *
 from maps
-where deleted_at is null and id = $1;
+where deleted_at is null
+  and id = $1;
 
 -- name: GetMapWithTagsById :one
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
-where deleted_at is null and id = $1;
+where deleted_at is null
+  and id = $1;
 
 -- name: MultiGetMapWithTagsById :many
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
@@ -106,6 +108,23 @@ set deleted_at     = now(),
     deleted_by     = $2,
     deleted_reason = $3
 where id = $1;
+
+-- name: CreatePendingMapBuilder :exec
+insert into map_builders (map_id, player_id)
+values ($1, $2);
+
+-- name: ApproveMapBuilder :one
+update map_builders
+set is_pending = false
+where map_id = $1
+  and player_id = $2
+returning *;
+
+-- name: RemoveMapBuilder :exec
+delete
+from map_builders
+where map_id = $1
+  and player_id = $2;
 
 -- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,
