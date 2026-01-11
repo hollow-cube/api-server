@@ -101,6 +101,9 @@ type ClientInterface interface {
 	// GetMapHistory request
 	GetMapHistory(ctx context.Context, playerId string, params *GetMapHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMapPlayerSlots request
+	GetMapPlayerSlots(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteMapPlayerStates request
 	DeleteMapPlayerStates(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -231,6 +234,18 @@ func (c *Client) GetMapPlayerData(ctx context.Context, playerId string, reqEdito
 
 func (c *Client) GetMapHistory(ctx context.Context, playerId string, params *GetMapHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMapHistoryRequest(c.Server, playerId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMapPlayerSlots(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMapPlayerSlotsRequest(c.Server, playerId)
 	if err != nil {
 		return nil, err
 	}
@@ -708,6 +723,40 @@ func NewSearchHeadDatabaseRequest(server string, params *SearchHeadDatabaseParam
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetMapPlayerSlotsRequest generates requests for GetMapPlayerSlots
+func NewGetMapPlayerSlotsRequest(server string, playerId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/map-players/%s/slots", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2127,6 +2176,9 @@ type ClientWithResponsesInterface interface {
 	// GetMapHistoryWithResponse request
 	GetMapHistoryWithResponse(ctx context.Context, playerId string, params *GetMapHistoryParams, reqEditors ...RequestEditorFn) (*GetMapHistoryResponse, error)
 
+	// GetMapPlayerSlotsWithResponse request
+	GetMapPlayerSlotsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetMapPlayerSlotsResponse, error)
+
 	// DeleteMapPlayerStatesWithResponse request
 	DeleteMapPlayerStatesWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*DeleteMapPlayerStatesResponse, error)
 
@@ -2307,6 +2359,28 @@ func (r GetMapHistoryResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetMapHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetMapPlayerSlotsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]MapSlot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMapPlayerSlotsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMapPlayerSlotsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2897,6 +2971,15 @@ func (c *ClientWithResponses) GetMapHistoryWithResponse(ctx context.Context, pla
 	return ParseGetMapHistoryResponse(rsp)
 }
 
+// GetMapPlayerSlotsWithResponse request returning *GetMapPlayerSlotsResponse
+func (c *ClientWithResponses) GetMapPlayerSlotsWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*GetMapPlayerSlotsResponse, error) {
+	rsp, err := c.GetMapPlayerSlots(ctx, playerId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMapPlayerSlotsResponse(rsp)
+}
+
 // DeleteMapPlayerStatesWithResponse request returning *DeleteMapPlayerStatesResponse
 func (c *ClientWithResponses) DeleteMapPlayerStatesWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*DeleteMapPlayerStatesResponse, error) {
 	rsp, err := c.DeleteMapPlayerStates(ctx, playerId, reqEditors...)
@@ -3205,6 +3288,32 @@ func ParseSearchHeadDatabaseResponse(rsp *http.Response) (*SearchHeadDatabaseRes
 			Pages   *int          `json:"pages,omitempty"`
 			Results []HeadDbEntry `json:"results"`
 		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMapPlayerSlotsResponse parses an HTTP response from a GetMapPlayerSlotsWithResponse call
+func ParseGetMapPlayerSlotsResponse(rsp *http.Response) (*GetMapPlayerSlotsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMapPlayerSlotsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []MapSlot
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

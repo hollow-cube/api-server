@@ -10,9 +10,14 @@ from maps
 where deleted_at is null and id = $1;
 
 -- name: GetMapWithTagsById :one
-select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
+select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
 where deleted_at is null and id = $1;
+
+-- name: MultiGetMapWithTagsById :many
+select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id = any ($1::uuid[]);
 
 -- name: GetPublishedMapById :one
 select *
@@ -59,14 +64,16 @@ set opt_name         = @name,
 where id = $1;
 
 -- name: DeleteMapTagsNotIn :exec
-DELETE FROM map_tags
-WHERE map_id = @map_id
-  AND tag != ALL(@tags::map_tag[]);
+delete
+from map_tags
+where map_id = @map_id
+  and tag != all (@tags::map_tag[]);
 
 -- name: UpsertMapTags :exec
-INSERT INTO map_tags (map_id, tag)
-SELECT @map_id, unnest(@tags::map_tag[])
-ON CONFLICT (map_id, tag) DO NOTHING;
+insert into map_tags (map_id, tag, index)
+select @map_id, tag, idx
+from unnest(@tags::map_tag[]) with ordinality as t(tag, idx)
+on conflict (map_id, tag) do update set index = excluded.index;
 
 -- name: UpdateMapVerification :exec
 update maps

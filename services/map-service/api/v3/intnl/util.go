@@ -58,9 +58,11 @@ func (s *server) getMapSlotIndex(ctx context.Context, pd *db.MapPlayerData, mapI
 			return -1, err
 		}
 
-		if len(existing) >= pd.UnlockedSlots {
-			return -1, fmt.Errorf("no free slots")
-		}
+		_ = existing
+		// TODO: reenable
+		//if len(existing) >= pd.UnlockedSlots {
+		//	return -1, fmt.Errorf("no free slots")
+		//}
 
 		// They have at least one available slot, ok to insert
 		return -1, nil
