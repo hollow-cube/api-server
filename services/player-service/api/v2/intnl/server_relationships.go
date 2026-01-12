@@ -172,7 +172,13 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 	page = int32(math.Min(float64(page), float64(maxPage)))
 	offset := (page - 1) * pageSize
 
-	rows, err := s.store.GetPlayerFriends(ctx, request.PlayerId, pageSize, offset)
+	onlineState := request.Params.OnlineState
+	rows, err := s.store.GetPlayerFriends(ctx, db.GetPlayerFriendsParams{
+		PlayerID: request.PlayerId,
+		Limit:    pageSize,
+		Offset:   offset,
+		Online:   onlineState,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get friends: %w", err)
 	}

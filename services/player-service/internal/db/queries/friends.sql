@@ -10,8 +10,9 @@ select pf.target_id, pd.username, pd.online, pd.last_online, pf.created_at
 from player_friends pf
          join player_data pd on pd.id = pf.target_id
 where pf.player_id = $1
-order by pd.online desc,    -- ensure online friends are listed first
-         pf.created_at desc -- just here for consistency in ordering
+  and (sqlc.narg('online')::boolean is null or pd.online = sqlc.narg('online'))
+order by pd.online desc,
+         pf.created_at desc
 limit $2 offset $3;
 
 -- name: CreatePlayerFriend :exec

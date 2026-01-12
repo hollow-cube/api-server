@@ -311,8 +311,14 @@ paths:
           schema:
             type: integer
             format: int32
-            maximum: 100
+            maximum: 10000 # Very large amount so the frontend can retrieve it on player join for login notifications
             minimum: 1
+        - name: onlineState
+          description: If present, filters friends by online state (online or offline). If null, doesn't filter.
+          in: query
+          required: false
+          schema:
+            type: boolean
       responses:
         '200':
           description: Friends successfully retrieved

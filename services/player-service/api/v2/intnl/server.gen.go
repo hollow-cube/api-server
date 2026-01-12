@@ -285,6 +285,9 @@ type DeleteFriendRequestParams struct {
 type GetPlayerFriendsParams struct {
 	Page     int32 `form:"page" json:"page"`
 	PageSize int32 `form:"pageSize" json:"pageSize"`
+
+	// OnlineState If present, filters friends by online state (online or offline). If null, doesn't filter.
+	OnlineState *bool `form:"onlineState,omitempty" json:"onlineState,omitempty"`
 }
 
 // GetPlayerNotificationsParams defines parameters for GetPlayerNotifications.
@@ -1354,6 +1357,14 @@ func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *ht
 	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "onlineState" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "onlineState", r.URL.Query(), &params.OnlineState)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "onlineState", Err: err})
 		return
 	}
 
