@@ -12,7 +12,10 @@ from player_friends pf
 where pf.player_id = $1
   and (sqlc.narg('online')::boolean is null or pd.online = sqlc.narg('online'))
 order by pd.online desc,
-         pf.created_at desc
+         case
+             when pd.online then pf.created_at
+             else pd.last_online
+             end desc
 limit $2 offset $3;
 
 -- name: CreatePlayerFriend :exec
