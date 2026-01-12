@@ -48,7 +48,8 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 
 	var ok bool
 	var displayName2 DisplayNameV2
-	if displayName2, ok = s.nameCache2.Get(pd.ID); !ok {
+	// do not reenable this for now. its because getting hypercube doesnt currently wipe it.
+	if displayName2, ok = s.nameCache2.Get(pd.ID); !ok && true {
 		displayName2, err = s.computeDisplayNameV2(ctx, pd.ID, pd.Username)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute display name 2: %w", err)
