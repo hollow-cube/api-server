@@ -3208,6 +3208,14 @@ func (response CreatePunishment200JSONResponse) VisitCreatePunishmentResponse(w 
 	return json.NewEncoder(w).Encode(response)
 }
 
+type CreatePunishment409Response struct {
+}
+
+func (response CreatePunishment409Response) VisitCreatePunishmentResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
 type GetPunishmentLaddersRequestObject struct {
 	Params GetPunishmentLaddersParams
 }

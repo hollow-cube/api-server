@@ -95,7 +95,7 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 		if err != nil && !errors.Is(err, db.ErrNoRows) {
 			return nil, fmt.Errorf("failed to get active punishment: %w", err)
 		} else if err == nil {
-			return nil, fmt.Errorf("player already has an active punishment of type %s", request.Body.PunishmentType)
+			return CreatePunishment409Response{}, nil
 		}
 
 		// Find the existing punishments in the given ladder

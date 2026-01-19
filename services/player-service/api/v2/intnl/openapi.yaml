@@ -952,6 +952,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Punishment'
+        '409':
+          description: Player already has a punishment active for the given type.
   /punishments/revoke:
     post:
       summary: Revoke the latest punishment for a player
