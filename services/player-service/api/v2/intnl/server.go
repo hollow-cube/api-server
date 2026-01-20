@@ -399,10 +399,12 @@ var (
 		/* kimoi_ */ "8df33c65-09a3-4d89-8096-d220ec97a416": "mod_2",
 		/* TuxedoLemon */ "e7a98851-920a-49cc-a644-a880f638d14e": "mod_2",
 		/* ZuckerFreaks */ "b35a731e-c205-40da-833f-474cbb79d5b5": "mod_2",
+		/* Moderating */ "7e1c30f5-7fc5-4ae3-b8f4-6f7e1675fd97": "mod_2",
 		/* Clypes */ "f6eee203-43cc-4d13-973c-f6e44c098d56": "ct_1",
 		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",
 		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",
 		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f": "ct_1",
+        /* Tahuy */ "4f2e9fdb-27c2-4e63-8877-990b78c3caa3": "ct_1",
 
 		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d": "media",
 		/* SandwichLord_ */ "1e2bf44f-122f-4960-a62d-7da9609f52e7": "media",
