@@ -423,6 +423,8 @@ var (
 		/* Loefars */ "dac076ab-0e11-436b-9aff-6f985e99df26": "media",
 		/* Greninja */ "ac38802e-9eb0-4fb2-ad79-739796e8c5d6": "media",
 		/* Picobit */ "e89da8ad-4211-4bc0-9a45-746fdb535309": "media",
+		/* SpeedSilver */ "2efce67d-d9bf-47d8-88f4-74d016da278b": "media",
+		/* ish13c */ "28d048bd-0fc5-4283-ade3-f9b3e7676cd4": "media",
 	}
 	hardcodedColors = map[string]string{
 		"dev_3": "#fa4141",
