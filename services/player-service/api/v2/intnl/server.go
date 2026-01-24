@@ -228,7 +228,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 		return GetPlayerDisplayNameV2200JSONResponse(orgName), nil
 	}
 
-	if cached, ok := s.nameCache2.Get(request.PlayerId); ok {
+	if cached, ok := s.nameCache2.Get(request.PlayerId); ok && false {
 		return GetPlayerDisplayNameV2200JSONResponse(cached), nil
 	}
 
