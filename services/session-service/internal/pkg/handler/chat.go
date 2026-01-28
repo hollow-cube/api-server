@@ -10,6 +10,7 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
@@ -38,6 +39,7 @@ type ChatHandler struct {
 	redis       rueidis.Client
 	producer    kafkafx.SyncProducer
 
+	playerClient  playerService.ClientWithResponsesInterface
 	playerTracker *player.Tracker
 }
 
@@ -50,6 +52,7 @@ type ChatHandlerParams struct {
 	Queries          *db.Queries
 	KubernetesClient *kubernetes.Clientset
 	Redis            rueidis.Client
+	PlayerClient     playerService.ClientWithResponsesInterface
 	PlayerTracker    *player.Tracker
 	Consumer         kafkafx.Consumer
 	Producer         kafkafx.SyncProducer
@@ -68,6 +71,7 @@ func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 		redis:       p.Redis,
 		producer:    p.Producer,
 
+		playerClient:  p.PlayerClient,
 		playerTracker: p.PlayerTracker,
 	}
 
@@ -75,6 +79,8 @@ func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 
 	return handler, nil
 }
+
+const playerSettingAllowDMs = "allow_direct_messages"
 
 func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.ClientChatMessage) error {
 	// Sanitize the message for invalid characters
@@ -86,6 +92,39 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 	channel, ok := h.resolveMessageChannel(ctx, msg)
 	if !ok {
 		return nil // Error system message was already sent
+	}
+
+	// We've already resolved the reply channel here so all dms look the same.
+	if common.IsUUID(string(channel)) {
+		sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
+		if err != nil {
+			return fmt.Errorf("failed to get sender player data: %w", err)
+		}
+		// If sender is not accepting DMs, dont allow them to send DMs either
+		if allow, ok := sender.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "chat.channel.dm.disabled.self",
+			})
+			return nil
+		}
+
+		target, err := h.playerClient.GetPlayerDataWithResponse(ctx, string(channel))
+		if err != nil {
+			return fmt.Errorf("failed to get target player data: %w", err)
+		}
+		// If target is not accepting DMs, notify the sender and drop.
+		if allow, ok := target.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "chat.channel.dm.disabled",
+				// This is a hacky way to send player names we should support this properly.
+				Args: []string{fmt.Sprintf("pdn::%s", channel)},
+			})
+			return nil
+		}
 	}
 
 	censor := h.contentFilter.Test(ctx, text)
@@ -161,7 +200,7 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		SenderHasHypercube: hasHyperCube,
 	})
 
-	// If this is a DM, update the reply channels for both sides
+	// If this is a DM (NOT REPLY), update the reply channels for both sides
 	if common.IsUUID(string(msg.Channel)) {
 		h.updateLastMessageChannel(ctx, msg.Sender, msg.Channel)
 		h.updateLastMessageChannel(ctx, string(msg.Channel), model.ChatChannel(msg.Sender))
