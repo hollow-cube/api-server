@@ -405,6 +405,7 @@ var (
 		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",
 		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f": "ct_1",
         /* Tahuy */ "4f2e9fdb-27c2-4e63-8877-990b78c3caa3": "ct_1",
+	        /* BomBardyGamer */ "9b967160-68ba-4992-863e-60b15d00ce38": "dev_2",
 
 		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d": "media",
 		/* SandwichLord_ */ "1e2bf44f-122f-4960-a62d-7da9609f52e7": "media",
