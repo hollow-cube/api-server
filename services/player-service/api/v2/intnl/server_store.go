@@ -285,7 +285,7 @@ func (s *server) TebexCheckout(ctx context.Context, request TebexCheckoutRequest
 	checkoutId := genVerifySecret()
 	url := fmt.Sprintf("https://hollowcube.net/store?c=%s", checkoutId)
 
-	err = s.store.CreatePendingTransaction(ctx, request.Body.Username, checkoutId, playerId)
+	err = s.store.CreatePendingTransaction(ctx, playerId, request.Body.Username, checkoutId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pending transaction: %w", err)
 	}
