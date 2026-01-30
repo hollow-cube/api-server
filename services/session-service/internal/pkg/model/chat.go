@@ -40,9 +40,10 @@ type ChatMessage struct {
 	SenderHasHypercube bool          `json:"senderHasHypercube,omitempty"` // Whether the sender has a hypercube, used to determine if they can send hypercube messages.
 
 	// System message
-	Target string   `json:"target,omitempty"` // The player the message is for
-	Key    string   `json:"key,omitempty"`    // The translation key of the message
-	Args   []string `json:"args,omitempty"`   // The arguments to the message
+	Target                string   `json:"target,omitempty"`                // The player the message is for
+	Key                   string   `json:"key,omitempty"`                   // The translation key of the message
+	Args                  []string `json:"args,omitempty"`                  // The arguments to the message
+	RespectClientSettings bool     `json:"respectClientSettings,omitempty"` // Whether the message should be treated as requiring the client to have FULL chat settings
 
 	Extra *ChatMessage `json:"extra,omitempty"` // A follow up message, typically a system message.
 }
