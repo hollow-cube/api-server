@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"strings"
 	"sync"
 
@@ -109,8 +108,9 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 				if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
 					c.log.Errorf("failed to read kafka message: %v", err)
 				}
-				log.Printf("terminating kafka reader on topic %q\n", cfg.Topic)
-				break
+				// don't terminate on this error - it could be transient, e.g. rebalance
+				c.log.Errorf("failed to read kafka message: %v", err)
+				continue
 			}
 
 			// todo: in the future we could handle automatic error retries and DLQ logic in a common manner
