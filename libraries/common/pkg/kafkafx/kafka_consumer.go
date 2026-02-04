@@ -9,6 +9,9 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -105,12 +108,29 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 		for {
 			m, err := r.FetchMessage(ctx)
 			if err != nil {
-				if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
-					c.log.Errorf("failed to read kafka message: %v", err)
+				if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+					c.log.Info("Shutting down consumer ", "reason", err)
+					break // break since the application should be shutting down
 				}
+
 				// don't terminate on this error - it could be transient, e.g. rebalance
-				c.log.Errorf("failed to read kafka message: %v", err)
+				c.log.Warnw("failed to read kafka message: ", err)
 				continue
+			}
+
+			// Extract trace context from message headers and start a consumer span
+			ctx = ExtractTraceContext(ctx, m)
+			ctx, span := tracer.Start(ctx, "kafka.consume "+m.Topic,
+				trace.WithSpanKind(trace.SpanKindConsumer),
+				trace.WithAttributes(
+					semconv.MessagingSystemKafka,
+					semconv.MessagingDestinationName(m.Topic),
+					semconv.MessagingKafkaMessageOffset(int(m.Offset)),
+					semconv.MessagingKafkaConsumerGroup(cfg.GroupID),
+				),
+			)
+			if len(m.Key) > 0 {
+				span.SetAttributes(semconv.MessagingKafkaMessageKey(string(m.Key)))
 			}
 
 			// todo: in the future we could handle automatic error retries and DLQ logic in a common manner
@@ -122,12 +142,19 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			// A handler should implement a DLQ itself where necessary.
 			if err := handler(ctx, m); err != nil {
 				c.log.Errorf("failed to handle kafka message: %v", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				span.End()
 				continue // message not committed, will be redelivered
 			}
 
 			if err := r.CommitMessages(ctx, m); err != nil { // commit only after success
 				c.log.Errorf("failed to commit kafka message: %v", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 			}
+
+			span.End()
 		}
 	}()
 }

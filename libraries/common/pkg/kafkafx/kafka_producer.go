@@ -23,7 +23,7 @@ type AsyncProducer interface {
 }
 
 type producerImpl struct {
-	*kafka.Writer
+	w *kafka.Writer
 }
 
 func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogger, async bool) *producerImpl {
@@ -58,7 +58,16 @@ func newProducer(conf common.KafkaConfig, lc fx.Lifecycle, log *zap.SugaredLogge
 	}
 
 	lc.Append(fx.StopHook(w.Close))
-	return &producerImpl{Writer: w}
+	return &producerImpl{w: w}
+}
+
+func (p *producerImpl) WriteMessages(ctx context.Context, messages ...kafka.Message) error {
+	// Inject current trace context into each message's headers
+	for i := range messages {
+		InjectTraceContext(ctx, &messages[i])
+	}
+
+	return p.w.WriteMessages(ctx, messages...)
 }
 
 // NewSyncKafkaProducer create a synchronous and instant publish producer
