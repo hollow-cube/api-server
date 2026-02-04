@@ -119,8 +119,8 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			}
 
 			// Extract trace context from message headers and start a consumer span
-			ctx = ExtractTraceContext(ctx, m)
-			ctx, span := tracer.Start(ctx, "kafka.consume "+m.Topic,
+			msgCtx := ExtractTraceContext(ctx, m)
+			msgCtx, span := tracer.Start(msgCtx, "kafka.consume "+m.Topic,
 				trace.WithSpanKind(trace.SpanKindConsumer),
 				trace.WithAttributes(
 					semconv.MessagingSystemKafka,
@@ -140,7 +140,7 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 			// When committing, Kafka treats that as committing up to that offset, so if a newer message is committed,
 			// it commits the previous failed message as well.
 			// A handler should implement a DLQ itself where necessary.
-			if err := handler(ctx, m); err != nil {
+			if err := handler(msgCtx, m); err != nil {
 				c.log.Errorf("failed to handle kafka message: %v", err)
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
@@ -148,12 +148,16 @@ func (c *consumerImpl) subscribe(cfg kafka.ReaderConfig, handler func(ctx contex
 				continue // message not committed, will be redelivered
 			}
 
-			if err := r.CommitMessages(ctx, m); err != nil { // commit only after success
+			commitCtx, commitSpan := tracer.Start(msgCtx, "kafka.commit",
+				trace.WithSpanKind(trace.SpanKindClient),
+			)
+			if err := r.CommitMessages(commitCtx, m); err != nil { // commit only after success
 				c.log.Errorf("failed to commit kafka message: %v", err)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
+				commitSpan.RecordError(err)
+				commitSpan.SetStatus(codes.Error, err.Error())
 			}
 
+			commitSpan.End()
 			span.End()
 		}
 	}()
