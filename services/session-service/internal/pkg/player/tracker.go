@@ -108,7 +108,7 @@ func (t *Tracker) CreateSession(
 		return nil, fmt.Errorf("failed to record session: %w", err)
 	}
 
-	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+	go t.sendSessionUpdate(ctx, kafkaModel.SessionUpdateMessage{
 		Action:   kafkaModel.Session_Create,
 		PlayerId: s.PlayerID,
 		Session: &kafkaModel.Session{
@@ -169,7 +169,7 @@ func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLe
 	}
 
 	sessionLength = int(time.Since(s.CreatedAt).Milliseconds())
-	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+	go t.sendSessionUpdate(ctx, kafkaModel.SessionUpdateMessage{
 		Action:   kafkaModel.Session_Delete,
 		PlayerId: playerId,
 	})
@@ -268,7 +268,7 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 		}
 	}
 
-	go t.sendSessionUpdate(kafkaModel.SessionUpdateMessage{
+	go t.sendSessionUpdate(ctx, kafkaModel.SessionUpdateMessage{
 		Action:   kafkaModel.Session_Update,
 		PlayerId: s.PlayerID,
 		Session: &kafkaModel.Session{
@@ -290,7 +290,7 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 	return nil
 }
 
-func (t *Tracker) sendSessionUpdate(msg kafkaModel.SessionUpdateMessage) {
+func (t *Tracker) sendSessionUpdate(ctx context.Context, msg kafkaModel.SessionUpdateMessage) {
 	msgContent, err := json.Marshal(msg)
 	if err != nil {
 		zap.S().Errorw("failed to marshal session update message", "error", err)
@@ -299,7 +299,7 @@ func (t *Tracker) sendSessionUpdate(msg kafkaModel.SessionUpdateMessage) {
 
 	zap.S().Infow("sending session update", "session", msgContent)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	err = t.producer.WriteMessages(ctx, kafka.Message{
