@@ -256,6 +256,18 @@ type ObjectData struct {
 	Type string                  `json:"type"`
 }
 
+// PlayerTopTimesEntry defines model for PlayerTopTimesEntry.
+type PlayerTopTimesEntry struct {
+	// CompletionTime Time to complete the map in milliseconds
+	CompletionTime int    `json:"completionTime"`
+	MapId          string `json:"mapId"`
+	MapName        string `json:"mapName"`
+	PublishedId    int    `json:"publishedId"`
+
+	// Rank Player's rank on this map's leaderboard (1-indexed)
+	Rank int `json:"rank"`
+}
+
 // Point defines model for Point.
 type Point struct {
 	X float32 `json:"x"`
@@ -314,6 +326,13 @@ type GetMapProgressBulk struct {
 
 // GetMapRating defines model for GetMapRating.
 type GetMapRating = MapRating
+
+// GetPlayerTopTimes defines model for GetPlayerTopTimes.
+type GetPlayerTopTimes struct {
+	Items      []PlayerTopTimesEntry `json:"items"`
+	Page       int32                 `json:"page"`
+	TotalItems int64                 `json:"totalItems"`
+}
 
 // LeaderboardData defines model for LeaderboardData.
 type LeaderboardData struct {
@@ -411,6 +430,12 @@ type GetHeadDatabaseCategoryParams struct {
 // GetMapHistoryParams defines parameters for GetMapHistory.
 type GetMapHistoryParams struct {
 	Params *MapHistoryParams `form:"params,omitempty" json:"params,omitempty"`
+}
+
+// GetPlayerTopTimesParams defines parameters for GetPlayerTopTimes.
+type GetPlayerTopTimesParams struct {
+	Page     int32 `form:"page" json:"page"`
+	PageSize int32 `form:"pageSize" json:"pageSize"`
 }
 
 // GetMapsParams defines parameters for GetMaps.
@@ -565,6 +590,9 @@ type ServerInterface interface {
 	// Delete all save states for a player
 	// (DELETE /map-players/{playerId}/states)
 	DeleteMapPlayerStates(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get a player's top times sorted by leaderboard placement
+	// (GET /map-players/{playerId}/topTimes)
+	GetPlayerTopTimes(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerTopTimesParams)
 	// Get requested maps
 	// (GET /maps)
 	GetMaps(w http.ResponseWriter, r *http.Request, params GetMapsParams)
@@ -812,6 +840,64 @@ func (siw *ServerInterfaceWrapper) DeleteMapPlayerStates(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteMapPlayerStates(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlayerTopTimes operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerTopTimes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPlayerTopTimesParams
+
+	// ------------- Required query parameter "page" -------------
+
+	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "pageSize" -------------
+
+	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlayerTopTimes(w, r, playerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1733,6 +1819,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}", wrapper.GetMapPlayerData)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/history", wrapper.GetMapHistory)
 	m.HandleFunc("DELETE "+options.BaseURL+"/map-players/{playerId}/states", wrapper.DeleteMapPlayerStates)
+	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/topTimes", wrapper.GetPlayerTopTimes)
 	m.HandleFunc("GET "+options.BaseURL+"/maps", wrapper.GetMaps)
 	m.HandleFunc("POST "+options.BaseURL+"/maps", wrapper.CreateMap)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/hub/leaderboard/{leaderboardName}", wrapper.GetGlobalLeaderboard)
@@ -1778,6 +1865,12 @@ type GetMapProgressBulkJSONResponse struct {
 }
 
 type GetMapRatingJSONResponse MapRating
+
+type GetPlayerTopTimesJSONResponse struct {
+	Items      []PlayerTopTimesEntry `json:"items"`
+	Page       int32                 `json:"page"`
+	TotalItems int64                 `json:"totalItems"`
+}
 
 type LeaderboardDataJSONResponse struct {
 	Player *LeaderboardEntry  `json:"player,omitempty"`
@@ -1925,6 +2018,24 @@ type DeleteMapPlayerStates404Response = MapPlayerNotFoundResponse
 func (response DeleteMapPlayerStates404Response) VisitDeleteMapPlayerStatesResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
+}
+
+type GetPlayerTopTimesRequestObject struct {
+	PlayerId string `json:"playerId"`
+	Params   GetPlayerTopTimesParams
+}
+
+type GetPlayerTopTimesResponseObject interface {
+	VisitGetPlayerTopTimesResponse(w http.ResponseWriter) error
+}
+
+type GetPlayerTopTimes200JSONResponse struct{ GetPlayerTopTimesJSONResponse }
+
+func (response GetPlayerTopTimes200JSONResponse) VisitGetPlayerTopTimesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type GetMapsRequestObject struct {
@@ -2643,6 +2754,9 @@ type StrictServerInterface interface {
 	// Delete all save states for a player
 	// (DELETE /map-players/{playerId}/states)
 	DeleteMapPlayerStates(ctx context.Context, request DeleteMapPlayerStatesRequestObject) (DeleteMapPlayerStatesResponseObject, error)
+	// Get a player's top times sorted by leaderboard placement
+	// (GET /map-players/{playerId}/topTimes)
+	GetPlayerTopTimes(ctx context.Context, request GetPlayerTopTimesRequestObject) (GetPlayerTopTimesResponseObject, error)
 	// Get requested maps
 	// (GET /maps)
 	GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error)
@@ -2871,6 +2985,33 @@ func (sh *strictHandler) DeleteMapPlayerStates(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(DeleteMapPlayerStatesResponseObject); ok {
 		if err := validResponse.VisitDeleteMapPlayerStatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlayerTopTimes operation middleware
+func (sh *strictHandler) GetPlayerTopTimes(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerTopTimesParams) {
+	var request GetPlayerTopTimesRequestObject
+
+	request.PlayerId = playerId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlayerTopTimes(ctx, request.(GetPlayerTopTimesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlayerTopTimes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlayerTopTimesResponseObject); ok {
+		if err := validResponse.VisitGetPlayerTopTimesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

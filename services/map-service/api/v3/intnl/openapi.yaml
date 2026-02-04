@@ -533,6 +533,35 @@ paths:
           description: Save states successfully deleted
         '404':
           $ref: '#/components/responses/MapPlayerNotFound'
+  /map-players/{playerId}/topTimes:
+    get:
+      operationId: getPlayerTopTimes
+      tags: [ players ]
+      summary: Get a player's top times sorted by leaderboard placement
+      description: Returns the player's best times across all completed maps, sorted by their rank on each map's leaderboard (best placements first).
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          $ref: '#/components/responses/GetPlayerTopTimes'
 
   /hdb/search:
     get:
@@ -780,6 +809,19 @@ components:
         score: { type: integer }
         rank: { type: integer }
 
+    PlayerTopTimesEntry:
+      type: object
+      required: [ mapId, publishedId, mapName, completionTime, rank ]
+      properties:
+        mapId: { type: string }
+        publishedId: { type: integer }
+        mapName: { type: string }
+        completionTime:
+          type: integer
+          description: Time to complete the map in milliseconds
+        rank:
+          type: integer
+          description: Player's rank on this map's leaderboard (1-indexed)
     MapPlayerData:
       type: object
       required: [ id, mapSlots ]
@@ -1031,3 +1073,20 @@ components:
               results:
                 type: array
                 items: { $ref: '#/components/schemas/MapHistoryEntry' }
+    GetPlayerTopTimes:
+      description: Player's top times sorted by leaderboard placement.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ page, totalItems, items ]
+            properties:
+              page:
+                type: integer
+                format: int32
+              totalItems:
+                type: integer
+                format: int64
+              items:
+                type: array
+                items: { $ref: '#/components/schemas/PlayerTopTimesEntry' }

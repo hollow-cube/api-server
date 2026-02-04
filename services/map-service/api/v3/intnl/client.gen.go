@@ -104,6 +104,9 @@ type ClientInterface interface {
 	// DeleteMapPlayerStates request
 	DeleteMapPlayerStates(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetPlayerTopTimes request
+	GetPlayerTopTimes(ctx context.Context, playerId string, params *GetPlayerTopTimesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMaps request
 	GetMaps(ctx context.Context, params *GetMapsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -243,6 +246,18 @@ func (c *Client) GetMapHistory(ctx context.Context, playerId string, params *Get
 
 func (c *Client) DeleteMapPlayerStates(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteMapPlayerStatesRequest(c.Server, playerId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlayerTopTimes(ctx context.Context, playerId string, params *GetPlayerTopTimesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlayerTopTimesRequest(c.Server, playerId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -907,6 +922,70 @@ func NewDeleteMapPlayerStatesRequest(server string, playerId string) (*http.Requ
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPlayerTopTimesRequest generates requests for GetPlayerTopTimes
+func NewGetPlayerTopTimesRequest(server string, playerId string, params *GetPlayerTopTimesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "playerId", runtime.ParamLocationPath, playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/map-players/%s/topTimes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, params.Page); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "pageSize", runtime.ParamLocationQuery, params.PageSize); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2130,6 +2209,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteMapPlayerStatesWithResponse request
 	DeleteMapPlayerStatesWithResponse(ctx context.Context, playerId string, reqEditors ...RequestEditorFn) (*DeleteMapPlayerStatesResponse, error)
 
+	// GetPlayerTopTimesWithResponse request
+	GetPlayerTopTimesWithResponse(ctx context.Context, playerId string, params *GetPlayerTopTimesParams, reqEditors ...RequestEditorFn) (*GetPlayerTopTimesResponse, error)
+
 	// GetMapsWithResponse request
 	GetMapsWithResponse(ctx context.Context, params *GetMapsParams, reqEditors ...RequestEditorFn) (*GetMapsResponse, error)
 
@@ -2328,6 +2410,28 @@ func (r DeleteMapPlayerStatesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteMapPlayerStatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPlayerTopTimesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetPlayerTopTimes
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlayerTopTimesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlayerTopTimesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2906,6 +3010,15 @@ func (c *ClientWithResponses) DeleteMapPlayerStatesWithResponse(ctx context.Cont
 	return ParseDeleteMapPlayerStatesResponse(rsp)
 }
 
+// GetPlayerTopTimesWithResponse request returning *GetPlayerTopTimesResponse
+func (c *ClientWithResponses) GetPlayerTopTimesWithResponse(ctx context.Context, playerId string, params *GetPlayerTopTimesParams, reqEditors ...RequestEditorFn) (*GetPlayerTopTimesResponse, error) {
+	rsp, err := c.GetPlayerTopTimes(ctx, playerId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlayerTopTimesResponse(rsp)
+}
+
 // GetMapsWithResponse request returning *GetMapsResponse
 func (c *ClientWithResponses) GetMapsWithResponse(ctx context.Context, params *GetMapsParams, reqEditors ...RequestEditorFn) (*GetMapsResponse, error) {
 	rsp, err := c.GetMaps(ctx, params, reqEditors...)
@@ -3307,6 +3420,32 @@ func ParseDeleteMapPlayerStatesResponse(rsp *http.Response) (*DeleteMapPlayerSta
 	response := &DeleteMapPlayerStatesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetPlayerTopTimesResponse parses an HTTP response from a GetPlayerTopTimesWithResponse call
+func ParseGetPlayerTopTimesResponse(rsp *http.Response) (*GetPlayerTopTimesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlayerTopTimesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetPlayerTopTimes
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

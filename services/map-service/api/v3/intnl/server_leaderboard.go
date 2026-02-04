@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
@@ -237,4 +238,112 @@ func cachedLBToAPI(entries []rueidis.ZScore, playerId *string, playerScore []int
 	}
 
 	return result
+}
+
+func (s *server) GetPlayerTopTimes(ctx context.Context, request GetPlayerTopTimesRequestObject) (GetPlayerTopTimesResponseObject, error) {
+	// Page is 1-indexed from the API
+	page := int(request.Params.Page)
+	pageSize := int(request.Params.PageSize)
+
+	bestTimes, err := s.store.GetPlayerBestTimes(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch player best times: %w", err)
+	}
+
+	if len(bestTimes) == 0 {
+		return GetPlayerTopTimes200JSONResponse{GetPlayerTopTimesJSONResponse{
+			Page:       int32(page),
+			TotalItems: 0,
+			Items:      []PlayerTopTimesEntry{},
+		}}, nil
+	}
+
+	// Use a redis pipeline to avoid network rtt
+	cmds := make(rueidis.Commands, len(bestTimes))
+	for i, bt := range bestTimes {
+		leaderboardKey := mapLeaderboardKey(bt.MapID, "playtime")
+		cmds[i] = s.redis.B().Zrank().Key(leaderboardKey).
+			Member(string(common.UUIDToBin(request.PlayerId))).Build()
+	}
+
+	// Exec pipeline
+	results := s.redis.DoMulti(ctx, cmds...)
+
+	// Collect only entries with valid ranks (!= -1)
+	type rankedEntry struct {
+		MapID       string
+		PublishedID int
+		MapName     string
+		Playtime    int
+		Rank        int
+	}
+	var entries []rankedEntry
+	for i, resp := range results {
+		rank, err := resp.AsInt64()
+		if errors.Is(err, rueidis.Nil) {
+			// Player not on this leaderboard, skip
+			continue
+		}
+		if err != nil {
+			s.log.Warnw("failed to get rank for map", "mapId", bestTimes[i].MapID, "error", err)
+			continue
+		}
+
+		mapName := ""
+		if bestTimes[i].MapName != nil {
+			mapName = *bestTimes[i].MapName
+		}
+
+		publishedID := 0
+		if bestTimes[i].PublishedID != nil {
+			publishedID = *bestTimes[i].PublishedID
+		}
+
+		entries = append(entries, rankedEntry{
+			MapID:       bestTimes[i].MapID,
+			PublishedID: publishedID,
+			MapName:     mapName,
+			Playtime:    bestTimes[i].Playtime,
+			Rank:        int(rank) + 1, // Convert 0-indexed to 1-indexed
+		})
+	}
+
+	// Sort by rank ascending (best placements first)
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Rank < entries[j].Rank
+	})
+
+	// Paginate (page is 1-indexed)
+	totalItems := int64(len(entries))
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	if start >= len(entries) {
+		return GetPlayerTopTimes200JSONResponse{GetPlayerTopTimesJSONResponse{
+			Page:       int32(page),
+			TotalItems: totalItems,
+			Items:      []PlayerTopTimesEntry{},
+		}}, nil
+	}
+
+	if end > len(entries) {
+		end = len(entries)
+	}
+
+	items := make([]PlayerTopTimesEntry, 0, end-start)
+	for _, e := range entries[start:end] {
+		items = append(items, PlayerTopTimesEntry{
+			MapId:          e.MapID,
+			PublishedId:    e.PublishedID,
+			MapName:        e.MapName,
+			CompletionTime: e.Playtime,
+			Rank:           e.Rank,
+		})
+	}
+
+	return GetPlayerTopTimes200JSONResponse{GetPlayerTopTimesJSONResponse{
+		Page:       int32(page),
+		TotalItems: totalItems,
+		Items:      items,
+	}}, nil
 }
