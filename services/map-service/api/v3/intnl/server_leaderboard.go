@@ -259,17 +259,21 @@ func (s *server) GetPlayerTopTimes(ctx context.Context, request GetPlayerTopTime
 	}
 
 	// Use a redis pipeline to avoid network rtt
+	// Use ZCOUNT to count players with strictly lower times (to handle ties).
+	// E.g. if 6 players share the same time, ZCOUNT returns 0 for all of them, so they all get rank 1.
 	cmds := make(rueidis.Commands, len(bestTimes))
 	for i, bt := range bestTimes {
 		leaderboardKey := mapLeaderboardKey(bt.MapID, "playtime")
-		cmds[i] = s.redis.B().Zrank().Key(leaderboardKey).
-			Member(string(common.UUIDToBin(request.PlayerId))).Build()
+		roundedPlaytime := int(math.Round(float64(bt.Playtime)/50.0)) * 50
+		threshold := roundedPlaytime - 25
+		cmds[i] = s.redis.B().Zcount().Key(leaderboardKey).
+			Min("-inf").Max(fmt.Sprintf("(%d", threshold)).Build()
 	}
 
 	// Exec pipeline
 	results := s.redis.DoMulti(ctx, cmds...)
 
-	// Collect only entries with valid ranks (!= -1)
+	// Collect entries - ZCOUNT returns the count of players with better times
 	type rankedEntry struct {
 		MapID       string
 		PublishedID int
@@ -279,11 +283,7 @@ func (s *server) GetPlayerTopTimes(ctx context.Context, request GetPlayerTopTime
 	}
 	var entries []rankedEntry
 	for i, resp := range results {
-		rank, err := resp.AsInt64()
-		if errors.Is(err, rueidis.Nil) {
-			// Player not on this leaderboard, skip
-			continue
-		}
+		betterCount, err := resp.AsInt64()
 		if err != nil {
 			s.log.Warnw("failed to get rank for map", "mapId", bestTimes[i].MapID, "error", err)
 			continue
@@ -299,12 +299,14 @@ func (s *server) GetPlayerTopTimes(ctx context.Context, request GetPlayerTopTime
 			publishedID = *bestTimes[i].PublishedID
 		}
 
+		// Round playtime to 50ms for display (consistent with rank calculation)
+		roundedPlaytime := int(math.Round(float64(bestTimes[i].Playtime)/50.0)) * 50
 		entries = append(entries, rankedEntry{
 			MapID:       bestTimes[i].MapID,
 			PublishedID: publishedID,
 			MapName:     mapName,
-			Playtime:    bestTimes[i].Playtime,
-			Rank:        int(rank) + 1, // Convert 0-indexed to 1-indexed
+			Playtime:    roundedPlaytime,
+			Rank:        int(betterCount) + 1, // Rank = count of better times + 1
 		})
 	}
 
