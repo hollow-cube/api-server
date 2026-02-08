@@ -200,9 +200,10 @@ func (s *server) RestoreMapLeaderboard(ctx context.Context, request RestoreMapLe
 		return nil, fmt.Errorf("failed to fetch save states: %w", err)
 	}
 
-	cmds := make(rueidis.Commands, len(saveStates))
+	cmds := make(rueidis.Commands, len(saveStates)+1)
+	cmds[0] = s.redis.B().Del().Key(leaderboardKey).Build()
 	for i, saveState := range saveStates {
-		cmds[i] = s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
+		cmds[i+1] = s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
 			ScoreMember(float64(saveState.Playtime), string(common.UUIDToBin(saveState.PlayerID))).Build()
 	}
 	for _, resp := range s.redis.DoMulti(ctx, cmds...) {
