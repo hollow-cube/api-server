@@ -10,6 +10,7 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
@@ -299,10 +300,11 @@ func (t *Tracker) sendSessionUpdate(ctx context.Context, msg kafkaModel.SessionU
 
 	zap.S().Infow("sending session update", "session", msgContent)
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	// Use a new context to avoid inheriting a canceled request context
+	writeCtx, cancel := context.WithTimeout(tracefx.NewCtxWithTraceCtx(ctx), 15*time.Second)
 	defer cancel()
 
-	err = t.producer.WriteMessages(ctx, kafka.Message{
+	err = t.producer.WriteMessages(writeCtx, kafka.Message{
 		Topic: kafkafx.TopicSessionUpdates,
 		Key:   []byte(msg.PlayerId),
 		Value: msgContent,
