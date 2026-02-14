@@ -270,7 +270,7 @@ func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequest
 }
 
 const (
-	freeFriendLimit      = 15
+	freeFriendLimit      = 30
 	hypercubeFriendLimit = 150
 )
 
