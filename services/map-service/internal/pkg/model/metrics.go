@@ -36,6 +36,7 @@ type MapCompletedEvent struct {
 type MapReportedEvent struct {
 	PlayerId   string   `mapstructure:"player_id"`
 	MapId      string   `mapstructure:"map_id"`
+	MapName    string   `mapstructure:"map_name"`
 	Categories []string `mapstructure:"reason"`
 	Comment    *string  `mapstructure:"comment"`
 }

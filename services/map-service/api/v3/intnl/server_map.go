@@ -708,7 +708,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 }
 
 func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) (ReportMapResponseObject, error) {
-	_, err := s.store.GetMapById(ctx, request.MapId)
+	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, db.ErrNoRows) {
 		return MapNotFoundResponse{}, nil
 	} else if err != nil {
@@ -746,9 +746,14 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 		}
 	}
 
+	mapName := ""
+	if m.OptName != nil {
+		mapName = *m.OptName
+	}
 	reportEvent := model.MapReportedEvent{
 		PlayerId:   request.Body.Reporter,
 		MapId:      request.MapId,
+		MapName:    mapName,
 		Categories: make([]string, len(request.Body.Categories)),
 		Comment:    request.Body.Comment,
 	}
