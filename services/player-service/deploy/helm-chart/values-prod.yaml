@@ -15,6 +15,7 @@ base:
     PLAYERS_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
 
     PLAYERS_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"
+    PLAYERS_NATS_SERVERS: "nats://nats:4222"
     PLAYERS_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"
     PLAYERS_REDIS_ADDRESS: "redis-master.mapmaker.svc.cluster.local:6379"
 

@@ -14,6 +14,9 @@ spicedb:
   token: "supersecretkey"
   tls: false
 
+nats:
+  servers: nats://localhost:4222
+
 kafka:
   brokers: kafka:9092
 

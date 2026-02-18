@@ -20,6 +20,10 @@ type Postgres struct {
 	URI string `mapstructure:"uri"`
 }
 
+type NATS struct {
+	Servers string `mapstructure:"servers"`
+}
+
 type SpiceDB struct {
 	Endpoint string `mapstructure:"endpoint"`
 	Token    string `mapstructure:"token"`
@@ -69,6 +73,7 @@ type Config struct {
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
 	Metrics           Metrics            `mapstructure:"metrics"`
 	Postgres          Postgres           `mapstructure:"postgres"`
+	NATS              NATS               `mapstructure:"nats"`
 	SpiceDB           SpiceDB            `mapstructure:"spicedb"`
 	Kafka             common.KafkaConfig `mapstructure:"kafka"`
 	Tebex             Tebex              `mapstructure:"tebex"`

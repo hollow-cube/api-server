@@ -8,12 +8,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/consumers"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"google.golang.org/grpc"
@@ -60,6 +63,19 @@ func main() {
 		fx.Provide(newPostgresStore),
 		fx.Provide(newRedisClient),
 		fx.Provide(newAuthzSpiceDB),
+		fx.Provide(
+			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
+				nc, err := nats.Connect(conf.NATS.Servers)
+				if err != nil {
+					return nil, err
+				}
+
+				lc.Append(fx.StopHook(nc.Close))
+				return nc, nil
+			},
+			jetstream.New,
+			natsutil.NewJetStreamWrapper,
+		),
 
 		// Kafka
 		kafkafx.Module,
