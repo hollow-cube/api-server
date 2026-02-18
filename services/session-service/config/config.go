@@ -25,6 +25,10 @@ type Redis struct {
 	Address string `mapstructure:"address"`
 }
 
+type NATS struct {
+	Servers string `mapstructure:"servers"`
+}
+
 type Kubernetes struct {
 	Namespace string `mapstructure:"namespace"`
 }
@@ -73,6 +77,7 @@ type Config struct {
 	MapServiceUrl    string             `mapstructure:"map_service_url"`
 	Redis            Redis              `mapstructure:"redis"`
 	Kafka            common.KafkaConfig `mapstructure:"kafka"`
+	NATS             NATS               `mapstructure:"nats"`
 	Kubernetes       Kubernetes         `mapstructure:"kubernetes"`
 	Postgres         Postgres           `mapstructure:"postgres"`
 	SpiceDB          SpiceDB            `mapstructure:"spicedb"`

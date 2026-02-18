@@ -15,6 +15,9 @@ redis:
 kafka:
   brokers: kafka:9092
 
+nats:
+  servers: nats://localhost:4222
+
 kubernetes:
   namespace: default
 

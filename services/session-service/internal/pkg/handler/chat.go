@@ -16,6 +16,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/text"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
@@ -38,6 +39,7 @@ type ChatHandler struct {
 	queries     *db.Queries
 	redis       rueidis.Client
 	producer    kafkafx.SyncProducer
+	js          jetstream.JetStream
 
 	playerClient  playerService.ClientWithResponsesInterface
 	playerTracker *player.Tracker
@@ -56,11 +58,11 @@ type ChatHandlerParams struct {
 	PlayerTracker    *player.Tracker
 	Consumer         kafkafx.Consumer
 	Producer         kafkafx.SyncProducer
+
+	JS jetstream.JetStream
 }
 
-func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
-	//hostname, _ := os.Hostname()
-
+func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) {
 	handler := &ChatHandler{
 		log: p.Log.With("handler", "chat"),
 
@@ -70,12 +72,64 @@ func NewChatHandler(p ChatHandlerParams) (*ChatHandler, error) {
 		queries:     p.Queries,
 		redis:       p.Redis,
 		producer:    p.Producer,
+		js:          p.JS,
 
 		playerClient:  p.PlayerClient,
 		playerTracker: p.PlayerTracker,
 	}
 
-	p.Consumer.Subscribe(kafkafx.TopicChatInput, "session-service-chat", handler.handleConsumerMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
+	_, err := p.JS.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
+		Name:       "CHAT_RAW",
+		Subjects:   []string{"chat.raw.>"},
+		Retention:  jetstream.WorkQueuePolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create CHAT_RAW: %w", err)
+	}
+
+	_, err = p.JS.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
+		Name:       "CHAT_PROCESSED",
+		Subjects:   []string{"chat.processed.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     30 * time.Second,
+		Duplicates: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create CHAT_PROCESSED: %w", err)
+	}
+
+	var consumeContext jetstream.ConsumeContext
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) (err error) {
+			chatConsumer, err := p.JS.CreateOrUpdateConsumer(context.Background(), "CHAT_RAW", jetstream.ConsumerConfig{
+				Durable:       "chat-processor",
+				FilterSubject: "chat.raw.>",
+				AckPolicy:     jetstream.AckExplicitPolicy,
+				AckWait:       10 * time.Second,
+				MaxAckPending: 1,
+				MaxDeliver:    3,
+			})
+			if err != nil {
+				return fmt.Errorf("create consumer: %w", err)
+			}
+
+			consumeContext, err = chatConsumer.Consume(handler.handleJSMessage)
+			return err
+		},
+		OnStop: func(_ context.Context) error {
+			if consumeContext != nil {
+				consumeContext.Stop()
+			}
+			return nil
+		},
+	})
+
+	// Legacy kafka subscribe TODO: remove me after its phased out
+	p.Consumer.Subscribe(kafkafx.TopicChatInput, "session-service-chat", handler.handleKafkaMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
 
 	return handler, nil
 }
@@ -258,6 +312,11 @@ func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMe
 		return
 	}
 
+	// May eventually split by channel, for now just group we dont have perf questions here right now.
+	if _, err = h.js.PublishAsync("chat.processed.global", raw); err != nil {
+		h.log.Errorw("failed to publish chat message", "error", err)
+	}
+
 	if err = h.producer.WriteMessages(ctx, kafka.Message{Topic: kafkafx.TopicChatOutput, Value: raw}); err != nil {
 		h.log.Errorw("failed to write chat message", "error", err)
 		return
@@ -309,7 +368,7 @@ func mapMessageParts(current []model.MessagePart, mapper func(part model.Message
 	return result
 }
 
-func (h *ChatHandler) handleConsumerMessage(ctx context.Context, m kafka.Message) error {
+func (h *ChatHandler) handleKafkaMessage(ctx context.Context, m kafka.Message) error {
 	h.log.Infow("new message", "offset", m.Offset, "lag", m.HighWaterMark-m.Offset-1)
 
 	// Parse the message
@@ -329,4 +388,24 @@ func (h *ChatHandler) handleConsumerMessage(ctx context.Context, m kafka.Message
 	}
 
 	return nil
+}
+
+func (h *ChatHandler) handleJSMessage(m jetstream.Msg) {
+	h.log.Infow("new chat message")
+
+	var msg model.ClientChatMessage
+	if err := json.Unmarshal(m.Data(), &msg); err != nil {
+		h.log.Errorw("failed to unmarshal chat message", "error", err)
+		return
+	}
+
+	msgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := h.HandleUnsignedChatMessage(msgCtx, &msg); err != nil {
+		h.log.Errorw("failed to handle unsigned chat message", "error", err)
+	}
+
+	if err := m.Ack(); err != nil {
+		h.log.Errorw("failed to ack message", "error", err)
+	}
 }

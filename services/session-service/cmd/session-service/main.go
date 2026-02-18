@@ -16,6 +16,8 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -44,6 +46,16 @@ func main() {
 		// Dependencies
 		fx.Invoke(setupPosthogClient),
 		fx.Provide(newKubernetesClient),
+		fx.Provide(func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
+			nc, err := nats.Connect(conf.NATS.Servers)
+			if err != nil {
+				return nil, err
+			}
+
+			lc.Append(fx.StopHook(nc.Close))
+			return nc, nil
+		}),
+		fx.Provide(jetstream.New),
 
 		// Kafka
 		kafkafx.Module,
