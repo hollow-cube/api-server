@@ -10,6 +10,7 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
@@ -28,6 +29,17 @@ var (
 	emojiRegex = regexp.MustCompile(`:([a-zA-Z0-9\-_]+):`)
 	mapRegex   = regexp.MustCompile(`\[map]`)
 	urlRegex   = regexp.MustCompile(`(?:https?://)?[a-zA-Z0-9@:%._+~#=-]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)`)
+
+	chatRawStream       = "CHAT_RAW"
+	chatProcessedStream = "CHAT_PROCESSED"
+	chatConsumerConfig  = jetstream.ConsumerConfig{
+		Durable:       "chat-processor",
+		FilterSubject: "chat.raw.>",
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		AckWait:       10 * time.Second,
+		MaxAckPending: 1,
+		MaxDeliver:    3,
+	}
 )
 
 type ChatHandler struct {
@@ -39,7 +51,7 @@ type ChatHandler struct {
 	queries     *db.Queries
 	redis       rueidis.Client
 	producer    kafkafx.SyncProducer
-	js          jetstream.JetStream
+	js          *natsutil.JetStreamWrapper
 
 	playerClient  playerService.ClientWithResponsesInterface
 	playerTracker *player.Tracker
@@ -56,10 +68,9 @@ type ChatHandlerParams struct {
 	Redis            rueidis.Client
 	PlayerClient     playerService.ClientWithResponsesInterface
 	PlayerTracker    *player.Tracker
+	JS               *natsutil.JetStreamWrapper
 	Consumer         kafkafx.Consumer
 	Producer         kafkafx.SyncProducer
-
-	JS jetstream.JetStream
 }
 
 func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) {
@@ -78,8 +89,8 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 		playerTracker: p.PlayerTracker,
 	}
 
-	_, err := p.JS.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
-		Name:       "CHAT_RAW",
+	err := p.JS.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       chatRawStream,
 		Subjects:   []string{"chat.raw.>"},
 		Retention:  jetstream.WorkQueuePolicy,
 		Storage:    jetstream.FileStorage,
@@ -87,11 +98,11 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 		Duplicates: 60 * time.Second,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create CHAT_RAW: %w", err)
+		return nil, err
 	}
 
-	_, err = p.JS.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
-		Name:       "CHAT_PROCESSED",
+	err = p.JS.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       chatProcessedStream,
 		Subjects:   []string{"chat.processed.>"},
 		Retention:  jetstream.LimitsPolicy,
 		Storage:    jetstream.FileStorage,
@@ -99,34 +110,14 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 		Duplicates: 30 * time.Second,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create CHAT_PROCESSED: %w", err)
+		return nil, err
 	}
 
-	var consumeContext jetstream.ConsumeContext
-	lc.Append(fx.Hook{
-		OnStart: func(_ context.Context) (err error) {
-			chatConsumer, err := p.JS.CreateOrUpdateConsumer(context.Background(), "CHAT_RAW", jetstream.ConsumerConfig{
-				Durable:       "chat-processor",
-				FilterSubject: "chat.raw.>",
-				AckPolicy:     jetstream.AckExplicitPolicy,
-				AckWait:       10 * time.Second,
-				MaxAckPending: 1,
-				MaxDeliver:    3,
-			})
-			if err != nil {
-				return fmt.Errorf("create consumer: %w", err)
-			}
-
-			consumeContext, err = chatConsumer.Consume(handler.handleJSMessage)
-			return err
-		},
-		OnStop: func(_ context.Context) error {
-			if consumeContext != nil {
-				consumeContext.Stop()
-			}
-			return nil
-		},
-	})
+	consumer, err := p.JS.Subscribe(context.Background(), chatRawStream, chatConsumerConfig, handler.handleJSMessage)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.StartStopHook(consumer.Start, consumer.Stop))
 
 	// Legacy kafka subscribe TODO: remove me after its phased out
 	p.Consumer.Subscribe(kafkafx.TopicChatInput, "session-service-chat", handler.handleKafkaMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
@@ -313,7 +304,7 @@ func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMe
 	}
 
 	// May eventually split by channel, for now just group we dont have perf questions here right now.
-	if _, err = h.js.PublishAsync("chat.processed.global", raw); err != nil {
+	if err = h.js.PublishAsync(ctx, "chat.processed.global", raw); err != nil {
 		h.log.Errorw("failed to publish chat message", "error", err)
 	}
 
@@ -390,22 +381,15 @@ func (h *ChatHandler) handleKafkaMessage(ctx context.Context, m kafka.Message) e
 	return nil
 }
 
-func (h *ChatHandler) handleJSMessage(m jetstream.Msg) {
-	h.log.Infow("new chat message")
-
+func (h *ChatHandler) handleJSMessage(ctx context.Context, m jetstream.Msg) error {
 	var msg model.ClientChatMessage
 	if err := json.Unmarshal(m.Data(), &msg); err != nil {
-		h.log.Errorw("failed to unmarshal chat message", "error", err)
-		return
+		return fmt.Errorf("failed to unmarshal chat message: %w", err)
 	}
 
-	msgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := h.HandleUnsignedChatMessage(msgCtx, &msg); err != nil {
-		h.log.Errorw("failed to handle unsigned chat message", "error", err)
+	if err := h.HandleUnsignedChatMessage(ctx, &msg); err != nil {
+		return fmt.Errorf("failed to handle unsigned chat message: %w", err)
 	}
 
-	if err := m.Ack(); err != nil {
-		h.log.Errorw("failed to ack message", "error", err)
-	}
+	return m.Ack()
 }

@@ -7,6 +7,7 @@ import (
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	mapService "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
 	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
@@ -46,16 +47,19 @@ func main() {
 		// Dependencies
 		fx.Invoke(setupPosthogClient),
 		fx.Provide(newKubernetesClient),
-		fx.Provide(func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
-			nc, err := nats.Connect(conf.NATS.Servers)
-			if err != nil {
-				return nil, err
-			}
+		fx.Provide(
+			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
+				nc, err := nats.Connect(conf.NATS.Servers)
+				if err != nil {
+					return nil, err
+				}
 
-			lc.Append(fx.StopHook(nc.Close))
-			return nc, nil
-		}),
-		fx.Provide(jetstream.New),
+				lc.Append(fx.StopHook(nc.Close))
+				return nc, nil
+			},
+			jetstream.New,
+			natsutil.NewJetStreamWrapper,
+		),
 
 		// Kafka
 		kafkafx.Module,
