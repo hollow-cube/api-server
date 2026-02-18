@@ -89,7 +89,7 @@ func (t *Tracker) GetAllSessions(ctx context.Context) ([]*db.PlayerSession, erro
 }
 
 func (t *Tracker) CreateSession(
-	ctx context.Context, proxyId string, pd *playerService.PlayerData,
+	ctx context.Context, proxyId string, serverId *string, pd *playerService.PlayerData,
 	skinTexture, skinSignature string, connectedHost *string,
 	playerIP string, protocolVersion int, version string,
 ) (*db.PlayerSession, error) {
@@ -98,6 +98,7 @@ func (t *Tracker) CreateSession(
 	// Upsert the session into the table
 	s, err := t.queries.UpsertPlayerSession(ctx, db.UpsertPlayerSessionParams{
 		PlayerID:        pd.Id,
+		ServerID:        serverId,
 		ProxyID:         proxyId,
 		Hidden:          isHidden,
 		Username:        util.Pointer(pd.Username),
@@ -243,6 +244,7 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 
 	if _, err := t.queries.UpsertPlayerSession(ctx, db.UpsertPlayerSessionParams{
 		PlayerID:        s.PlayerID,
+		ServerID:        s.ServerID,
 		ProxyID:         s.ProxyID,
 		Hidden:          s.Hidden,
 		Username:        s.Username,

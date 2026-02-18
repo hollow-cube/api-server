@@ -136,7 +136,7 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 		skinTexture = request.Body.Skin.Texture
 		skinSignature = request.Body.Skin.Signature
 	}
-	_, err = s.playerTracker.CreateSession(ctx, request.Body.Proxy, pd, skinTexture, skinSignature,
+	_, err = s.playerTracker.CreateSession(ctx, request.Body.Proxy, nil, pd, skinTexture, skinSignature,
 		request.Body.ConnectedHost, request.Body.Ip, protocolVersion, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
