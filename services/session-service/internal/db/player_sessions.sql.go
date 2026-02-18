@@ -114,7 +114,7 @@ const listTimedOutPlayers = `-- name: ListTimedOutPlayers :many
 select player_id
 from player_sessions
 where last_seen < now() - interval '30 seconds'
-  and server_id != 'devserver'
+  and proxy_id != 'devserver-integrated'
 `
 
 func (q *Queries) ListTimedOutPlayers(ctx context.Context) ([]string, error) {
