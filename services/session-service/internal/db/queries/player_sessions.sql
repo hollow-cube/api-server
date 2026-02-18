@@ -29,7 +29,7 @@ returning *;
 select player_id
 from player_sessions
 where last_seen < now() - interval '30 seconds'
-  and server_id != 'devserver';
+  and proxy_id != 'devserver-integrated';
 
 -- name: UpdatePlayerLastSeenByServer :exec
 update player_sessions
