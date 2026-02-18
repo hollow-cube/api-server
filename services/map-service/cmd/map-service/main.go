@@ -17,6 +17,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	intnlV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
 	obungusV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/obungus"
@@ -27,6 +28,8 @@ import (
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/rueidis"
@@ -60,11 +63,21 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
-		// Storage
 		fx.Provide(newPostgresStore),
-
-		// Authz
 		fx.Provide(newAuthzSpiceDB),
+		fx.Provide(
+			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
+				nc, err := nats.Connect(conf.NATS.Servers)
+				if err != nil {
+					return nil, err
+				}
+
+				lc.Append(fx.StopHook(nc.Close))
+				return nc, nil
+			},
+			jetstream.New,
+			natsutil.NewJetStreamWrapper,
+		),
 
 		// Kafka
 		kafkafx.Module,

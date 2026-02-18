@@ -499,7 +499,7 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 	}
 
 	// Send a map delete message for servers to handle
-	err = s.writeMapUpdate(&model.MapUpdateMessage{
+	err = s.writeMapUpdate(ctx, &model.MapUpdateMessage{
 		Action: model.MapUpdate_Delete,
 		ID:     request.MapId,
 	})

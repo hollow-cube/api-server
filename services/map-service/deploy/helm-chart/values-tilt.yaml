@@ -21,7 +21,7 @@ base:
     MAPS_REDIS_ADDRESS: "redis-master:6379"
     MAPS_KAFKA_BROKERS: "kafka:9093"
     MAPS_PLAYER_SERVICE_URL: "http://player-service:9124"
-    MAPS_KAFKA_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+    MAPS_NATS_SERVERS: "nats://nats:4222"
 
   service:
     monitor:

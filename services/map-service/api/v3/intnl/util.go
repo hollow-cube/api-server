@@ -149,7 +149,11 @@ func (s *server) writePlayerDataUpdateMessage(ctx context.Context, playerId stri
 	return nil
 }
 
-func (s *server) writeMapUpdate(update *model.MapUpdateMessage) error {
+func (s *server) writeMapUpdate(ctx context.Context, update *model.MapUpdateMessage) error {
+	if err := s.jetStream.PublishJSONAsync(ctx, update); err != nil {
+		return fmt.Errorf("failed to publish map update message: %w", err)
+	}
+
 	updateMessageData, err := json.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map update message: %w", err)

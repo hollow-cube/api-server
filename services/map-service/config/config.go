@@ -38,6 +38,10 @@ type Redis struct {
 	Address string `mapstructure:"address"`
 }
 
+type NATS struct {
+	Servers string `mapstructure:"servers"`
+}
+
 type Posthog struct {
 	Endpoint       string `mapstructure:"endpoint"`
 	PersonalApiKey string `mapstructure:"personal_api_key"` // Required for feature flags
@@ -52,6 +56,7 @@ type Config struct {
 	SpiceDB          SpiceDB            `mapstructure:"spicedb"`
 	S3               S3                 `mapstructure:"s3"`
 	Redis            Redis              `mapstructure:"redis"`
+	NATS             NATS               `mapstructure:"nats"`
 	Kafka            common.KafkaConfig `mapstructure:"kafka"`
 	OTLP             common.OtlpConfig  `mapstructure:"otlp"`
 	Posthog          Posthog            `mapstructure:"posthog"`

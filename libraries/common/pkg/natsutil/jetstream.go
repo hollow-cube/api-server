@@ -2,6 +2,7 @@ package natsutil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/nats-io/nats.go"
@@ -12,6 +13,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
+
+type Message interface {
+	Subject() string
+}
 
 type JetStreamWrapper struct {
 	log *zap.SugaredLogger
@@ -85,6 +90,15 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 			return nil
 		},
 	}, nil
+}
+
+func (w *JetStreamWrapper) PublishJSONAsync(ctx context.Context, msg Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	return w.PublishAsync(ctx, msg.Subject(), data)
 }
 
 func (w *JetStreamWrapper) PublishAsync(ctx context.Context, subject string, data []byte) error {

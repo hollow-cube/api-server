@@ -8,6 +8,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
@@ -31,7 +32,8 @@ type InternalHandler struct {
 
 	redis *redis.Client //todo redis should not be a hard dependency here, i would like to mock it for testing later
 
-	producer kafkafx.AsyncProducer
+	producer  kafkafx.AsyncProducer
+	jetStream *natsutil.JetStreamWrapper
 
 	legacyData *legacyDataCache
 }
@@ -50,7 +52,8 @@ type InternalHandlerParams struct {
 	PerfdumpStorage  object.Client `name:"object-mapmaker-perfdumps"`
 	MetricWriter     metric.Writer
 
-	Producer kafkafx.AsyncProducer
+	Producer  kafkafx.AsyncProducer
+	JetStream *natsutil.JetStreamWrapper
 
 	Redis *redis.Client
 }
@@ -67,8 +70,9 @@ func NewInternalHandler(p InternalHandlerParams) (v1.InternalServer, error) {
 		replayStorage:   p.ReplayStorage,
 		perfdumpStorage: p.PerfdumpStorage,
 
-		producer: p.Producer,
-		redis:    p.Redis,
+		producer:  p.Producer,
+		jetStream: p.JetStream,
+		redis:     p.Redis,
 
 		legacyData: &legacyDataCache{
 			client: p.LegacyMapStorage,
@@ -175,11 +179,14 @@ func (h *InternalHandler) revokeMapFromSlots(ctx context.Context, id string) err
 }
 
 func (h *InternalHandler) writeMapUpdate(ctx context.Context, update *model.MapUpdateMessage) error {
+	if err := h.jetStream.PublishJSONAsync(ctx, update); err != nil {
+		return fmt.Errorf("failed to publish map update message: %w", err)
+	}
+
 	updateMessageData, err := json.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map update message: %w", err)
 	}
-
 	if err := h.producer.WriteMessages(ctx, kafka.Message{
 		Topic: kafkafx.TopicMapUpdate,
 		Value: updateMessageData,
