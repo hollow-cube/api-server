@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
+	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
 
 	"github.com/google/go-github/v56/github"
@@ -37,6 +39,7 @@ var _ StrictServerInterface = (*serverImpl)(nil)
 
 type serverImpl struct {
 	invites     *handler.InviteManager
+	jetStream   *natsutil.JetStreamWrapper
 	producer    kafkafx.SyncProducer
 	authzClient authz.Client
 	gh          *github.Client
@@ -54,10 +57,11 @@ type serverImpl struct {
 type ServerParams struct {
 	fx.In
 
-	Invites  *handler.InviteManager
-	Producer kafkafx.SyncProducer
-	Authz    authz.Client
-	GitHub   *github.Client
+	Invites   *handler.InviteManager
+	JetStream *natsutil.JetStreamWrapper
+	Producer  kafkafx.SyncProducer
+	Authz     authz.Client
+	GitHub    *github.Client
 
 	Queries *db.Queries
 
@@ -69,9 +73,22 @@ type ServerParams struct {
 	K8s *kubernetes.Clientset
 }
 
-func NewServer(params ServerParams) StrictServerInterface {
+func NewServer(params ServerParams) (StrictServerInterface, error) {
+	err := params.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "MAP_JOINS",
+		Subjects:   []string{"map-join.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &serverImpl{
 		invites:       params.Invites,
+		jetStream:     params.JetStream,
 		producer:      params.Producer,
 		authzClient:   params.Authz,
 		gh:            params.GitHub,
@@ -81,7 +98,7 @@ func NewServer(params ServerParams) StrictServerInterface {
 		serverTracker: params.ServerTracker,
 		worldTracker:  params.WorldTracker,
 		k8s:           params.K8s,
-	}
+	}, nil
 }
 
 func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error) {
@@ -496,6 +513,10 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 }
 
 func (s *serverImpl) sendMapJoinMessage(ctx context.Context, msg model.MapJoinInfoMessage) error {
+	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
+	}
+
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to encode map join message: %w", err)

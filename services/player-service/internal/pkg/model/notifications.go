@@ -11,3 +11,7 @@ type NotificationUpdateMessage struct {
 	Key      string                  `json:"key"`
 	Data     *map[string]interface{} `json:"data,omitempty"`
 }
+
+func (m NotificationUpdateMessage) Subject() string {
+	return "notification.created"
+}

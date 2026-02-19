@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"github.com/segmentio/kafka-go"
 	"github.com/vmihailenco/msgpack/v5"
@@ -21,6 +23,7 @@ type InviteManager struct {
 	log *zap.SugaredLogger
 
 	redis         rueidis.Client
+	jetStream     *natsutil.JetStreamWrapper
 	producer      kafkafx.SyncProducer
 	playerTracker *player.Tracker
 }
@@ -36,18 +39,32 @@ type InviteManagerParams struct {
 	Log *zap.SugaredLogger
 
 	Redis         rueidis.Client
+	JetStream     *natsutil.JetStreamWrapper
 	Producer      kafkafx.SyncProducer
 	PlayerTracker *player.Tracker
 }
 
-func NewInviteManager(params InviteManagerParams) *InviteManager {
+func NewInviteManager(params InviteManagerParams) (*InviteManager, error) {
+	err := params.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "INVITES",
+		Subjects:   []string{"invite.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &InviteManager{
 		log: params.Log,
 
 		redis:         params.Redis,
+		jetStream:     params.JetStream,
 		producer:      params.Producer,
 		playerTracker: params.PlayerTracker,
-	}
+	}, nil
 }
 
 type InviteError struct {
@@ -150,6 +167,10 @@ func (i *InviteManager) sendInviteMessage(ctx context.Context, invite *model.Map
 		MapId:       invite.MapId,
 	}
 
+	if err := i.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
+	}
+
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -168,6 +189,10 @@ func (i *InviteManager) sendAcceptedOrRejectedMessage(ctx context.Context, invit
 		RecipientId: invite.RecipientId,
 		MapId:       invite.MapId,
 		Accepted:    accepted,
+	}
+
+	if err := i.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
 
 	raw, err := json.Marshal(msg)

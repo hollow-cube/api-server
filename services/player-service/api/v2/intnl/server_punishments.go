@@ -274,6 +274,10 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 		Punishment: punishment,
 	}
 
+	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
+	}
+
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return err

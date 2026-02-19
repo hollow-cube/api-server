@@ -8,6 +8,10 @@ type MapJoinInfoMessage struct {
 	State    string `json:"state"`
 }
 
+func (m MapJoinInfoMessage) Subject() string {
+	return "map-join.incoming"
+}
+
 type PlayerSkin struct {
 	Texture   string `json:"texture,omitempty"`
 	Signature string `json:"signature,omitempty"`

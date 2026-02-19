@@ -46,7 +46,9 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 	} else {
 		updateMessage.Cubits = &newBalance
 	}
-	sendPlayerDataUpdateMessage(s.producer, ctx, updateMessage)
+	if err = s.sendPlayerDataUpdateMessage(ctx, updateMessage); err != nil {
+		s.log.Errorw("failed to write player data update", "error", err)
+	}
 
 	s.log.Infow("faucet", "player", request.Body.PlayerId, "amount", request.Body.Amount,
 		"currency", currency, "new_balance", newBalance)
@@ -122,7 +124,9 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 	}
 
 	// Send update to the player to update their stats in-game
-	sendPlayerDataUpdateMessage(s.producer, ctx, update)
+	if err = s.sendPlayerDataUpdateMessage(ctx, update); err != nil {
+		s.log.Errorw("failed to write player data update", "error", err)
+	}
 
 	go s.metrics.Write(&model.CosmeticUnlocked{
 		PlayerId: request.PlayerId,
@@ -259,7 +263,10 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 		return nil, err
 	}
 
-	sendPlayerDataUpdateMessage(s.producer, ctx, update) // Send update to the player to update their stats in-game (though it will be predicted by the response from this function)
+	// Send update to the player to update their stats in-game (though it will be predicted by the response from this function)
+	if err = s.sendPlayerDataUpdateMessage(ctx, update); err != nil {
+		s.log.Errorw("failed to write player data update", "error", err)
+	}
 
 	return BuyNamedUpgrade200Response{}, nil
 }

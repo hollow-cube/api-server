@@ -3,6 +3,7 @@ package intnl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
@@ -130,6 +131,10 @@ func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlay
 		Type:     request.Body.Type,
 		Key:      request.Body.Key,
 		Data:     request.Body.Data,
+	}
+
+	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
 
 	raw, err := json.Marshal(msg)

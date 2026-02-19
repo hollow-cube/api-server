@@ -58,9 +58,17 @@ const (
 	PunishmentUpdateAction_Revoke
 )
 
+func (a PunishmentUpdateAction) String() string {
+	return [...]string{"created", "revoked"}[a]
+}
+
 type PunishmentUpdateMessage struct {
 	Action     PunishmentUpdateAction `json:"action"`
 	Punishment *db.Punishment         `json:"punishment"`
+}
+
+func (m PunishmentUpdateMessage) Subject() string {
+	return fmt.Sprintf("punishment.%v", m.Action)
 }
 
 func ConvertConfigLadders2Model(ladders []config.PunishmentLadder) (map[string]*PunishmentLadder, error) {

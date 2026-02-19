@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
@@ -16,6 +17,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/jackc/pgx/v5"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
 	"github.com/segmentio/kafka-go"
@@ -25,8 +27,9 @@ import (
 
 // Tracker keeps track of the currently online players and their sessions/presences.
 type Tracker struct {
-	queries  *db.Queries
-	producer kafkafx.SyncProducer
+	queries   *db.Queries
+	jetStream *natsutil.JetStreamWrapper
+	producer  kafkafx.SyncProducer
 
 	countReportCtx    context.Context
 	countReportCancel context.CancelFunc
@@ -36,9 +39,10 @@ type Tracker struct {
 type TrackerParams struct {
 	fx.In
 
-	Redis    rueidis.Client
-	Queries  *db.Queries
-	Producer kafkafx.SyncProducer
+	Redis     rueidis.Client
+	Queries   *db.Queries
+	JetStream *natsutil.JetStreamWrapper
+	Producer  kafkafx.SyncProducer
 }
 
 func NewTracker(p TrackerParams) (*Tracker, error) {
@@ -56,8 +60,22 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		return nil, fmt.Errorf("failed to create locker: %w", err)
 	}
 
+	err = p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "SESSIONS",
+		Subjects:   []string{"session.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		reportCancel()
+		return nil, err
+	}
+
 	return &Tracker{
 		queries:           p.Queries,
+		jetStream:         p.JetStream,
 		producer:          p.Producer,
 		countReportCtx:    reportCtx,
 		countReportCancel: reportCancel,
@@ -305,6 +323,10 @@ func (t *Tracker) sendSessionUpdate(ctx context.Context, msg kafkaModel.SessionU
 	// Use a new context to avoid inheriting a canceled request context
 	writeCtx, cancel := context.WithTimeout(tracefx.NewCtxWithTraceCtx(ctx), 15*time.Second)
 	defer cancel()
+
+	if err = t.jetStream.PublishJSONAsync(writeCtx, msg); err != nil {
+		zap.S().Errorw("failed to publish session update message", "error", err)
+	}
 
 	err = t.producer.WriteMessages(writeCtx, kafka.Message{
 		Topic: kafkafx.TopicSessionUpdates,

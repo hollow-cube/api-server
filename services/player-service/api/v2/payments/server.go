@@ -17,6 +17,7 @@ import (
 	"net/http"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
@@ -38,11 +39,12 @@ type ServerParams struct {
 	Log        *zap.SugaredLogger
 	Config     *config.Config
 
-	Consumer kafkafx.Consumer
-	Producer kafkafx.SyncProducer
-	Store    *db.Store
-	Authz    authz.Client
-	Posthog  posthog.Client
+	Consumer  kafkafx.Consumer
+	JetStream *natsutil.JetStreamWrapper
+	Producer  kafkafx.SyncProducer
+	Store     *db.Store
+	Authz     authz.Client
+	Posthog   posthog.Client
 }
 
 func NewServer(params ServerParams) (ServerInterface, error) {
@@ -59,6 +61,7 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 	s := &server{
 		log:         params.Log.With("handler", "payments"),
 		tebexSecret: []byte(tebexSecret),
+		jetStream:   params.JetStream,
 		producer:    params.Producer,
 		store:       params.Store,
 		authClient:  params.Authz,
@@ -74,6 +77,7 @@ type server struct {
 	log         *zap.SugaredLogger
 	tebexSecret []byte
 
+	jetStream  *natsutil.JetStreamWrapper
 	producer   kafkafx.SyncProducer
 	store      *db.Store
 	authClient authz.Client

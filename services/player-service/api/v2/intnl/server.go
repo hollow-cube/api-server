@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
@@ -19,6 +21,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -32,6 +35,7 @@ type ServerParams struct {
 	Log        *zap.SugaredLogger
 	Config     *config.Config
 	Metrics    metric.Writer
+	JetStream  *natsutil.JetStreamWrapper
 	Producer   kafkafx.SyncProducer
 	TBHeadless *tebex.HeadlessClient
 
@@ -60,11 +64,48 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		}
 	}
 
+	err := p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "PUNISHMENTS",
+		Subjects:   []string{"punishment.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "NOTIFICATIONS",
+		Subjects:   []string{"notification.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "PLAYER_DATA_MANAGEMENT",
+		Subjects:   []string{"player-data.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &server{
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
 		store:             p.Store,
 		authzClient:       p.Authz,
+		jetStream:         p.JetStream,
 		producer:          p.Producer,
 		tbHeadless:        p.TBHeadless,
 		punishmentLadders: p.PunishmentLadders,
@@ -79,6 +120,7 @@ type server struct {
 
 	store       *db.Store
 	authzClient authz.Client
+	jetStream   *natsutil.JetStreamWrapper
 	producer    kafkafx.SyncProducer
 	tbHeadless  *tebex.HeadlessClient
 
@@ -339,13 +381,14 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 	return &PerformTabComplete200JSONResponse{Result: result}, nil
 }
 
-func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
-	log := zap.S()
+func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
+	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
+	}
 
 	content, err := json.Marshal(msg)
 	if err != nil {
-		log.Errorw("failed to marshal player data update message", "error", err)
-		return
+		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
 	kafkaRecord := kafka.Message{
@@ -353,10 +396,7 @@ func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg 
 		Key:   []byte(msg.Id),
 		Value: content,
 	}
-
-	if err = w.WriteMessages(context.Background(), kafkaRecord); err != nil {
-		log.Errorw("failed to write to kafka", "error", err)
-	}
+	return s.producer.WriteMessages(context.Background(), kafkaRecord)
 }
 
 var (
@@ -404,8 +444,8 @@ var (
 		/* _BoXcat */ "62b4e630-3529-4675-afb0-06a6223d341c": "ct_1",
 		/* Robeens */ "b4e0ff6e-c806-4598-a866-249e7ea40cee": "ct_1",
 		/* cudsys */ "5f827271-01f8-4591-b688-c478e89b870f": "ct_1",
-        /* Tahuy */ "4f2e9fdb-27c2-4e63-8877-990b78c3caa3": "ct_1",
-	        /* BomBardyGamer */ "9b967160-68ba-4992-863e-60b15d00ce38": "dev_2",
+		/* Tahuy */ "4f2e9fdb-27c2-4e63-8877-990b78c3caa3": "ct_1",
+		/* BomBardyGamer */ "9b967160-68ba-4992-863e-60b15d00ce38": "dev_2",
 
 		/* HammSamichz */ "932f4094-7189-45d9-bf58-70f972ec3e6d": "media",
 		/* SandwichLord_ */ "1e2bf44f-122f-4960-a62d-7da9609f52e7": "media",

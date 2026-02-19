@@ -14,7 +14,6 @@ import (
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
-	"go.uber.org/zap"
 )
 
 func (s *server) processStoredEventStream(c kafkafx.Consumer) {
@@ -123,9 +122,11 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 		}
 	}
 
+	var err error
+
 	// Send out cubit changes
 	for playerId, newBalance := range newBalances {
-		sendPlayerDataUpdateMessage(s.producer, ctx, &model.PlayerDataUpdateMessage{
+		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     playerId,
 			Cubits: &newBalance,
@@ -134,11 +135,14 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 				Quantity: cubitUpdates[playerId],
 			},
 		})
+		if err != nil {
+			s.log.Errorw("failed to send player data update message", "error", err)
+		}
 	}
 
 	// Send out hypercube changes
 	for player, hypercubeAdd := range hypercubeUpdates {
-		sendPlayerDataUpdateMessage(s.producer, ctx, &model.PlayerDataUpdateMessage{
+		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     player,
 			Reason: &model.UpdateReason{
@@ -146,6 +150,9 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 				Quantity: hypercubeAdd,
 			},
 		})
+		if err != nil {
+			s.log.Errorw("failed to send player data update message", "error", err)
+		}
 	}
 }
 
@@ -371,13 +378,14 @@ func extractTargetFromEvent(event interface{}) string {
 	}
 }
 
-func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg *model.PlayerDataUpdateMessage) {
-	log := zap.S()
+func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
+	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
+		return fmt.Errorf("failed to publish invite message: %w", err)
+	}
 
 	content, err := json.Marshal(msg)
 	if err != nil {
-		log.Errorw("failed to marshal player data update message", "error", err)
-		return
+		return fmt.Errorf("failed to marshal invite message: %w", err)
 	}
 
 	kafkaRecord := kafka.Message{
@@ -386,9 +394,11 @@ func sendPlayerDataUpdateMessage(w kafkafx.SyncProducer, _ context.Context, msg 
 		Value: content,
 	}
 
-	if err = w.WriteMessages(context.Background(), kafkaRecord); err != nil {
-		log.Errorw("failed to write to kafka", "error", err)
+	if err = s.producer.WriteMessages(context.Background(), kafkaRecord); err != nil {
+		return fmt.Errorf("failed to write to kafka: %w", err)
 	}
+
+	return nil
 }
 
 func logTebexEvent(ctx context.Context, store *db.Store, event *tebex.Event) error {

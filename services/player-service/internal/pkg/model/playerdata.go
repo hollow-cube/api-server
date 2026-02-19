@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -44,6 +45,10 @@ const (
 	PlayerDataUpdate_Modify PlayerDataUpdateAction = iota
 )
 
+func (a PlayerDataUpdateAction) String() string {
+	return [...]string{"updated"}[a]
+}
+
 type PlayerDataUpdateMessage struct {
 	Action PlayerDataUpdateAction `json:"action"`
 	Id     string                 `json:"id"` // Player ID of the update
@@ -59,6 +64,10 @@ type PlayerDataUpdateMessage struct {
 	// The reason for the update, or nil if it is unspecified.
 	// For example, used to acknowledge a cubits/hypercube/etc purchase
 	Reason *UpdateReason `json:"reason,omitempty"`
+}
+
+func (m PlayerDataUpdateMessage) Subject() string {
+	return fmt.Sprintf("player-data.%v", m.Action)
 }
 
 type UpdateReasonType int
