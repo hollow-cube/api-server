@@ -90,20 +90,23 @@ type PlayerAltsItem struct {
 
 // PlayerData defines model for PlayerData.
 type PlayerData struct {
-	BetaEnabled    bool           `json:"betaEnabled"`
-	Coins          int            `json:"coins"`
-	Cubits         int            `json:"cubits"`
-	DisplayNameV2  DisplayNameV2  `json:"displayNameV2"`
-	Experience     int            `json:"experience"`
-	FirstJoin      time.Time      `json:"firstJoin"`
-	HypercubeUntil *time.Time     `json:"hypercubeUntil,omitempty"`
-	Id             string         `json:"id"`
-	LastOnline     time.Time      `json:"lastOnline"`
-	Playtime       int            `json:"playtime"`
-	Settings       PlayerSettings `json:"settings"`
-	Skin           *PlayerSkin    `json:"skin,omitempty"`
-	TotpEnabled    bool           `json:"totpEnabled"`
-	Username       string         `json:"username"`
+	BetaEnabled    bool          `json:"betaEnabled"`
+	Coins          int           `json:"coins"`
+	Cubits         int           `json:"cubits"`
+	DisplayNameV2  DisplayNameV2 `json:"displayNameV2"`
+	Experience     int           `json:"experience"`
+	FirstJoin      time.Time     `json:"firstJoin"`
+	HypercubeUntil *time.Time    `json:"hypercubeUntil,omitempty"`
+	Id             string        `json:"id"`
+	LastOnline     time.Time     `json:"lastOnline"`
+
+	// Permissions String of uint64 flags
+	Permissions string         `json:"permissions"`
+	Playtime    int            `json:"playtime"`
+	Settings    PlayerSettings `json:"settings"`
+	Skin        *PlayerSkin    `json:"skin,omitempty"`
+	TotpEnabled bool           `json:"totpEnabled"`
+	Username    string         `json:"username"`
 }
 
 // PlayerDataCreateRequest defines model for PlayerDataCreateRequest.

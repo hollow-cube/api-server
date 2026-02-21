@@ -1,5 +1,11 @@
 package db
 
+import (
+	"time"
+
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
+)
+
 // This is not an exhaustive list of player settings - only those used by the player service.
 
 type PlayerSetting struct {
@@ -55,4 +61,19 @@ const (
 type PlayerSkin struct {
 	Signature string `json:"signature"`
 	Texture   string `json:"texture"`
+}
+
+func (pd PlayerData) EffectiveRole() player.Role {
+	if pd.HypercubeEnd != nil && pd.HypercubeEnd.After(time.Now()) {
+		return player.HypercubeRole
+	}
+	return player.DefaultRole
+}
+
+func (pd PlayerData) Flags() player.Flags {
+	return pd.EffectiveRole().Flags()
+}
+
+func (pd PlayerData) Has(flags player.Flags) bool {
+	return pd.Flags().Has(flags)
 }

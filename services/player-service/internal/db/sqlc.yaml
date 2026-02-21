@@ -52,6 +52,11 @@ sql:
             nullable: true
             go_type: { type: "PlayerSkin", pointer: true }
 
+          - column: "player_data.role"
+            go_type:
+              import: "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
+              type: "Role"
+
           - { column: "tx_log.meta", go_type: { type: "map[string]any" } }
           - { column: "player_recaps.data", go_type: { type: "map[string]any" } }
           - { column: "player_notifications.data", go_type: { type: "map[string]any", pointer: true } }

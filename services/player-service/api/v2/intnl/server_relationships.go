@@ -10,6 +10,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -292,18 +293,20 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 
 	totalUsage := usageResult.OutgoingFriendRequestCount + usageResult.FriendCount
 	if totalUsage >= freeFriendLimit {
-		isHyperCube, err := s.authzClient.HasHypercube(ctx, request.PlayerId, authz.NoKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check if player has hypercube: %w", err)
+		pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+		if !errors.Is(err, db.ErrNoRows) && err != nil {
+			return nil, fmt.Errorf("failed to get player data: %w", err)
 		}
+
 		limit := freeFriendLimit
-		if isHyperCube {
+		if pd.Has(player.FlagExtendedLimits) {
 			limit = hypercubeFriendLimit
 		}
 
 		if totalUsage >= limit {
 			return SendFriendRequest401JSONResponse{
-				Code: "friend_limit_reached", Message: "you have reached the friend limit for your account",
+				Code:                 "friend_limit_reached",
+				Message:              "you have reached the friend limit for your account",
 				Limit:                int32(limit),
 				FriendCount:          int32(usageResult.FriendCount),
 				OutgoingRequestCount: int32(usageResult.OutgoingFriendRequestCount),

@@ -63,9 +63,9 @@ where player_id = $1;
 insert into player_totp (player_id, active, key, recovery_codes)
 values ($1, $2, $3, $4)
 on conflict (player_id)
-    do update set key            = excluded.key,
-                  recovery_codes = excluded.recovery_codes,
-                  created_at     = now()
+  do update set key            = excluded.key,
+                recovery_codes = excluded.recovery_codes,
+                created_at     = now()
 where player_totp.active = false;
 
 -- name: ActivateTOTP :one
@@ -80,3 +80,13 @@ returning 1;
 delete
 from player_totp
 where player_id = $1;
+
+-- name: AppendHypercube :exec
+update player_data
+set hypercube_start = case
+                        when hypercube_start is null or hypercube_end < now()
+                          then now()
+                        else hypercube_end
+  end,
+    hypercube_end   = greatest(coalesce(hypercube_end, now()), now()) + $2::interval
+where id = $1;

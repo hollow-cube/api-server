@@ -20,7 +20,6 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/posthog/posthog-go"
@@ -43,7 +42,6 @@ type ServerParams struct {
 	JetStream *natsutil.JetStreamWrapper
 	Producer  kafkafx.SyncProducer
 	Store     *db.Store
-	Authz     authz.Client
 	Posthog   posthog.Client
 }
 
@@ -64,7 +62,6 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		jetStream:   params.JetStream,
 		producer:    params.Producer,
 		store:       params.Store,
-		authClient:  params.Authz,
 		posthog:     params.Posthog,
 	}
 
@@ -77,11 +74,10 @@ type server struct {
 	log         *zap.SugaredLogger
 	tebexSecret []byte
 
-	jetStream  *natsutil.JetStreamWrapper
-	producer   kafkafx.SyncProducer
-	store      *db.Store
-	authClient authz.Client
-	posthog    posthog.Client
+	jetStream *natsutil.JetStreamWrapper
+	producer  kafkafx.SyncProducer
+	store     *db.Store
+	posthog   posthog.Client
 }
 
 func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params OnTebexWebhookParams) {

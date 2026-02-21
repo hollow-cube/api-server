@@ -3,7 +3,6 @@ package payments
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/posthog/posthog-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -197,78 +197,46 @@ func (s *server) computeChangeList(ctx context.Context, products []*tebex.Produc
 	return
 }
 
-var errDuplicateProcess = errors.New("duplicate process")
-
-func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txId string, changes []*model.TebexChange) (newBalances map[string]int, err error) {
-	// Apply the changes as a two-phase commit
-	// 1. Update the spicedb relationship for any hypercube purchases
-	// 2. Begin postgres transaction
-	// 3. Write tebex event log
-	// 4. Write tebex change log
-	// 5. Update player balance for each change
-	// 6. Commit postgres transaction
-	// 7a. If success, publish a message to the player updates topic for the server to handle
-	// 7b. If failure, remove hypercube term in spicedb
-
-	// Note about 7b: We currently do not handle the case where spicedb changes cannot be reverted.
-	// In this case a hypercube change was applied but the cubits change was not.
-	// In the future this should be handled by writing it into a DLQ or keeping it in memory as long as
-	// possible to try again later if it cannot be written to DLQ.
-
-	if err = s.applyHypercubeChanges(ctx, changes, false); err != nil { // 2pc: Update spicedb hypercube
-		return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
-	}
-
-	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error { // 2pc: Begin transaction
-		if err = logTebexEvent(ctx, tx, rawEvent); err != nil {
-			return fmt.Errorf("failed to log tebex event: %w", err)
-		}
-
+func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txId string, changes []*model.TebexChange) (map[string]int, error) {
+	return db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (newBalances map[string]int, err error) { // 2pc: Begin transaction
 		changesJson, err := json.Marshal(changes)
 		if err != nil {
-			return fmt.Errorf("failed to marshal change list: %w", err)
+			return nil, fmt.Errorf("failed to marshal change list: %w", err)
 		}
 		createdStates, err := tx.CreateTebexState(ctx, txId, changesJson)
 		if err != nil {
-			return fmt.Errorf("failed to create tebex state: %w", err)
+			return nil, fmt.Errorf("failed to create tebex state: %w", err)
 		} else if createdStates == 0 {
-			return errDuplicateProcess
+			// This is fine, we already processed this tx.
+			return nil, nil
+		}
+
+		if err = logTebexEvent(ctx, tx, rawEvent); err != nil {
+			return nil, fmt.Errorf("failed to log tebex event: %w", err)
 		}
 
 		meta := map[string]interface{}{"tx": txId}
-		if newBalances, err = applyCubitsChanges(ctx, tx, changes, meta, false); err != nil {
-			return fmt.Errorf("failed to apply cubits changes: %w", err)
+		if newBalances, err = applyCubitsChanges(ctx, tx, changes, meta); err != nil {
+			return nil, fmt.Errorf("failed to apply cubits changes: %w", err)
 		}
 
-		return nil
-	}) // 2pc: Commit transaction
-	if err != nil {
-		if errRevert := s.applyHypercubeChanges(ctx, changes, true); errRevert != nil { // 2pc: Revert spicedb hypercube
-			s.log.Errorw("failed to revert hypercube changes", "error", errRevert)
+		if err = s.applyHypercubeChanges(ctx, changes); err != nil { // 2pc: Update spicedb hypercube
+			return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
 		}
 
-		// errDuplicateProcess is fine, it means we already processed this event
-		if !errors.Is(err, errDuplicateProcess) {
-			return nil, fmt.Errorf("db write failed: %w", err)
-		}
-	}
-	return
+		return newBalances, nil
+	})
 }
 
-func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.TebexChange, txMeta map[string]interface{}, invert bool) (newBalances map[string]int, err error) {
+func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.TebexChange, txMeta map[string]interface{}) (newBalances map[string]int, err error) {
 	newBalances = map[string]int{}
 	for _, change := range changes {
 		if change.Type != model.TebexChangeCubits {
 			continue
 		}
 
-		sign := 1
-		if invert {
-			sign = -1
-		}
-
 		newBalances[change.Target], err = store.AddCurrency(
-			ctx, change.Target, db.Cubits, sign*change.Amount,
+			ctx, change.Target, db.Cubits, change.Amount,
 			db.BalanceChangeReasonTebexOneoff, txMeta,
 		)
 		if err != nil {
@@ -278,18 +246,16 @@ func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.T
 	return
 }
 
-func (s *server) applyHypercubeChanges(ctx context.Context, changes []*model.TebexChange, invert bool) error {
+func (s *server) applyHypercubeChanges(ctx context.Context, changes []*model.TebexChange) error {
 	for _, change := range changes {
 		if change.Type != model.TebexChangeHypercube {
 			continue
 		}
 
-		sign := 1
-		if invert {
-			sign = -1
-		}
-
-		err := s.authClient.AppendHypercube(ctx, change.Target, time.Duration(sign*change.Amount)*time.Minute, "")
+		err := s.store.AppendHypercube(ctx, change.Target, pgtype.Interval{
+			Valid:        true,
+			Microseconds: (time.Duration(change.Amount) * time.Minute).Microseconds(),
+		})
 		if err != nil {
 			return err
 		}

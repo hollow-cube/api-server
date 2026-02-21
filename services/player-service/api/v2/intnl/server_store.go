@@ -203,18 +203,17 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 }
 
 func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error) {
-	startTime, term, err := s.authzClient.GetHypercubeStats(ctx, request.PlayerId, authz.NoKey)
+	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, authz.ErrNotFound) {
 		return GetPlayerHypercube404Response{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get hypercube stats: %w", err)
 	}
 
-	until := startTime.Add(term)
 	return GetPlayerHypercube200JSONResponse{
 		Exp:   0,
-		Since: &startTime,
-		Until: &until,
+		Since: pd.HypercubeStart,
+		Until: pd.HypercubeEnd,
 	}, nil
 }
 

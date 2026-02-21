@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
@@ -45,8 +44,6 @@ type ServerParams struct {
 }
 
 func NewServer(p ServerParams) (StrictServerInterface, error) {
-	nameCache2, _ := lru.New[string, DisplayNameV2](1000)
-
 	punishmentAliases := make(map[model.PunishmentType]map[string]*model.PunishmentLadder)
 	for _, ladder := range p.PunishmentLadders {
 		aliases, ok := punishmentAliases[ladder.Type]
@@ -110,7 +107,6 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		tbHeadless:        p.TBHeadless,
 		punishmentLadders: p.PunishmentLadders,
 		punishmentAliases: punishmentAliases,
-		nameCache2:        nameCache2,
 	}, nil
 }
 
@@ -126,9 +122,6 @@ type server struct {
 
 	punishmentLadders map[string]*model.PunishmentLadder
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder
-
-	//todo names are never evicted from this, should use redis instead and perhaps LRU on server if needed.
-	nameCache2 *lru.Cache[string, DisplayNameV2]
 }
 
 func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
@@ -270,11 +263,6 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 		return GetPlayerDisplayNameV2200JSONResponse(orgName), nil
 	}
 
-	if cached, ok := s.nameCache2.Get(request.PlayerId); ok && false {
-		return GetPlayerDisplayNameV2200JSONResponse(cached), nil
-	}
-
-	// Load it from storage
 	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if err != nil {
 		if errors.Is(err, db.ErrNoRows) {
@@ -284,11 +272,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
 
-	displayName, err := s.computeDisplayNameV2(ctx, pd.ID, pd.Username)
-	if err != nil {
-		return nil, err
-	}
-
+	displayName := computeDisplayNameV2(pd)
 	return GetPlayerDisplayNameV2200JSONResponse(displayName), nil
 }
 
@@ -482,42 +466,22 @@ var (
 	}
 )
 
-func (s *server) computeDisplayNameV2(ctx context.Context, playerId, playerUsername string) (DisplayNameV2, error) {
+func computeDisplayNameV2(pd db.PlayerData) DisplayNameV2 {
 	var parts DisplayNameV2
-	var nameColor string
 
-	if badge, ok := hardcodedBadges[playerId]; ok {
-		nameColor = hardcodedColors[badge]
+	role := pd.EffectiveRole()
+	if role.Badge() != "" {
 		parts = append(parts, DisplayNamePart{
 			Type: "badge",
-			Text: badge,
+			Text: role.Badge(),
 		})
-	} else {
-		// try to check hypercube
-		//todo this can use a lower spicedb req consistency. High consistency is only relevant for admin/other high ranks.
-		hasHypercube, err := s.authzClient.HasHypercube(ctx, playerId, authz.NoKey)
-		if err != nil {
-			return DisplayNameV2{}, fmt.Errorf("failed to check hypercube status: %w", err)
-		}
-
-		if hasHypercube {
-			nameColor = "#ffb700"
-			parts = append(parts, DisplayNamePart{
-				Type: "badge",
-				Text: "hypercube/gold",
-			})
-		}
 	}
 
-	// Username
 	parts = append(parts, DisplayNamePart{
 		Type:  "username",
-		Text:  playerUsername,
-		Color: nameColor,
+		Text:  pd.Username,
+		Color: role.Color(),
 	})
-	if playerUsername != "" {
-		s.nameCache2.Add(playerId, parts)
-	}
 
-	return parts, nil
+	return parts
 }

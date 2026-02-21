@@ -23,8 +23,6 @@ var (
 
 type Client interface {
 	CheckPlatformPermission(ctx context.Context, userId, cacheKey string, perm PlatformPermission) (State, error)
-
-	HasHypercube(ctx context.Context, userId, cacheKey string) (bool, error)
 }
 
 type PlatformPermission string

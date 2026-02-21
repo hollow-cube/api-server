@@ -12,6 +12,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
+	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
@@ -139,12 +140,13 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		return nil // Error system message was already sent
 	}
 
+	sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
+	if err != nil {
+		return fmt.Errorf("failed to get sender player data: %w", err)
+	}
+
 	// We've already resolved the reply channel here so all dms look the same.
 	if common.IsUUID(string(channel)) {
-		sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
-		if err != nil {
-			return fmt.Errorf("failed to get sender player data: %w", err)
-		}
 		// If sender is not accepting DMs, dont allow them to send DMs either
 		if allow, ok := sender.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
 			h.sendMessageToServer(ctx, &model.ChatMessage{
@@ -230,12 +232,7 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		}
 	})
 
-	hasHyperCube, err := h.authzClient.HasHypercube(ctx, msg.Sender, authz.NoKey)
-
-	if err != nil {
-		return fmt.Errorf("could not filter emojis: %w", err)
-	}
-
+	hasHyperCube := pplayer.Has(sender.JSON200.Permissions, pplayer.FlagExtendedLimits)
 	h.sendMessageToServer(ctx, &model.ChatMessage{
 		Type:               model.ChatUnsigned,
 		Channel:            channel,

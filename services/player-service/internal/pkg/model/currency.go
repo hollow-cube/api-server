@@ -10,7 +10,7 @@ const (
 type TebexChange struct {
 	Target string          `json:"target"` // The player's id
 	Type   TebexChangeType `json:"type"`
-	Amount int             `json:"amount"` // Cubits or Hypercube duration in months
+	Amount int             `json:"amount"` // Cubits or Hypercube duration in minutes
 }
 
 type Rarity int

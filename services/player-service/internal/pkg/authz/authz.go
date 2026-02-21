@@ -5,7 +5,6 @@ package authz
 import (
 	"context"
 	"errors"
-	"time"
 )
 
 const NoKey = ""
@@ -27,12 +26,6 @@ var (
 type Client interface {
 	MultiCheckPlatformPermission(ctx context.Context, userIds []string, cacheKey string, perm PlatformPermission) (map[string]State, error)
 	CheckPlatformPermission(ctx context.Context, userId, cacheKey string, perm PlatformPermission) (State, error)
-
-	// Hypercube
-
-	HasHypercube(ctx context.Context, userId, cacheKey string) (bool, error)
-	GetHypercubeStats(ctx context.Context, playerId string, cacheKey string) (time.Time, time.Duration, error)
-	AppendHypercube(ctx context.Context, playerId string, addedTerm time.Duration, cacheKey string) error
 
 	// Upgrades
 	UnlockUpgrade(ctx context.Context, playerId, upgradeId, cacheKey string) error

@@ -1334,7 +1334,7 @@ components:
             example: Invalid input
     PlayerData:
       type: object
-      required: [ id, username, displayNameV2, firstJoin, lastOnline, playtime, experience, settings, betaEnabled, coins, cubits, unlockedCosmetics, totpEnabled ]
+      required: [ id, username, displayNameV2, firstJoin, lastOnline, playtime, experience, settings, betaEnabled, coins, cubits, unlockedCosmetics, totpEnabled, permissions ]
       properties:
         id: { type: string }
         username: { type: string }
@@ -1364,6 +1364,9 @@ components:
           format: date-time
 
         totpEnabled: { type: boolean }
+        permissions:
+          type: string
+          description: String of uint64 flags
 
     DisplayNameV2:
       type: array
