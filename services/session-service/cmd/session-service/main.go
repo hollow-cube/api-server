@@ -67,7 +67,6 @@ func main() {
 		fx.Provide(newRedisClient),
 		fx.Provide(newPlayerSvc2, newMapServiceClient),
 		fx.Provide(newDbQuerySet),
-		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(newGithubClient),
 
 		fx.Invoke(handler.NewChatHandler),

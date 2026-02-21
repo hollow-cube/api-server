@@ -8,7 +8,6 @@ import (
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -66,14 +65,6 @@ func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error
 	})
 
 	return c, nil
-}
-
-func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
-	return authz.NewSpiceDBClient(
-		conf.SpiceDB.Endpoint,
-		conf.SpiceDB.Token,
-		conf.SpiceDB.TLS,
-	)
 }
 
 func setupPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) error {

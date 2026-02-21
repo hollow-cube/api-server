@@ -14,7 +14,6 @@ import (
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/text"
@@ -48,11 +47,10 @@ type ChatHandler struct {
 
 	contentFilter text.Filter
 
-	authzClient authz.Client
-	queries     *db.Queries
-	redis       rueidis.Client
-	producer    kafkafx.SyncProducer
-	js          *natsutil.JetStreamWrapper
+	queries  *db.Queries
+	redis    rueidis.Client
+	producer kafkafx.SyncProducer
+	js       *natsutil.JetStreamWrapper
 
 	playerClient  playerService.ClientWithResponsesInterface
 	playerTracker *player.Tracker
@@ -63,7 +61,6 @@ type ChatHandlerParams struct {
 
 	Log *zap.SugaredLogger
 
-	AuthzClient      authz.Client
 	Queries          *db.Queries
 	KubernetesClient *kubernetes.Clientset
 	Redis            rueidis.Client
@@ -80,11 +77,10 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 
 		contentFilter: text.NewStaticFilter(),
 
-		authzClient: p.AuthzClient,
-		queries:     p.Queries,
-		redis:       p.Redis,
-		producer:    p.Producer,
-		js:          p.JS,
+		queries:  p.Queries,
+		redis:    p.Redis,
+		producer: p.Producer,
+		js:       p.JS,
 
 		playerClient:  p.PlayerClient,
 		playerTracker: p.PlayerTracker,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
+	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
@@ -22,7 +23,6 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/handler"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
@@ -38,11 +38,10 @@ import (
 var _ StrictServerInterface = (*serverImpl)(nil)
 
 type serverImpl struct {
-	invites     *handler.InviteManager
-	jetStream   *natsutil.JetStreamWrapper
-	producer    kafkafx.SyncProducer
-	authzClient authz.Client
-	gh          *github.Client
+	invites   *handler.InviteManager
+	jetStream *natsutil.JetStreamWrapper
+	producer  kafkafx.SyncProducer
+	gh        *github.Client
 
 	queries *db.Queries
 
@@ -60,7 +59,6 @@ type ServerParams struct {
 	Invites   *handler.InviteManager
 	JetStream *natsutil.JetStreamWrapper
 	Producer  kafkafx.SyncProducer
-	Authz     authz.Client
 	GitHub    *github.Client
 
 	Queries *db.Queries
@@ -90,7 +88,6 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 		invites:       params.Invites,
 		jetStream:     params.JetStream,
 		producer:      params.Producer,
-		authzClient:   params.Authz,
 		gh:            params.GitHub,
 		queries:       params.Queries,
 		playerClient:  params.PlayerClient,
@@ -126,15 +123,9 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	}
 	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
-	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) {
-		// PlatformBypassWhitelist will allow you in even with maintenance enabled.
-		state, err := s.authzClient.CheckPlatformPermission(ctx, pd.Id, authz.NoKey, authz.PlatformBypassWhitelist)
-		if err != nil {
-			zap.S().Errorw("failed to check platform permission", "error", err)
-			return CreateSession401Response{}, nil
-		} else if state != authz.Conditional && state != authz.Allow {
-			return CreateSession401Response{}, nil
-		}
+	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
+		!pplayer.Has(pd.Permissions, pplayer.FlagBypassWhitelist) {
+		return CreateSession401Response{}, nil
 	}
 
 	protocolVersion := 0

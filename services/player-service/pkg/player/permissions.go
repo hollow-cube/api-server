@@ -16,6 +16,8 @@ func (f Flags) Has(flag Flags) bool {
 
 const (
 	FlagExtendedLimits Flags = 1 << iota
+	FlagBypassWhitelist
+
 	FlagBan
 )
 
