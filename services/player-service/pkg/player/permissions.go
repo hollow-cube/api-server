@@ -18,6 +18,8 @@ const (
 	FlagExtendedLimits Flags = 1 << iota
 	FlagBypassWhitelist
 
+	FlagMapDelete
+
 	FlagBan
 )
 

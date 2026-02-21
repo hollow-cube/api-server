@@ -11,8 +11,8 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
+	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -27,11 +27,11 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Store     *db.Store
-	Authz     authz.Client
 	Redis     rueidis.Client
 	Producer  kafkafx.SyncProducer
 	JetStream *natsutil.JetStreamWrapper
 	Metrics   metric.Writer
+	Players   playerService.ClientWithResponsesInterface
 
 	Object object.Client `name:"object-mapmaker"`
 }
@@ -39,12 +39,12 @@ type ServerParams struct {
 type server struct {
 	log *zap.SugaredLogger
 
-	store       *db.Store
-	authzClient authz.Client
-	redis       rueidis.Client
-	producer    kafkafx.SyncProducer
-	jetStream   *natsutil.JetStreamWrapper
-	metrics     metric.Writer
+	store     *db.Store
+	redis     rueidis.Client
+	producer  kafkafx.SyncProducer
+	jetStream *natsutil.JetStreamWrapper
+	metrics   metric.Writer
+	players   playerService.ClientWithResponsesInterface
 
 	objectClient object.Client
 }
@@ -65,11 +65,11 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:          params.Log,
 		store:        params.Store,
-		authzClient:  params.Authz,
 		redis:        params.Redis,
 		producer:     params.Producer,
 		jetStream:    params.JetStream,
 		metrics:      params.Metrics,
+		players:      params.Players,
 		objectClient: params.Object,
 	}, nil
 }

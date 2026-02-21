@@ -25,8 +25,7 @@ const (
 	// Owned by the Map service
 	//
 
-	TopicMapPlayerDataUpdate = "map_player_data_mgmt"
-	TopicMapUpdate           = "map_mgmt"
+	TopicMapUpdate = "map_mgmt"
 
 	//
 	// Owned by the Player service

@@ -25,9 +25,8 @@ import (
 	terraformV3 "github.com/hollow-cube/hc-services/services/map-service/api/v3/terraform"
 	"github.com/hollow-cube/hc-services/services/map-service/config"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
-	oapi_rt "github.com/mworzala/openapi-go/pkg/oapi-rt"
+	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
@@ -36,8 +35,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 	"go.opentelemetry.io/otel/sdk/trace"
 
-	v1 "github.com/hollow-cube/hc-services/services/map-service/api/v1"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/handler"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -64,7 +61,6 @@ func main() {
 		}),
 
 		fx.Provide(newPostgresStore),
-		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(
 			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
 				nc, err := nats.Connect(conf.NATS.Servers)
@@ -113,20 +109,12 @@ func main() {
 
 		fx.Provide(newRedisClient, newRueidisClient),
 
+		fx.Provide(newPlayerSvc2),
+
 		// HTTP server
 		fx.Provide(newDynamicExporter),
 		tracefx.Module,
 		fx.Provide(
-			fx.Annotate(
-				func() *v1.AuthorizerMiddleware {
-					return &v1.AuthorizerMiddleware{}
-				},
-				fx.As(new(oapi_rt.Middleware)),
-				fx.ResultTags(`group:"internal_middleware"`),
-			),
-			handler.NewInternalHandler,
-			httpfx.AsRouteProvider(v1.NewInternalServerWrapper),
-
 			publicV3.NewServer,
 			intnlV3.NewServer,
 			terraformV3.NewServer,
@@ -200,14 +188,6 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 	} else {
 		return tracefx.NewNoopExporter()
 	}
-}
-
-func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
-	return authz.NewSpiceDBClient(
-		conf.SpiceDB.Endpoint,
-		conf.SpiceDB.Token,
-		conf.SpiceDB.TLS,
-	)
 }
 
 func newS3Client(conf *config.Config) (*s3.Client, error) {
@@ -302,4 +282,8 @@ func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycl
 	lc.Append(fx.StopHook(pool.Close))
 
 	return store, nil
+}
+
+func newPlayerSvc2(conf *config.Config) (playerService2.ClientWithResponsesInterface, error) {
+	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(tracefx.DefaultHTTPClient))
 }
