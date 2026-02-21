@@ -100,13 +100,19 @@ type PlayerData struct {
 	Id             string        `json:"id"`
 	LastOnline     time.Time     `json:"lastOnline"`
 
+	// MapSlots Total number of map slots available to the player (incl. default & bonuses).
+	MapSlots int `json:"mapSlots"`
+
 	// Permissions String of uint64 flags
 	Permissions string         `json:"permissions"`
 	Playtime    int            `json:"playtime"`
 	Settings    PlayerSettings `json:"settings"`
 	Skin        *PlayerSkin    `json:"skin,omitempty"`
-	TotpEnabled bool           `json:"totpEnabled"`
-	Username    string         `json:"username"`
+
+	// TempMaxMapSize Map size enum, probably will convert to a string later when we decide about tall or custom map sizes
+	TempMaxMapSize int    `json:"tempMaxMapSize"`
+	TotpEnabled    bool   `json:"totpEnabled"`
+	Username       string `json:"username"`
 }
 
 // PlayerDataCreateRequest defines model for PlayerDataCreateRequest.
@@ -537,7 +543,7 @@ type ServerInterface interface {
 	// Remove a friend
 	// (DELETE /players/{playerId}/friends/{targetId})
 	RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
-	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
+	// Get the hypercube status for a player. Should only be used to display in-depth info.
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(w http.ResponseWriter, r *http.Request, playerId string)
 	// Get notifications for a player
@@ -3457,7 +3463,7 @@ type StrictServerInterface interface {
 	// Remove a friend
 	// (DELETE /players/{playerId}/friends/{targetId})
 	RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error)
-	// Get the hypercube status for a player. Should only be used to display in-depth info. Use spicedb for checking related permissions
+	// Get the hypercube status for a player. Should only be used to display in-depth info.
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error)
 	// Get notifications for a player

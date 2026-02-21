@@ -16,11 +16,12 @@ func (f Flags) Has(flag Flags) bool {
 
 const (
 	FlagExtendedLimits Flags = 1 << iota
-	FlagBypassWhitelist
 
 	FlagMapDelete
 
-	FlagBan
+	FlagBypassWhitelist
+	FlagBypassBlock
+	FlagPunish // ban, mute, kick
 )
 
 type Role string

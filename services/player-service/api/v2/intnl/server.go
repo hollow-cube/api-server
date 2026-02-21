@@ -16,7 +16,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/tebex-go"
@@ -39,7 +38,6 @@ type ServerParams struct {
 	TBHeadless *tebex.HeadlessClient
 
 	Store             *db.Store
-	Authz             authz.Client
 	PunishmentLadders map[string]*model.PunishmentLadder
 }
 
@@ -101,7 +99,6 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
 		store:             p.Store,
-		authzClient:       p.Authz,
 		jetStream:         p.JetStream,
 		producer:          p.Producer,
 		tbHeadless:        p.TBHeadless,
@@ -114,11 +111,10 @@ type server struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	store       *db.Store
-	authzClient authz.Client
-	jetStream   *natsutil.JetStreamWrapper
-	producer    kafkafx.SyncProducer
-	tbHeadless  *tebex.HeadlessClient
+	store      *db.Store
+	jetStream  *natsutil.JetStreamWrapper
+	producer   kafkafx.SyncProducer
+	tbHeadless *tebex.HeadlessClient
 
 	punishmentLadders map[string]*model.PunishmentLadder
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder

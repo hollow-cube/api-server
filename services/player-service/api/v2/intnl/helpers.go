@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 )
 
 func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*PlayerData, error) {
@@ -36,6 +37,13 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 		}
 	}
 
+	// Its kinda weird to have this map specific stuff in player service but we will merge the two later and i do NOT
+	// want to deal with the distributed transaction nightmare that comes with trying to update this in map service.
+	mapSlots := 2 + int(pd.ExtraMapSlots)
+	if pd.Has(player.FlagExtendedLimits) {
+		mapSlots += 3
+	}
+
 	return &PlayerData{
 		Id:            pd.ID,
 		Username:      pd.Username,
@@ -54,6 +62,8 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 
 		TotpEnabled: totpEnabled,
 
-		Permissions: strconv.FormatUint(uint64(pd.Flags()), 10),
+		Permissions:    strconv.FormatUint(uint64(pd.Flags()), 10),
+		MapSlots:       mapSlots,
+		TempMaxMapSize: int(pd.MaxMapSize),
 	}, nil
 }

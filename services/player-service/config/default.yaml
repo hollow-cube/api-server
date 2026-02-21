@@ -9,11 +9,6 @@ metrics:
 postgres:
   uri: "postgres://postgres:postgres@localhost:5432/player-service?sslmode=disable"
 
-spicedb:
-  endpoint: localhost:50051
-  token: "supersecretkey"
-  tls: false
-
 nats:
   servers: nats://localhost:4222
 

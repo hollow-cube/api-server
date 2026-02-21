@@ -32,7 +32,6 @@ import (
 	v2Payments "github.com/hollow-cube/hc-services/services/player-service/api/v2/payments"
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	"go.uber.org/fx"
@@ -62,7 +61,6 @@ func main() {
 
 		fx.Provide(newPostgresStore),
 		fx.Provide(newRedisClient),
-		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(
 			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
 				nc, err := nats.Connect(conf.NATS.Servers)
@@ -184,14 +182,6 @@ func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycl
 	lc.Append(fx.StopHook(pool.Close))
 
 	return store, nil
-}
-
-func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
-	return authz.NewSpiceDBClient(
-		conf.SpiceDB.Endpoint,
-		conf.SpiceDB.Token,
-		conf.SpiceDB.TLS,
-	)
 }
 
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {

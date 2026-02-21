@@ -4,7 +4,7 @@ from player_blocks
 where player_id = $1;
 
 -- name: GetBlockedPlayers :many
-select pb.target_id, pd.username, pb.created_at
+select pb.target_id, pb.created_at, sqlc.embed(pd)
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
 where pb.player_id = $1

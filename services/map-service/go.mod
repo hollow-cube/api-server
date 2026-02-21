@@ -1,6 +1,6 @@
 module github.com/hollow-cube/hc-services/services/map-service
 
-go 1.24.0
+go 1.26.0
 
 replace github.com/hollow-cube/hc-services/libraries/common => ../../libraries/common
 

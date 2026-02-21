@@ -49,7 +49,7 @@ func (q *Queries) DeletePlayerBlock(ctx context.Context, playerID string, target
 }
 
 const getBlockedPlayers = `-- name: GetBlockedPlayers :many
-select pb.target_id, pd.username, pb.created_at
+select pb.target_id, pb.created_at, pd.id, pd.username, pd.first_join, pd.last_online, pd.playtime, pd.experience, pd.beta_enabled, pd.settings, pd.coins, pd.cubits, pd.skin, pd.online, pd.hypercube_start, pd.hypercube_end, pd.role, pd.extra_map_slots, pd.max_map_size
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
 where pb.player_id = $1
@@ -57,9 +57,9 @@ limit $2 offset $3
 `
 
 type GetBlockedPlayersRow struct {
-	TargetID  string    `json:"targetId"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"createdAt"`
+	TargetID   string     `json:"targetId"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	PlayerData PlayerData `json:"playerData"`
 }
 
 func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit int32, offset int32) ([]GetBlockedPlayersRow, error) {
@@ -71,7 +71,27 @@ func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit 
 	items := []GetBlockedPlayersRow{}
 	for rows.Next() {
 		var i GetBlockedPlayersRow
-		if err := rows.Scan(&i.TargetID, &i.Username, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.TargetID,
+			&i.CreatedAt,
+			&i.PlayerData.ID,
+			&i.PlayerData.Username,
+			&i.PlayerData.FirstJoin,
+			&i.PlayerData.LastOnline,
+			&i.PlayerData.Playtime,
+			&i.PlayerData.Experience,
+			&i.PlayerData.BetaEnabled,
+			&i.PlayerData.Settings,
+			&i.PlayerData.Coins,
+			&i.PlayerData.Cubits,
+			&i.PlayerData.Skin,
+			&i.PlayerData.Online,
+			&i.PlayerData.HypercubeStart,
+			&i.PlayerData.HypercubeEnd,
+			&i.PlayerData.Role,
+			&i.PlayerData.ExtraMapSlots,
+			&i.PlayerData.MaxMapSize,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

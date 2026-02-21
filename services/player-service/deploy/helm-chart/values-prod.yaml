@@ -16,7 +16,6 @@ base:
 
     PLAYERS_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"
     PLAYERS_NATS_SERVERS: "nats://nats:4222"
-    PLAYERS_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"
     PLAYERS_REDIS_ADDRESS: "redis-master.mapmaker.svc.cluster.local:6379"
 
     PLAYERS_VOTIFIER_LISTEN_ADDR: "0.0.0.0:30192"

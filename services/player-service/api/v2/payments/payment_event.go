@@ -220,7 +220,7 @@ func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txI
 			return nil, fmt.Errorf("failed to apply cubits changes: %w", err)
 		}
 
-		if err = s.applyHypercubeChanges(ctx, changes); err != nil { // 2pc: Update spicedb hypercube
+		if err = s.applyHypercubeChanges(ctx, changes); err != nil {
 			return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
 		}
 

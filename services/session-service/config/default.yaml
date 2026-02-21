@@ -24,11 +24,6 @@ kubernetes:
 postgres:
   uri: "postgres://postgres:postgres@localhost:5432/session-service?sslmode=disable"
 
-spicedb:
-  endpoint: localhost:50051
-  token: "foobar"
-  tls: false
-
 player_service_url: http://localhost:9126
 map_service_url: http://localhost:9125
 

@@ -313,15 +313,15 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		for k, v := range *request.Body.Extra {
 			switch k {
 			case "only_sprint":
-				update.OnlySprint = util.Ptr(v.(bool))
+				update.OnlySprint = new(v.(bool))
 			case "no_sprint":
-				update.NoSprint = util.Ptr(v.(bool))
+				update.NoSprint = new(v.(bool))
 			case "no_jump":
-				update.NoJump = util.Ptr(v.(bool))
+				update.NoJump = new(v.(bool))
 			case "no_sneak":
-				update.NoSneak = util.Ptr(v.(bool))
+				update.NoSneak = new(v.(bool))
 			case "boat":
-				update.Boat = util.Ptr(v.(bool))
+				update.Boat = new(v.(bool))
 			default:
 				extra[k] = v
 			}

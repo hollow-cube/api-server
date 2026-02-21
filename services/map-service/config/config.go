@@ -20,12 +20,6 @@ type Postgres struct {
 	URI string `mapstructure:"uri"`
 }
 
-type SpiceDB struct {
-	Endpoint string `mapstructure:"endpoint"`
-	Token    string `mapstructure:"token"`
-	TLS      bool   `mapstructure:"tls"`
-}
-
 type S3 struct {
 	Endpoint   string `mapstructure:"endpoint"`
 	Region     string `mapstructure:"region"`
@@ -53,7 +47,6 @@ type Config struct {
 	Metrics          Metrics            `mapstructure:"metrics"`
 	PlayerServiceUrl string             `mapstructure:"player_service_url"`
 	Postgres         Postgres           `mapstructure:"postgres"`
-	SpiceDB          SpiceDB            `mapstructure:"spicedb"`
 	S3               S3                 `mapstructure:"s3"`
 	Redis            Redis              `mapstructure:"redis"`
 	NATS             NATS               `mapstructure:"nats"`

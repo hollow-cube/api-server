@@ -8,7 +8,6 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -35,7 +34,11 @@ func (s *server) getMapSlotIndex(ctx context.Context, pd *db.MapPlayerData, mapI
 			return -1, err
 		}
 
-		if len(existing) >= pd.UnlockedSlots {
+		unlockedSlots, err := s.getUnlockedSlots(ctx, pd)
+		if err != nil {
+			return -1, err
+		}
+		if len(existing) >= unlockedSlots {
 			return -1, fmt.Errorf("no free slots")
 		}
 
@@ -64,11 +67,8 @@ func (s *server) getTotalSlotsFromPerm(ctx context.Context, pd *db.MapPlayerData
 	if err != nil {
 		return 0, err
 	}
-	if pplayer.Has(resp.JSON200.Permissions, pplayer.FlagExtendedLimits) {
-		return 5, nil
-	}
 
-	return 2 + pd.UnlockedSlots, nil
+	return resp.JSON200.MapSlots, nil
 }
 
 func (s *server) writeMapUpdate(ctx context.Context, update *model.MapUpdateMessage) error {

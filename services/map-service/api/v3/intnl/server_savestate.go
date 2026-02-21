@@ -108,7 +108,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			Type:            db.SaveStateType(*request.Body.Type),
 			Created:         createdTime,
 			Updated:         time.Now(),
-			ProtocolVersion: util.Ptr(769), // Remains our default version
+			ProtocolVersion: new(769), // Remains our default version
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch save state: %w", err)

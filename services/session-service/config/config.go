@@ -37,12 +37,6 @@ type Postgres struct {
 	URI string `mapstructure:"uri"`
 }
 
-type SpiceDB struct {
-	Endpoint string `mapstructure:"endpoint"`
-	Token    string `mapstructure:"token"`
-	TLS      bool   `mapstructure:"tls"`
-}
-
 type Posthog struct {
 	Endpoint       string `mapstructure:"endpoint"`
 	PersonalApiKey string `mapstructure:"personal_api_key"` // Required for feature flags
@@ -80,7 +74,6 @@ type Config struct {
 	NATS             NATS               `mapstructure:"nats"`
 	Kubernetes       Kubernetes         `mapstructure:"kubernetes"`
 	Postgres         Postgres           `mapstructure:"postgres"`
-	SpiceDB          SpiceDB            `mapstructure:"spicedb"`
 	Posthog          Posthog            `mapstructure:"posthog"`
 	Unleash          Unleash            `mapstructure:"unleash"`
 	MapIsolate       MapIsolate         `mapstructure:"map_isolate"`

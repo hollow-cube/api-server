@@ -77,7 +77,7 @@ func (q *Queries) AppendHypercube(ctx context.Context, iD string, column2 pgtype
 const createPlayerData = `-- name: CreatePlayerData :one
 insert into player_data (id, username, first_join, last_online, skin, online)
 values ($1, $2, now(), now(), $3, false)
-returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role
+returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
 `
 
 func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string, skin *PlayerSkin) (PlayerData, error) {
@@ -99,6 +99,8 @@ func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username stri
 		&i.HypercubeStart,
 		&i.HypercubeEnd,
 		&i.Role,
+		&i.ExtraMapSlots,
+		&i.MaxMapSize,
 	)
 	return i, err
 }
@@ -115,7 +117,7 @@ func (q *Queries) DeleteTOTP(ctx context.Context, playerID string) error {
 }
 
 const getPlayerData = `-- name: GetPlayerData :one
-select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
 from player_data
 where id = $1
 limit 1
@@ -140,6 +142,8 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (PlayerData, err
 		&i.HypercubeStart,
 		&i.HypercubeEnd,
 		&i.Role,
+		&i.ExtraMapSlots,
+		&i.MaxMapSize,
 	)
 	return i, err
 }
@@ -252,6 +256,18 @@ func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]Se
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPlayerUnlocks = `-- name: SetPlayerUnlocks :exec
+update player_data
+set extra_map_slots = greatest(extra_map_slots, $2),
+    max_map_size = greatest(max_map_size, $3)
+where id = $1
+`
+
+func (q *Queries) SetPlayerUnlocks(ctx context.Context, iD string, extraMapSlots int16, maxMapSize int16) error {
+	_, err := q.db.Exec(ctx, setPlayerUnlocks, iD, extraMapSlots, maxMapSize)
+	return err
 }
 
 const updatePlayerData = `-- name: UpdatePlayerData :exec

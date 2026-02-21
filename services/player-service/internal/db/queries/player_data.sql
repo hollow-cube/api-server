@@ -90,3 +90,9 @@ set hypercube_start = case
   end,
     hypercube_end   = greatest(coalesce(hypercube_end, now()), now()) + $2::interval
 where id = $1;
+
+-- name: SetPlayerUnlocks :exec
+update player_data
+set extra_map_slots = greatest(extra_map_slots, $2),
+    max_map_size = greatest(max_map_size, $3)
+where id = $1;

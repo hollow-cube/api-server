@@ -43,6 +43,8 @@ type PlayerData struct {
 	HypercubeStart *time.Time  `json:"hypercubeStart"`
 	HypercubeEnd   *time.Time  `json:"hypercubeEnd"`
 	Role           player.Role `json:"role"`
+	ExtraMapSlots  int16       `json:"extraMapSlots"`
+	MaxMapSize     int16       `json:"maxMapSize"`
 }
 
 type PlayerTotp struct {

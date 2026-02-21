@@ -21,7 +21,6 @@ base:
     SESSION_MAP_SERVICE_URL: "http://map-service.mapmaker.svc.cluster.local:9124"
     SESSION_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"
     SESSION_NATS_SERVERS: "nats://nats:4222"
-    SESSION_SPICEDB_ENDPOINT: "spicedb.mapmaker.svc.cluster.local:50051"
 
     SESSION_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
 

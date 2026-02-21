@@ -1,8 +1,8 @@
 module github.com/hollow-cube/hc-services/libraries/common
 
-go 1.24.0
+go 1.26.0
 
-toolchain go1.24.4
+toolchain go1.26.0
 
 require (
 	github.com/authzed/authzed-go v1.7.0
