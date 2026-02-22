@@ -5,7 +5,7 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
 func NewResource(service common.ServiceConfig) (*resource.Resource, error) {

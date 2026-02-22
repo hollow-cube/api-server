@@ -7,20 +7,32 @@ import (
 	"net"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	awsCredentials "github.com/aws/aws-sdk-go-v2/credentials"
+	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
+	mapIntnlV3 "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/intnl"
+	mapObungusV3 "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/obungus"
+	mapPublicV3 "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/public"
+	mapTerraformV3 "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/terraform"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/consumers"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/discord"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/mapdb"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/object"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 	"google.golang.org/grpc"
 
 	envoyAuth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -41,8 +53,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const serviceName = "player-service"
-
 func main() {
 	fx.New(
 		// Config
@@ -61,7 +71,7 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
-		fx.Provide(newPostgresStore),
+		fx.Provide(newPostgresStore, newMapsPostgresStore),
 		fx.Provide(newRedisClient),
 		fx.Provide(
 			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
@@ -75,6 +85,32 @@ func main() {
 			},
 			jetstream.New,
 			natsutil.NewJetStreamWrapper,
+		),
+
+		fx.Provide(
+			newS3Client,
+			newS3Downloader,
+			newS3Uploader,
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker-replays"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-replays"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("legacy-maps-v3"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-legacy-maps"`),
+			),
+			fx.Annotate(
+				object.NewS3ClientFactory("mapmaker-profdump"),
+				fx.As(new(object.Client)),
+				fx.ResultTags(`name:"object-mapmaker-perfdumps"`),
+			),
 		),
 
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -92,6 +128,12 @@ func main() {
 			v2Public.NewServer,
 			v2Internal.NewServer,
 			v2Payments.NewServer,
+
+			mapPublicV3.NewServer,
+			mapIntnlV3.NewServer,
+			mapTerraformV3.NewServer,
+			mapObungusV3.NewServer,
+
 			posthogProxy.NewProxy,
 			httpfx.AsRouteProvider(makeV2RouteHandler),
 		),
@@ -110,14 +152,31 @@ type v2RouteHandlerImpl struct {
 	public   v2Public.StrictServerInterface
 	internal v2Internal.StrictServerInterface
 	payments v2Payments.ServerInterface
-	posthog  *posthogProxy.Proxy
-	discord  *discord.Handler
+
+	mapPublic    mapPublicV3.StrictServerInterface
+	mapIntnl     mapIntnlV3.StrictServerInterface
+	mapTerraform mapTerraformV3.StrictServerInterface
+	mapObungus   mapObungusV3.StrictServerInterface
+
+	posthog *posthogProxy.Proxy
+
+	discord *discord.Handler
 }
 
 func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
 	r.Handle("/v2/payments/*", v2Payments.HandlerFromMuxWithBaseURL(v.payments, nil, "/v2/payments"))
+
+	r.Handle("/v3/maps/*", mapPublicV3.HandlerFromMuxWithBaseURL(mapPublicV3.NewStrictHandler(v.mapPublic,
+		[]mapPublicV3.StrictMiddlewareFunc{mapPublicV3.AuthMiddleware}), nil, "/v3/maps"))
+	r.Handle("/v3/internal/*", mapIntnlV3.HandlerFromMuxWithBaseURL(mapIntnlV3.NewStrictHandler(v.mapIntnl,
+		[]mapIntnlV3.StrictMiddlewareFunc{mapIntnlV3.AuthMiddleware}), nil, "/v3/internal"))
+	r.Handle("/v3/internal/terraform/*", mapTerraformV3.HandlerFromMuxWithBaseURL(mapTerraformV3.NewStrictHandler(v.mapTerraform,
+		[]mapTerraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
+	r.Handle("/v3/obungus/*", mapObungusV3.HandlerFromMuxWithBaseURL(mapObungusV3.NewStrictHandler(v.mapObungus,
+		[]mapObungusV3.StrictMiddlewareFunc{}), nil, "/v3/obungus"))
+
 	r.Handle("/posthog/*", v.posthog)
 
 	if v.discord != nil {
@@ -131,15 +190,29 @@ func makeV2RouteHandler(params struct {
 	Public   v2Public.StrictServerInterface
 	Internal v2Internal.StrictServerInterface
 	Payments v2Payments.ServerInterface
-	Posthog  *posthogProxy.Proxy
-	Discord  *discord.Handler `optional:"true"`
+
+	MapPublicV3    mapPublicV3.StrictServerInterface
+	MapIntnlV3     mapIntnlV3.StrictServerInterface
+	MapTerraformV3 mapTerraformV3.StrictServerInterface
+	MapObungusV3   mapObungusV3.StrictServerInterface
+
+	Posthog *posthogProxy.Proxy
+
+	Discord *discord.Handler `optional:"true"`
 }) httpTransport.RouteProvider {
 	return &v2RouteHandlerImpl{
-		params.Public,
-		params.Internal,
-		params.Payments,
-		params.Posthog,
-		params.Discord,
+		public:   params.Public,
+		internal: params.Internal,
+		payments: params.Payments,
+
+		mapPublic:    params.MapPublicV3,
+		mapIntnl:     params.MapIntnlV3,
+		mapTerraform: params.MapTerraformV3,
+		mapObungus:   params.MapObungusV3,
+
+		posthog: params.Posthog,
+
+		discord: params.Discord,
 	}
 }
 
@@ -188,6 +261,20 @@ func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycl
 	defer cancel()
 
 	store, pool, err := db.NewQuerySet(ctx, metrics, conf.Postgres.URI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return store, nil
+}
+
+func newMapsPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*mapdb.Store, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	store, pool, err := mapdb.NewQuerySet(ctx, metrics, conf.Postgres.MapsURI)
 	if err != nil {
 		return nil, err
 	}
@@ -291,4 +378,31 @@ func newDiscordClient(conf *config.Config) (*discordgo.Session, error) {
 	// Note that we do not connect to the gateway. The bot is http interactions only for now.
 
 	return s, nil
+}
+
+func newS3Client(conf *config.Config) (*s3.Client, error) {
+	appCreds := aws.NewCredentialsCache(awsCredentials.NewStaticCredentialsProvider(conf.S3.AccessKey, conf.S3.SecretKey, ""))
+
+	cfg, err := awsConfig.LoadDefaultConfig(context.TODO(), // todo figure out context since it's created by Fx, there isnt one
+		awsConfig.WithRegion(conf.S3.Region),
+		awsConfig.WithCredentialsProvider(appCreds),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load aws config: %w", err)
+	}
+
+	otelaws.AppendMiddlewares(&cfg.APIOptions)
+
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.BaseEndpoint = aws.String(conf.S3.Endpoint)
+	}), nil
+}
+
+func newS3Downloader(s3Client *s3.Client) *s3manager.Downloader {
+	return s3manager.NewDownloader(s3Client)
+}
+
+func newS3Uploader(s3Client *s3.Client) *s3manager.Uploader {
+	return s3manager.NewUploader(s3Client)
 }

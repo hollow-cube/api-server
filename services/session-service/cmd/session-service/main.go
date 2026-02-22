@@ -8,7 +8,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
-	mapService "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
+	mapService "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/intnl"
 	playerService2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	intnlV3 "github.com/hollow-cube/hc-services/services/session-service/api/v3/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/config"

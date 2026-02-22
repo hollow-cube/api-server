@@ -8,6 +8,7 @@ metrics:
 
 postgres:
   uri: "postgres://postgres:postgres@localhost:5432/player-service?sslmode=disable"
+  maps_uri: "postgres://postgres:postgres@localhost:5432/map-service?sslmode=disable"
 
 nats:
   servers: nats://localhost:4222
@@ -35,6 +36,13 @@ discord:
   application_id: ""
   public_key: ""
   token: ""
+
+s3:
+  endpoint: http://127.0.0.1:9000
+  region: us-east-1
+  access_key: mapmaker
+  secret_key: mapmaker
+  maps_bucket: mapmaker
 
 punishment_ladders:
   - id: "chat-minor"

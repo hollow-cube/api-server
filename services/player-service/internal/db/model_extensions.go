@@ -79,3 +79,14 @@ func (pd PlayerData) Flags() player.Flags {
 func (pd PlayerData) Has(flags player.Flags) bool {
 	return pd.Flags().Has(flags)
 }
+
+func (pd PlayerData) TotalMapSlots() int {
+	// Its kinda weird to have this map specific stuff in player service but we will merge the two later and i do NOT
+	// want to deal with the distributed transaction nightmare that comes with trying to update this in map service.
+	mapSlots := 2 + int(pd.ExtraMapSlots)
+	if pd.Has(player.FlagExtendedLimits) {
+		mapSlots += 3
+	}
+
+	return mapSlots
+}

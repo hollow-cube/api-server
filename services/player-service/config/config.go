@@ -13,7 +13,8 @@ import (
 )
 
 type Postgres struct {
-	URI string `mapstructure:"uri"`
+	URI     string `mapstructure:"uri"`
+	MapsURI string `mapstructure:"maps_uri"`
 }
 
 type NATS struct {
@@ -59,6 +60,14 @@ type Discord struct {
 	Token         string `mapstructure:"token"`
 }
 
+type S3 struct {
+	Endpoint   string `mapstructure:"endpoint"`
+	Region     string `mapstructure:"region"`
+	AccessKey  string `mapstructure:"access_key"`
+	SecretKey  string `mapstructure:"secret_key"`
+	MapsBucket string `mapstructure:"maps_bucket"`
+}
+
 type Config struct {
 	Env               string             `mapstructure:"env"`
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
@@ -71,6 +80,7 @@ type Config struct {
 	PunishmentLadders []PunishmentLadder `mapstructure:"punishment_ladders"`
 	Redis             Redis              `mapstructure:"redis"`
 	Discord           Discord            `mapstructure:"discord"`
+	S3                S3                 `mapstructure:"s3"`
 }
 
 //go:embed default.yaml

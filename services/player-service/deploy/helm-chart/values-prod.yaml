@@ -17,4 +17,6 @@ base:
     PLAYERS_NATS_SERVERS: "nats://nats:4222"
     PLAYERS_REDIS_ADDRESS: "redis-master.mapmaker.svc.cluster.local:6379"
 
+    PLAYERS_S3_ENDPOINT: "https://bdb9cb2904188b760591dc1589a1ccf3.r2.cloudflarestorage.com"
+
     PLAYERS_DISCORD_APPLICATION_ID: "1086860126020964423"
