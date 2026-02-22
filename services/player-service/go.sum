@@ -113,8 +113,6 @@ github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+l
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/hashicorp/hcl v1.0.0 h1:0Anlzjpi4vEasTeNFn2mLJgTSwt0+6sfsiTG8qcWGx4=
 github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T20WEQ=
-github.com/hollow-cube/hc-services/services/session-service v0.0.0-20260219013522-bcc38fcfc7dd h1:wvwFhA296xbDqSRknbKfXnCuyBTJlEZHgwjf174WWH4=
-github.com/hollow-cube/hc-services/services/session-service v0.0.0-20260219013522-bcc38fcfc7dd/go.mod h1:affoyiHKHe2LAZEeb6Wkq/VNQ8NlzhXPxLIrCgmhCQg=
 github.com/hollow-cube/tebex-go v0.0.0-20250317152051-2147ad5b9b90 h1:h5fnjBMJ+cNtu+GQ8VdEJdcWJCJ/16SQC/lgrVryO3g=
 github.com/hollow-cube/tebex-go v0.0.0-20250317152051-2147ad5b9b90/go.mod h1:UXGXnK30KAfmOo/K6r/oDIHCGW6JlLQ+pm2cuOKOWns=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=

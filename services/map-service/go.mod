@@ -6,6 +6,8 @@ replace github.com/hollow-cube/hc-services/libraries/common => ../../libraries/c
 
 replace github.com/hollow-cube/hc-services/services/player-service => ../player-service
 
+replace github.com/hollow-cube/hc-services/services/map-service => ../map-service
+
 require (
 	github.com/Tnze/go-mc v1.20.2
 	github.com/aws/aws-sdk-go-v2 v1.40.0

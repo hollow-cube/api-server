@@ -4,6 +4,10 @@ go 1.26.0
 
 replace github.com/hollow-cube/hc-services/libraries/common => ../../libraries/common
 
+replace github.com/hollow-cube/hc-services/services/map-service => ../map-service
+
+replace github.com/hollow-cube/hc-services/services/session-service => ../session-service
+
 require (
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4
 	github.com/go-chi/chi/v5 v5.2.1
