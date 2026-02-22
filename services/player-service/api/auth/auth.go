@@ -22,6 +22,7 @@ import (
 const ApiKeyPrefix = "sk-hc-"
 
 var publicEndpoints = []string{
+	"/_external/*",
 	"/v2/players/stats",
 	"/v2/players/recap/*",
 	"/v2/payments/tebex/webhook",
