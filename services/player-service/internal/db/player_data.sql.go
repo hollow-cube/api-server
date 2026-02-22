@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const activateTOTP = `-- name: ActivateTOTP :one
@@ -30,9 +32,9 @@ const addTOTP = `-- name: AddTOTP :execrows
 insert into player_totp (player_id, active, key, recovery_codes)
 values ($1, $2, $3, $4)
 on conflict (player_id)
-    do update set key            = excluded.key,
-                  recovery_codes = excluded.recovery_codes,
-                  created_at     = now()
+  do update set key            = excluded.key,
+                recovery_codes = excluded.recovery_codes,
+                created_at     = now()
 where player_totp.active = false
 `
 
@@ -56,10 +58,26 @@ func (q *Queries) AddTOTP(ctx context.Context, arg AddTOTPParams) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const appendHypercube = `-- name: AppendHypercube :exec
+update player_data
+set hypercube_start = case
+                        when hypercube_start is null or hypercube_end < now()
+                          then now()
+                        else hypercube_end
+  end,
+    hypercube_end   = greatest(coalesce(hypercube_end, now()), now()) + $2::interval
+where id = $1
+`
+
+func (q *Queries) AppendHypercube(ctx context.Context, iD string, column2 pgtype.Interval) error {
+	_, err := q.db.Exec(ctx, appendHypercube, iD, column2)
+	return err
+}
+
 const createPlayerData = `-- name: CreatePlayerData :one
 insert into player_data (id, username, first_join, last_online, skin, online)
 values ($1, $2, now(), now(), $3, false)
-returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online
+returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
 `
 
 func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string, skin *PlayerSkin) (PlayerData, error) {
@@ -78,6 +96,11 @@ func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username stri
 		&i.Cubits,
 		&i.Skin,
 		&i.Online,
+		&i.HypercubeStart,
+		&i.HypercubeEnd,
+		&i.Role,
+		&i.ExtraMapSlots,
+		&i.MaxMapSize,
 	)
 	return i, err
 }
@@ -94,7 +117,7 @@ func (q *Queries) DeleteTOTP(ctx context.Context, playerID string) error {
 }
 
 const getPlayerData = `-- name: GetPlayerData :one
-select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
 from player_data
 where id = $1
 limit 1
@@ -116,6 +139,11 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (PlayerData, err
 		&i.Cubits,
 		&i.Skin,
 		&i.Online,
+		&i.HypercubeStart,
+		&i.HypercubeEnd,
+		&i.Role,
+		&i.ExtraMapSlots,
+		&i.MaxMapSize,
 	)
 	return i, err
 }
@@ -228,6 +256,18 @@ func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]Se
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPlayerUnlocks = `-- name: SetPlayerUnlocks :exec
+update player_data
+set extra_map_slots = greatest(extra_map_slots, $2),
+    max_map_size = greatest(max_map_size, $3)
+where id = $1
+`
+
+func (q *Queries) SetPlayerUnlocks(ctx context.Context, iD string, extraMapSlots int16, maxMapSize int16) error {
+	_, err := q.db.Exec(ctx, setPlayerUnlocks, iD, extraMapSlots, maxMapSize)
+	return err
 }
 
 const updatePlayerData = `-- name: UpdatePlayerData :exec

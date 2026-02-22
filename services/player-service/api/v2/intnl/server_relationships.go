@@ -7,9 +7,8 @@ import (
 	"math"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/util"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -39,30 +38,17 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 		return GetBlockedPlayers200JSONResponse{Items: make([]BlockedPlayer, 0), Page: 1, TotalItems: 0}, nil
 	}
 
-	targetIds := make([]string, len(rows))
-	for i, row := range rows {
-		targetIds[i] = row.TargetID
-	}
-	staffStates, err := s.authzClient.MultiCheckPlatformPermission(ctx, targetIds, authz.NoKey, authz.PlatformBanPlayer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if blocked players are staff members: %w", err)
-	}
-
 	blocks := make([]BlockedPlayer, 0, len(rows))
 	for _, row := range rows {
 		// Ignore blocked players that are staff members (they became staff after they were already blocked)
-		staffState, ok := staffStates[row.TargetID]
-		if !ok {
-			s.log.Warnw("staff state not found in SpiceDB for player %s", "targetId", row.TargetID)
-		}
-		if staffState == authz.Allow || staffState == authz.Conditional { // we must accept conditional due to the audit log hack applied
+		if row.PlayerData.Has(player.FlagGenericStaff) {
 			continue
 		}
 
 		blocks = append(blocks, BlockedPlayer{
 			BlockedAt: row.CreatedAt,
 			PlayerId:  row.TargetID,
-			Username:  row.Username,
+			Username:  row.PlayerData.Username,
 		})
 	}
 
@@ -84,12 +70,12 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 	}
 
 	// Check if the target is a staff member - players cannot block staff members
-	staffState, err := s.authzClient.CheckPlatformPermission(ctx, request.TargetId, authz.NoKey, authz.PlatformBanPlayer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if target is staff member: %w", err)
+	pd, err := s.store.GetPlayerData(ctx, request.TargetId)
+	if err != nil && !errors.Is(err, db.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
-	if staffState == authz.Allow || staffState == authz.Conditional { // We must accept conditional due to the audit log hack applied
-		return BlockPlayer400Response{}, nil
+	if pd.Has(player.FlagGenericStaff) {
+		return BlockPlayer409Response{}, nil
 	}
 
 	if err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, txStore *db.Store) error {
@@ -134,22 +120,23 @@ func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksB
 		return GetBlocksBetweenPlayers200JSONResponse(make([]BlockedPlayer, 0)), nil
 	}
 
-	// filter out any blocks that are staff members (they became staff after they were already blocked)
-	staffStates, err := s.authzClient.MultiCheckPlatformPermission(ctx, []string{request.TargetId, request.PlayerId}, authz.NoKey, authz.PlatformBanPlayer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if blocked players are staff members: %w", err)
-	}
-
 	blocksToReturn := make([]BlockedPlayer, 0, len(blocks))
 	for _, block := range blocks {
-		staffState := staffStates[block.TargetID]
-		if staffState != authz.Allow && staffState != authz.Conditional { // not staff, so a valid block
-			blocksToReturn = append(blocksToReturn, BlockedPlayer{
-				BlockedAt: block.CreatedAt,
-				PlayerId:  block.TargetID,
-				Username:  block.Username,
-			})
+		// filter out any blocks that are staff members (they became staff after they were already blocked)
+
+		pd, err := s.store.GetPlayerData(ctx, block.TargetID)
+		if err != nil && !errors.Is(err, db.ErrNoRows) {
+			return nil, fmt.Errorf("failed to get block player data: %w", err)
 		}
+		if !pd.Has(player.FlagGenericStaff) {
+			continue
+		}
+
+		blocksToReturn = append(blocksToReturn, BlockedPlayer{
+			BlockedAt: block.CreatedAt,
+			PlayerId:  block.TargetID,
+			Username:  block.Username,
+		})
 	}
 
 	return GetBlocksBetweenPlayers200JSONResponse(blocksToReturn), nil
@@ -292,18 +279,20 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 
 	totalUsage := usageResult.OutgoingFriendRequestCount + usageResult.FriendCount
 	if totalUsage >= freeFriendLimit {
-		isHyperCube, err := s.authzClient.HasHypercube(ctx, request.PlayerId, authz.NoKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check if player has hypercube: %w", err)
+		pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+		if !errors.Is(err, db.ErrNoRows) && err != nil {
+			return nil, fmt.Errorf("failed to get player data: %w", err)
 		}
+
 		limit := freeFriendLimit
-		if isHyperCube {
+		if pd.Has(player.FlagExtendedLimits) {
 			limit = hypercubeFriendLimit
 		}
 
 		if totalUsage >= limit {
 			return SendFriendRequest401JSONResponse{
-				Code: "friend_limit_reached", Message: "you have reached the friend limit for your account",
+				Code:                 "friend_limit_reached",
+				Message:              "you have reached the friend limit for your account",
 				Limit:                int32(limit),
 				FriendCount:          int32(usageResult.FriendCount),
 				OutgoingRequestCount: int32(usageResult.OutgoingFriendRequestCount),
@@ -343,10 +332,10 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 
 		notifReq := CreatePlayerNotificationRequestObject{
 			PlayerId: request.TargetId,
-			Params:   CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(false)},
+			Params:   CreatePlayerNotificationParams{ReplaceUnread: new(false)},
 			Body: &CreatePlayerNotificationJSONRequestBody{
 				Type:      "friend_added",
-				ExpiresIn: util.Ptr(0), // expire immediately, just for the toast
+				ExpiresIn: new(0), // expire immediately, just for the toast
 				Key:       request.PlayerId,
 			},
 		}
@@ -404,7 +393,7 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 	// Send notification of friend request
 	if err := s.createPlayerNotification(ctx, CreatePlayerNotificationRequestObject{
 		PlayerId: request.TargetId,
-		Params:   CreatePlayerNotificationParams{ReplaceUnread: util.Ptr(true)},
+		Params:   CreatePlayerNotificationParams{ReplaceUnread: new(true)},
 		Body: &CreatePlayerNotificationJSONRequestBody{
 			Type: "friend_request",
 			Key:  request.PlayerId, // Use the player ID as the key for a friend_request type

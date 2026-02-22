@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	mapService "github.com/hollow-cube/hc-services/services/map-service/api/v3/intnl"
@@ -61,13 +60,9 @@ func main() {
 			natsutil.NewJetStreamWrapper,
 		),
 
-		// Kafka
-		kafkafx.Module,
-
 		fx.Provide(newRedisClient),
 		fx.Provide(newPlayerSvc2, newMapServiceClient),
 		fx.Provide(newDbQuerySet),
-		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(newGithubClient),
 
 		fx.Invoke(handler.NewChatHandler),

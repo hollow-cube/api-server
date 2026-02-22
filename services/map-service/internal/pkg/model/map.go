@@ -35,7 +35,6 @@ type Map struct {
 	UpdatedAt       time.Time
 	ProtocolVersion int
 	Verification    Verification
-	AuthzKey        string // SpiceDB ZedToken if using spicedb authz
 	Settings        MapSettings
 	Contest         *string // The map contest this map was published as part of, or nil
 

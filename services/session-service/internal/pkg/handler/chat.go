@@ -9,17 +9,15 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
+	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/text"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -47,11 +45,9 @@ type ChatHandler struct {
 
 	contentFilter text.Filter
 
-	authzClient authz.Client
-	queries     *db.Queries
-	redis       rueidis.Client
-	producer    kafkafx.SyncProducer
-	js          *natsutil.JetStreamWrapper
+	queries *db.Queries
+	redis   rueidis.Client
+	js      *natsutil.JetStreamWrapper
 
 	playerClient  playerService.ClientWithResponsesInterface
 	playerTracker *player.Tracker
@@ -62,15 +58,12 @@ type ChatHandlerParams struct {
 
 	Log *zap.SugaredLogger
 
-	AuthzClient      authz.Client
 	Queries          *db.Queries
 	KubernetesClient *kubernetes.Clientset
 	Redis            rueidis.Client
 	PlayerClient     playerService.ClientWithResponsesInterface
 	PlayerTracker    *player.Tracker
 	JS               *natsutil.JetStreamWrapper
-	Consumer         kafkafx.Consumer
-	Producer         kafkafx.SyncProducer
 }
 
 func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) {
@@ -79,11 +72,9 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 
 		contentFilter: text.NewStaticFilter(),
 
-		authzClient: p.AuthzClient,
-		queries:     p.Queries,
-		redis:       p.Redis,
-		producer:    p.Producer,
-		js:          p.JS,
+		queries: p.Queries,
+		redis:   p.Redis,
+		js:      p.JS,
 
 		playerClient:  p.PlayerClient,
 		playerTracker: p.PlayerTracker,
@@ -119,9 +110,6 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 	}
 	lc.Append(fx.StartStopHook(consumer.Start, consumer.Stop))
 
-	// Legacy kafka subscribe TODO: remove me after its phased out
-	p.Consumer.Subscribe(kafkafx.TopicChatInput, "session-service-chat", handler.handleKafkaMessage, kafkafx.WithIsolationLevel(kafka.ReadCommitted))
-
 	return handler, nil
 }
 
@@ -139,12 +127,13 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		return nil // Error system message was already sent
 	}
 
+	sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
+	if err != nil {
+		return fmt.Errorf("failed to get sender player data: %w", err)
+	}
+
 	// We've already resolved the reply channel here so all dms look the same.
 	if common.IsUUID(string(channel)) {
-		sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
-		if err != nil {
-			return fmt.Errorf("failed to get sender player data: %w", err)
-		}
 		// If sender is not accepting DMs, dont allow them to send DMs either
 		if allow, ok := sender.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
 			h.sendMessageToServer(ctx, &model.ChatMessage{
@@ -230,12 +219,7 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		}
 	})
 
-	hasHyperCube, err := h.authzClient.HasHypercube(ctx, msg.Sender, authz.NoKey)
-
-	if err != nil {
-		return fmt.Errorf("could not filter emojis: %w", err)
-	}
-
+	hasHyperCube := pplayer.Has(sender.JSON200.Permissions, pplayer.FlagExtendedLimits)
 	h.sendMessageToServer(ctx, &model.ChatMessage{
 		Type:               model.ChatUnsigned,
 		Channel:            channel,
@@ -307,11 +291,6 @@ func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMe
 	if err = h.js.PublishAsync(ctx, "chat.processed.global", raw); err != nil {
 		h.log.Errorw("failed to publish chat message", "error", err)
 	}
-
-	if err = h.producer.WriteMessages(ctx, kafka.Message{Topic: kafkafx.TopicChatOutput, Value: raw}); err != nil {
-		h.log.Errorw("failed to write chat message", "error", err)
-		return
-	}
 }
 
 func regexReplaceInMessage(current []model.MessagePart, expr *regexp.Regexp, f func(match string) model.MessagePart) []model.MessagePart {
@@ -357,28 +336,6 @@ func mapMessageParts(current []model.MessagePart, mapper func(part model.Message
 		}
 	}
 	return result
-}
-
-func (h *ChatHandler) handleKafkaMessage(ctx context.Context, m kafka.Message) error {
-	h.log.Infow("new message", "offset", m.Offset, "lag", m.HighWaterMark-m.Offset-1)
-
-	// Parse the message
-	var msg model.ClientChatMessage
-	if err := json.Unmarshal(m.Value, &msg); err != nil {
-		return fmt.Errorf("failed to unmarshal chat message: %w", err)
-	}
-
-	// Handle the message
-	switch msg.Type {
-	case model.ChatUnsigned:
-		if err := h.HandleUnsignedChatMessage(ctx, &msg); err != nil {
-			return fmt.Errorf("failed to handle unsigned chat message: %w", err)
-		}
-	default:
-		h.log.Errorw("unknown message type", "type", msg.Type)
-	}
-
-	return nil
 }
 
 func (h *ChatHandler) handleJSMessage(ctx context.Context, m jetstream.Msg) error {

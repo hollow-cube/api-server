@@ -2,17 +2,14 @@ package intnl
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/segmentio/kafka-go"
 )
 
 func (s *server) GetActivePunishment(ctx context.Context, request GetActivePunishmentRequestObject) (GetActivePunishmentResponseObject, error) {
@@ -278,15 +275,7 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
 
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: kafkafx.TopicPunishmentUpdate,
-		Value: raw,
-	})
+	return nil
 }
 
 func punishmentToAPI(p db.Punishment) Punishment {

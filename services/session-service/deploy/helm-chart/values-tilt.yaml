@@ -16,9 +16,6 @@ base:
     SESSION_PLAYER_SERVICE_URL: "http://player-service:9124"
     SESSION_MAP_SERVICE_URL: "http://map-service:9124"
     SESSION_POSTGRES_URI: "postgres://postgres:postgres@postgres-postgresql:5432/session-service?sslmode=disable"
-    SESSION_KAFKA_BROKERS: "kafka:9093"
     SESSION_NATS_SERVERS: "nats://nats:4222"
-    SESSION_SPICEDB_ENDPOINT: "local:50051"
-    SESSION_SPICEDB_TOKEN: "supersecretkey"
 
     SESSION_KUBERNETES_NAMESPACE: "mapmaker"

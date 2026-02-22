@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
 	playerServiceV2 "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
@@ -108,7 +106,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			Type:            db.SaveStateType(*request.Body.Type),
 			Created:         createdTime,
 			Updated:         time.Now(),
-			ProtocolVersion: util.Ptr(769), // Remains our default version
+			ProtocolVersion: new(769), // Remains our default version
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch save state: %w", err)
@@ -299,19 +297,19 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			// Broadcast a message about the higher placement position
 			// IF map quality >= outstanding && placement is 1st/2nd/3rd
 			if newPlacement < 3 && m.QualityOverride != nil && *m.QualityOverride >= 4 {
-				raw, err := json.Marshal(map[string]interface{}{
-					"type":      "map_top_placement",
-					"mapId":     request.MapId,
-					"playerId":  request.PlayerId,
-					"placement": newPlacement,
-				})
-				if err != nil {
-					zap.S().Errorw("failed to marshal message", "err", err)
-				}
-				go s.producer.WriteMessages(context.Background(), kafka.Message{
-					Topic: kafkafx.TopicChatAnnouncements,
-					Value: raw,
-				})
+				//raw, err := json.Marshal(map[string]interface{}{
+				//	"type":      "map_top_placement",
+				//	"mapId":     request.MapId,
+				//	"playerId":  request.PlayerId,
+				//	"placement": newPlacement,
+				//})
+				//if err != nil {
+				//	zap.S().Errorw("failed to marshal message", "err", err)
+				//}
+				//go s.producer.WriteMessages(context.Background(), kafka.Message{
+				//	Topic: kafkafx.TopicChatAnnouncements,
+				//	Value: raw,
+				//})
 			}
 		}
 

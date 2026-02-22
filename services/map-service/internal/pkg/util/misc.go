@@ -13,7 +13,3 @@ func NilToEmpty(s *string) string {
 	}
 	return *s
 }
-
-func Ptr[T any](v T) *T {
-	return &v
-}

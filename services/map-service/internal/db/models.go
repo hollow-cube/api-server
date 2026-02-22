@@ -159,7 +159,6 @@ type MapOrgs struct {
 
 type MapPlayerData struct {
 	ID            string   `json:"id"`
-	UnlockedSlots int      `json:"unlockedSlots"`
 	Map           []string `json:"maps"`
 	LastPlayedMap *string  `json:"lastPlayedMap"`
 	LastEditedMap *string  `json:"lastEditedMap"`

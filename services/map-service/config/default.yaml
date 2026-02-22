@@ -9,11 +9,6 @@ metrics:
 postgres:
   uri: "postgres://postgres:postgres@localhost:5432/map-service?sslmode=disable"
 
-spicedb:
-  endpoint: localhost:50051
-  token: "foobar"
-  tls: false
-
 s3:
   endpoint: http://127.0.0.1:9000
   region: us-east-1
@@ -26,10 +21,6 @@ redis:
 
 nats:
   servers: nats://localhost:4222
-
-kafka:
-  brokers: kafka:9092
-  schema_registry_url: http://localhost:8081
 
 otlp:
   endpoint: ""

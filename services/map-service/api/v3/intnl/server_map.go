@@ -13,7 +13,6 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/util"
@@ -55,15 +54,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		}
 
 		// Ensure they have permission for the size map they are creating
-		allowedForSize, err := s.ensurePermForMapSize(ctx, pd.ID, size)
-		if err != nil {
-			return nil, err
-		}
-		if !allowedForSize {
-			return CreateMap400JSONResponse{BadRequestJSONResponse{
-				Error: "You have not unlocked the requested map size",
-			}}, nil
-		}
+		// TODO: should check here, but for now we assume the server doesnt make a mistake.
 
 		slot = &db.InsertMapSlotParams{
 			PlayerID:  pd.ID,
@@ -76,13 +67,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		}
 	}
 
-	// Write to DB and permission manager at the same time (2 phase commit)
 	createdMap, err := db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (*db.Map, error) {
-		_, err := s.authzClient.SetMapOwner(ctx, mapParams.ID, mapParams.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("authz write failed: %w", err)
-		}
-
 		m, err := tx.CreateMap(ctx, mapParams)
 		if err != nil {
 			return nil, fmt.Errorf("db write failed: %w", err)
@@ -98,20 +83,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 		return &m, nil
 	})
 	if err != nil {
-		// Rollback authz update
-		if rbErr := s.authzClient.DeleteMap(ctx, mapParams.ID); rbErr != nil {
-			zap.S().Errorw("failed to rollback authz", "err", rbErr)
-		}
-
 		return nil, fmt.Errorf("failed to create map: %w", err)
-	}
-
-	// If not an org map, send the updated player data
-	if !request.Body.IsOrg {
-		err = s.writePlayerDataUpdateMessage(ctx, createdMap.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("failed to send player data update message: %w", err)
-		}
 	}
 
 	go s.metrics.Write(model.MapCreatedEvent{
@@ -341,15 +313,15 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		for k, v := range *request.Body.Extra {
 			switch k {
 			case "only_sprint":
-				update.OnlySprint = util.Ptr(v.(bool))
+				update.OnlySprint = new(v.(bool))
 			case "no_sprint":
-				update.NoSprint = util.Ptr(v.(bool))
+				update.NoSprint = new(v.(bool))
 			case "no_jump":
-				update.NoJump = util.Ptr(v.(bool))
+				update.NoJump = new(v.(bool))
 			case "no_sneak":
-				update.NoSneak = util.Ptr(v.(bool))
+				update.NoSneak = new(v.(bool))
 			case "boat":
-				update.Boat = util.Ptr(v.(bool))
+				update.Boat = new(v.(bool))
 			default:
 				extra[k] = v
 			}
@@ -468,14 +440,7 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 		}}, nil
 	}
 
-	// Must have admin perms on the map to delete it
-	hasPermission, err := s.authzClient.CheckMapAdmin(ctx, request.MapId, userId, authz.NoKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check permission: %w", err)
-	}
-	if !hasPermission {
-		return nil, fmt.Errorf("unauthorized") //todo
-	}
+	// TODO: should check map delete perms here, but its an internal api so kinda dnc we are assuming we wont misuse it for now.
 
 	var reason string
 	if reasonRequired {
@@ -484,16 +449,17 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 		reason = "user_deletion"
 	}
 
-	// Delete map from DB first, if the perm delete fails after its not catastrophic
-	if err = s.store.DeleteMap(ctx, request.MapId, &userId, &reason); err != nil {
-		return nil, fmt.Errorf("failed to delete map: %w", err)
-	}
-	if err = s.authzClient.DeleteMap(ctx, request.MapId); err != nil {
-		return nil, fmt.Errorf("failed to delete map: %w", err)
-	}
+	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) (err error) {
+		if err = tx.DeleteMap(ctx, request.MapId, &userId, &reason); err != nil {
+			return fmt.Errorf("failed to delete map: %w", err)
+		}
 
-	// Remove the map from any players slots
-	err = s.revokeMapFromSlots(ctx, request.MapId)
+		if _, err = tx.RemoveMapFromSlots(ctx, m.ID); err != nil {
+			return fmt.Errorf("failed to remove map from slots: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -658,15 +624,13 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 		return nil, fmt.Errorf("failed to find next published id: %w", err)
 	}
 
-	// Make the updates in DB & spicedb as 2pc
 	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
-		_, err = s.authzClient.PublishMap(ctx, m.ID)
-		if err != nil {
-			return fmt.Errorf("failed to publish map: %w", err)
+		if err = tx.PublishMap(ctx, m.ID, &publishedId, request.Body.Contest); err != nil {
+			return fmt.Errorf("failed to update map: %w", err)
 		}
 
-		if err = s.store.PublishMap(ctx, m.ID, &publishedId, request.Body.Contest); err != nil {
-			return fmt.Errorf("failed to update map: %w", err)
+		if _, err = tx.RemoveMapFromSlots(ctx, m.ID); err != nil {
+			return fmt.Errorf("failed to remove map from slots: %w", err)
 		}
 
 		return nil
@@ -675,11 +639,6 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 		// todo this is quite bad, not sure how to roll back the removal of
 		zap.S().Errorw("bad thing happened, now we have a published map with no permissions to view it.", "error", err)
 		return nil, err
-	}
-
-	if err = s.revokeMapFromSlots(ctx, m.ID); err != nil {
-		s.log.Errorw("failed to revoke map from slots", "error", err)
-		// Non-fatal, still do the other bits here
 	}
 
 	s.clearCachedSearches(ctx)

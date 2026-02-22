@@ -4,60 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"strconv"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 )
 
-// getPlayerHypercubeTime returns the end time of the player's current hypercube subscription
-// or nil if they do not currently have hypercube.
-func (s *server) getPlayerHypercubeTime(ctx context.Context, playerId string) (*time.Time, error) {
-	hasHypercube, err := s.authzClient.HasHypercube(ctx, playerId, authz.NoKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check hypercube status: %w", err)
-	}
-	if !hasHypercube {
-		return nil, nil
-	}
-
-	// Try to get the time, though there may not be an entry because some people get it implicitly
-	// from other relationships. In that case we should simply grant it for a year from now.
-	hcStartTime, hcTerm, err := s.authzClient.GetHypercubeStats(ctx, playerId, authz.NoKey)
-	if errors.Is(err, authz.ErrNotFound) {
-		// Implicit grant
-		temp := time.Now().Add(365 * 24 * time.Hour)
-		return &temp, nil
-	} else if err == nil {
-		temp := hcStartTime.Add(hcTerm)
-		if time.Now().After(temp) {
-			// This is also an implicit grant case, kinda gross but oh well
-			temp = time.Now().Add(365 * 24 * time.Hour)
-		}
-		return &temp, nil
-	}
-
-	return nil, fmt.Errorf("failed to check hypercube time: %w", err)
-}
-
 func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*PlayerData, error) {
-	hypercubeTime, err := s.getPlayerHypercubeTime(ctx, pd.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	var ok bool
-	var displayName2 DisplayNameV2
-	// do not reenable this for now. its because getting hypercube doesnt currently wipe it.
-	if displayName2, ok = s.nameCache2.Get(pd.ID); !ok || true {
-		displayName2, err = s.computeDisplayNameV2(ctx, pd.ID, pd.Username)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute display name 2: %w", err)
-		}
-	}
-
 	// Can test empty code to see if TOTP is disabled
-	_, err = s.testTotpCode(ctx, pd.ID, "", false)
+	_, err := s.testTotpCode(ctx, pd.ID, "", false)
 	totpEnabled := true
 	if errors.Is(err, errNotConfigured) {
 		totpEnabled = false
@@ -82,10 +37,17 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 		}
 	}
 
+	// Its kinda weird to have this map specific stuff in player service but we will merge the two later and i do NOT
+	// want to deal with the distributed transaction nightmare that comes with trying to update this in map service.
+	mapSlots := 2 + int(pd.ExtraMapSlots)
+	if pd.Has(player.FlagExtendedLimits) {
+		mapSlots += 3
+	}
+
 	return &PlayerData{
 		Id:            pd.ID,
 		Username:      pd.Username,
-		DisplayNameV2: displayName2,
+		DisplayNameV2: computeDisplayNameV2(pd),
 		Skin:          skin,
 		FirstJoin:     pd.FirstJoin,
 		LastOnline:    pd.LastOnline,
@@ -96,8 +58,12 @@ func (s *server) hydratePlayerData(ctx context.Context, pd db.PlayerData) (*Play
 
 		Coins:          0,
 		Cubits:         pd.Cubits,
-		HypercubeUntil: hypercubeTime,
+		HypercubeUntil: pd.HypercubeEnd,
 
 		TotpEnabled: totpEnabled,
+
+		Permissions:    strconv.FormatUint(uint64(pd.Flags()), 10),
+		MapSlots:       mapSlots,
+		TempMaxMapSize: int(pd.MaxMapSize),
 	}, nil
 }

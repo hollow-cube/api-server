@@ -69,14 +69,14 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 
 				err = handler(ctx, msg)
 				if err != nil {
-					w.log.Errorf("failed to handle kafka message: %v", err)
+					w.log.Errorf("failed to handle nats message: %v", err)
 					span.RecordError(err)
 					span.SetStatus(codes.Error, err.Error())
 
 					// If we have acks enabled, we should Nak the message to trigger redelivery.
 					if config.AckPolicy != jetstream.AckNonePolicy {
 						if err = msg.Nak(); err != nil {
-							w.log.Errorf("failed to nak kafka message: %v", err)
+							w.log.Errorf("failed to nak nats message: %v", err)
 						}
 					}
 				}
@@ -92,6 +92,9 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 	}, nil
 }
 
+// PublishJSONAsync
+// Note that the ctx passed is only used for tracing data, and is not required after this
+// method returns so its valid to use a request (or otherwise temporary) context.
 func (w *JetStreamWrapper) PublishJSONAsync(ctx context.Context, msg Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -106,6 +109,20 @@ func (w *JetStreamWrapper) PublishAsync(ctx context.Context, subject string, dat
 		Subject: subject,
 		Data:    data,
 		Header:  nats.Header{},
+	}
+
+	carrier := headerCarrier(msg.Header)
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	_, err := w.js.PublishMsgAsync(msg)
+	return err
+}
+
+func (w *JetStreamWrapper) PublishAsyncWithHeader(ctx context.Context, subject string, data []byte, header nats.Header) error {
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+		Header:  header,
 	}
 
 	carrier := headerCarrier(msg.Header)

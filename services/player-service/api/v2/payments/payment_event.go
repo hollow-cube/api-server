@@ -3,71 +3,69 @@ package payments
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
-	"github.com/segmentio/kafka-go"
 )
 
-func (s *server) processStoredEventStream(c kafkafx.Consumer) {
-	c.Subscribe(kafkafx.TopicTebexMessages, "session-service", func(ctx context.Context, m kafka.Message) error {
-		s.log.Infow("read tebex message", "key", string(m.Key), "offset", m.Offset)
-		event, err := tebex.ParseEvent(m.Value)
-		if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
-			return fmt.Errorf("failed to parse tebex event: %w", err)
-		}
+func (s *server) processStoredEventStream(ctx context.Context, msg jetstream.Msg) error {
+	s.log.Infow("read tebex message", "subject", msg.Subject())
+	event, err := tebex.ParseEvent(msg.Data())
+	if err != nil { // This is really a sanity check because we parsed the message before writing it to nats
+		return fmt.Errorf("failed to parse tebex event: %w", err)
+	}
 
-		switch sub := event.Subject.(type) {
-		case *tebex.PaymentCompletedEvent:
-			err = s.handlePaymentCompletedEvent(ctx, event, sub)
-		case *tebex.PaymentDeclinedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.PaymentRefundedEvent:
-			err = s.handlePaymentRefundedEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeOpenedEvent:
-			err = s.handlePaymentDisputeOpenedEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeWonEvent:
-			err = s.handlePaymentDisputeWonEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeLostEvent:
-			err = s.handlePaymentDisputeLostEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeClosedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentStartedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentRenewedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentEndedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentStatusChangedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		}
+	switch sub := event.Subject.(type) {
+	case *tebex.PaymentCompletedEvent:
+		err = s.handlePaymentCompletedEvent(ctx, event, sub)
+	case *tebex.PaymentDeclinedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.PaymentRefundedEvent:
+		err = s.handlePaymentRefundedEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeOpenedEvent:
+		err = s.handlePaymentDisputeOpenedEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeWonEvent:
+		err = s.handlePaymentDisputeWonEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeLostEvent:
+		err = s.handlePaymentDisputeLostEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeClosedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentStartedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentRenewedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentEndedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentStatusChangedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	}
 
-		// If we have an error processing the message for whatever reason, we should put it in the DLQ.
-		// todo need to figure out what to do with these, but don't want to completely lose them for now
-		if err != nil {
-			s.log.Errorw("failed to process tebex event", "error", err)
-			dlqMessage := kafka.Message{
-				Topic: kafkafx.TopicTebexDlqMessages,
-				Key:   m.Key,
-				Value: m.Value,
-			}
-			if err = s.producer.WriteMessages(ctx, dlqMessage); err != nil {
-				return fmt.Errorf("failed to write to kafka dlq: %w", err)
+	// If we have an error processing the message for whatever reason, we should put it in the DLQ.
+	// todo need to figure out what to do with these, but don't want to completely lose them for now
+	if err != nil {
+		s.log.Errorw("failed to process tebex event", "error", err)
+
+		// If last attempt, send to DLQ to preserve
+		metadata, _ := msg.Metadata()
+		if metadata.NumDelivered >= uint64(tebexMaxDeliver) {
+			if err = s.jetStream.PublishAsync(ctx, msg.Subject(), msg.Data()); err != nil {
+				s.log.Errorw("failed to publish tebex event to dlq", "error", err)
 			}
 		}
+	}
 
-		// Parsing the message went fine. Returning a nil error will make kafkafx commit the message
-		s.log.Infow("finished handling tebex message...", "key", string(m.Key), "offset", m.Offset)
-
-		return nil
-	})
+	s.log.Infow("finished handling tebex message...")
+	if err = msg.Ack(); err != nil {
+		return fmt.Errorf("failed to ack tebex message: %w", err)
+	}
+	return nil
 }
 
 func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentCompletedEvent) error {
@@ -82,7 +80,10 @@ func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Eve
 		return err
 	}
 
-	s.writePurchaseUpdates(ctx, changes, newBalances)
+	if err = s.writePurchaseUpdates(ctx, changes, newBalances); err != nil {
+		// Log but dont fail over this.
+		s.log.Errorw("failed to write purchase updates", "error", err)
+	}
 
 	product := event.Products[0]
 	props := posthog.NewProperties().
@@ -111,7 +112,7 @@ func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Eve
 	return nil
 }
 
-func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.TebexChange, newBalances map[string]int) {
+func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.TebexChange, newBalances map[string]int) error {
 	cubitUpdates := make(map[string]int)
 	hypercubeUpdates := make(map[string]int)
 	for _, change := range changes {
@@ -126,7 +127,7 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 
 	// Send out cubit changes
 	for playerId, newBalance := range newBalances {
-		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
+		update := model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     playerId,
 			Cubits: &newBalance,
@@ -134,26 +135,28 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 				Type:     model.UpdateReason_Cubits,
 				Quantity: cubitUpdates[playerId],
 			},
-		})
-		if err != nil {
-			s.log.Errorw("failed to send player data update message", "error", err)
+		}
+		if err = s.jetStream.PublishJSONAsync(ctx, &update); err != nil {
+			return fmt.Errorf("failed to publish player data update message: %w", err)
 		}
 	}
 
 	// Send out hypercube changes
 	for player, hypercubeAdd := range hypercubeUpdates {
-		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
+		update := model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     player,
 			Reason: &model.UpdateReason{
 				Type:     model.UpdateReason_Hypercube,
 				Quantity: hypercubeAdd,
 			},
-		})
-		if err != nil {
-			s.log.Errorw("failed to send player data update message", "error", err)
+		}
+		if err = s.jetStream.PublishJSONAsync(ctx, &update); err != nil {
+			return fmt.Errorf("failed to publish player data update message: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func (s *server) handlePaymentRefundedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentRefundedEvent) error {
@@ -197,78 +200,46 @@ func (s *server) computeChangeList(ctx context.Context, products []*tebex.Produc
 	return
 }
 
-var errDuplicateProcess = errors.New("duplicate process")
-
-func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txId string, changes []*model.TebexChange) (newBalances map[string]int, err error) {
-	// Apply the changes as a two-phase commit
-	// 1. Update the spicedb relationship for any hypercube purchases
-	// 2. Begin postgres transaction
-	// 3. Write tebex event log
-	// 4. Write tebex change log
-	// 5. Update player balance for each change
-	// 6. Commit postgres transaction
-	// 7a. If success, publish a message to the player updates topic for the server to handle
-	// 7b. If failure, remove hypercube term in spicedb
-
-	// Note about 7b: We currently do not handle the case where spicedb changes cannot be reverted.
-	// In this case a hypercube change was applied but the cubits change was not.
-	// In the future this should be handled by writing it into a DLQ or keeping it in memory as long as
-	// possible to try again later if it cannot be written to DLQ.
-
-	if err = s.applyHypercubeChanges(ctx, changes, false); err != nil { // 2pc: Update spicedb hypercube
-		return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
-	}
-
-	err = db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error { // 2pc: Begin transaction
-		if err = logTebexEvent(ctx, tx, rawEvent); err != nil {
-			return fmt.Errorf("failed to log tebex event: %w", err)
-		}
-
+func (s *server) applyChangeList(ctx context.Context, rawEvent *tebex.Event, txId string, changes []*model.TebexChange) (map[string]int, error) {
+	return db.Tx(ctx, s.store, func(ctx context.Context, tx *db.Store) (newBalances map[string]int, err error) { // 2pc: Begin transaction
 		changesJson, err := json.Marshal(changes)
 		if err != nil {
-			return fmt.Errorf("failed to marshal change list: %w", err)
+			return nil, fmt.Errorf("failed to marshal change list: %w", err)
 		}
 		createdStates, err := tx.CreateTebexState(ctx, txId, changesJson)
 		if err != nil {
-			return fmt.Errorf("failed to create tebex state: %w", err)
+			return nil, fmt.Errorf("failed to create tebex state: %w", err)
 		} else if createdStates == 0 {
-			return errDuplicateProcess
+			// This is fine, we already processed this tx.
+			return nil, nil
+		}
+
+		if err = logTebexEvent(ctx, tx, rawEvent); err != nil {
+			return nil, fmt.Errorf("failed to log tebex event: %w", err)
 		}
 
 		meta := map[string]interface{}{"tx": txId}
-		if newBalances, err = applyCubitsChanges(ctx, tx, changes, meta, false); err != nil {
-			return fmt.Errorf("failed to apply cubits changes: %w", err)
+		if newBalances, err = applyCubitsChanges(ctx, tx, changes, meta); err != nil {
+			return nil, fmt.Errorf("failed to apply cubits changes: %w", err)
 		}
 
-		return nil
-	}) // 2pc: Commit transaction
-	if err != nil {
-		if errRevert := s.applyHypercubeChanges(ctx, changes, true); errRevert != nil { // 2pc: Revert spicedb hypercube
-			s.log.Errorw("failed to revert hypercube changes", "error", errRevert)
+		if err = s.applyHypercubeChanges(ctx, changes); err != nil {
+			return nil, fmt.Errorf("failed to apply hypercube changes (pre apply): %w", err)
 		}
 
-		// errDuplicateProcess is fine, it means we already processed this event
-		if !errors.Is(err, errDuplicateProcess) {
-			return nil, fmt.Errorf("db write failed: %w", err)
-		}
-	}
-	return
+		return newBalances, nil
+	})
 }
 
-func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.TebexChange, txMeta map[string]interface{}, invert bool) (newBalances map[string]int, err error) {
+func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.TebexChange, txMeta map[string]interface{}) (newBalances map[string]int, err error) {
 	newBalances = map[string]int{}
 	for _, change := range changes {
 		if change.Type != model.TebexChangeCubits {
 			continue
 		}
 
-		sign := 1
-		if invert {
-			sign = -1
-		}
-
 		newBalances[change.Target], err = store.AddCurrency(
-			ctx, change.Target, db.Cubits, sign*change.Amount,
+			ctx, change.Target, db.Cubits, change.Amount,
 			db.BalanceChangeReasonTebexOneoff, txMeta,
 		)
 		if err != nil {
@@ -278,18 +249,16 @@ func applyCubitsChanges(ctx context.Context, store *db.Store, changes []*model.T
 	return
 }
 
-func (s *server) applyHypercubeChanges(ctx context.Context, changes []*model.TebexChange, invert bool) error {
+func (s *server) applyHypercubeChanges(ctx context.Context, changes []*model.TebexChange) error {
 	for _, change := range changes {
 		if change.Type != model.TebexChangeHypercube {
 			continue
 		}
 
-		sign := 1
-		if invert {
-			sign = -1
-		}
-
-		err := s.authClient.AppendHypercube(ctx, change.Target, time.Duration(sign*change.Amount)*time.Minute, "")
+		err := s.store.AppendHypercube(ctx, change.Target, pgtype.Interval{
+			Valid:        true,
+			Microseconds: (time.Duration(change.Amount) * time.Minute).Microseconds(),
+		})
 		if err != nil {
 			return err
 		}
@@ -379,24 +348,6 @@ func extractTargetFromEvent(event interface{}) string {
 }
 
 func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
-	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
-		return fmt.Errorf("failed to publish invite message: %w", err)
-	}
-
-	content, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal invite message: %w", err)
-	}
-
-	kafkaRecord := kafka.Message{
-		Topic: kafkafx.TopicPlayerDataUpdate,
-		Key:   []byte(msg.Id),
-		Value: content,
-	}
-
-	if err = s.producer.WriteMessages(context.Background(), kafkaRecord); err != nil {
-		return fmt.Errorf("failed to write to kafka: %w", err)
-	}
 
 	return nil
 }

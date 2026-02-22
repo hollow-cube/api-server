@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
@@ -32,7 +31,6 @@ import (
 	v2Payments "github.com/hollow-cube/hc-services/services/player-service/api/v2/payments"
 	v2Public "github.com/hollow-cube/hc-services/services/player-service/api/v2/public"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	"go.uber.org/fx"
@@ -62,7 +60,6 @@ func main() {
 
 		fx.Provide(newPostgresStore),
 		fx.Provide(newRedisClient),
-		fx.Provide(newAuthzSpiceDB),
 		fx.Provide(
 			func(conf *config.Config, lc fx.Lifecycle) (*nats.Conn, error) {
 				nc, err := nats.Connect(conf.NATS.Servers)
@@ -76,9 +73,6 @@ func main() {
 			jetstream.New,
 			natsutil.NewJetStreamWrapper,
 		),
-
-		// Kafka
-		kafkafx.Module,
 
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 		fx.Provide(newTebexHeadlessClient),
@@ -148,7 +142,6 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
-	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -156,7 +149,6 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "player-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
-		Kafka:   conf.Kafka,
 	}
 }
 
@@ -184,14 +176,6 @@ func newPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycl
 	lc.Append(fx.StopHook(pool.Close))
 
 	return store, nil
-}
-
-func newAuthzSpiceDB(conf *config.Config) (authz.Client, error) {
-	return authz.NewSpiceDBClient(
-		conf.SpiceDB.Endpoint,
-		conf.SpiceDB.Token,
-		conf.SpiceDB.TLS,
-	)
 }
 
 func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {

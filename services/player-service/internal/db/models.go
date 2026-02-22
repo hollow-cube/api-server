@@ -7,6 +7,7 @@ package db
 import (
 	"time"
 
+	"github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -38,7 +39,12 @@ type PlayerData struct {
 	Cubits      int            `json:"cubits"`
 	Skin        *PlayerSkin    `json:"skin"`
 	// Updated by observing session status messages from the session-service
-	Online bool `json:"online"`
+	Online         bool        `json:"online"`
+	HypercubeStart *time.Time  `json:"hypercubeStart"`
+	HypercubeEnd   *time.Time  `json:"hypercubeEnd"`
+	Role           player.Role `json:"role"`
+	ExtraMapSlots  int16       `json:"extraMapSlots"`
+	MaxMapSize     int16       `json:"maxMapSize"`
 }
 
 type PlayerTotp struct {

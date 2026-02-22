@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/object"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -21,7 +20,6 @@ type ServerParams struct {
 	Log *zap.SugaredLogger
 
 	Store  *db.Store
-	Authz  authz.Client
 	Object object.Client `name:"object-mapmaker"`
 }
 
@@ -29,7 +27,6 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &server{
 		log:          params.Log.With("handler", "obungus"),
 		store:        params.Store,
-		authzClient:  params.Authz,
 		objectClient: params.Object,
 	}, nil
 }
@@ -38,7 +35,6 @@ type server struct {
 	log *zap.SugaredLogger
 
 	store        *db.Store
-	authzClient  authz.Client
 	objectClient object.Client
 
 	cachedTotalMaps, cachedTotalFails int

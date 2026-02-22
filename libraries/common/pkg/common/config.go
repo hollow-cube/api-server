@@ -23,7 +23,3 @@ type HTTPConfig struct {
 type OtlpConfig struct {
 	Endpoint string `yaml:"endpoint" json:"endpoint" mapstructure:"endpoint"`
 }
-
-type KafkaConfig struct {
-	Brokers string `mapstructure:"brokers"`
-}

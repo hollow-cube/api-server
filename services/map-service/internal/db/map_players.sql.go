@@ -124,7 +124,7 @@ func (q *Queries) RemoveMapFromSlots(ctx context.Context, mapID string) ([]strin
 }
 
 const unsafe_GetPlayerData = `-- name: Unsafe_GetPlayerData :one
-select id, unlocked_slots, maps, last_played_map, last_edited_map, contest_slot
+select id, maps, last_played_map, last_edited_map, contest_slot
 from map_player_data
 where id = $1
 `
@@ -134,7 +134,6 @@ func (q *Queries) Unsafe_GetPlayerData(ctx context.Context, id string) (MapPlaye
 	var i MapPlayerData
 	err := row.Scan(
 		&i.ID,
-		&i.UnlockedSlots,
 		&i.Map,
 		&i.LastPlayedMap,
 		&i.LastEditedMap,
@@ -144,8 +143,8 @@ func (q *Queries) Unsafe_GetPlayerData(ctx context.Context, id string) (MapPlaye
 }
 
 const upsertPlayerData = `-- name: UpsertPlayerData :exec
-insert into map_player_data (id, unlocked_slots, last_played_map, last_edited_map, contest_slot)
-values ($1, $2, $3, $4, $5)
+insert into map_player_data (id, last_played_map, last_edited_map, contest_slot)
+values ($1, $2, $3, $4)
 on conflict (id) do update
   set last_played_map=excluded.last_played_map,
       last_edited_map=excluded.last_edited_map,
@@ -154,7 +153,6 @@ on conflict (id) do update
 
 type UpsertPlayerDataParams struct {
 	ID            string  `json:"id"`
-	UnlockedSlots int     `json:"unlockedSlots"`
 	LastPlayedMap *string `json:"lastPlayedMap"`
 	LastEditedMap *string `json:"lastEditedMap"`
 	ContestSlot   *string `json:"contestSlot"`
@@ -163,7 +161,6 @@ type UpsertPlayerDataParams struct {
 func (q *Queries) UpsertPlayerData(ctx context.Context, arg UpsertPlayerDataParams) error {
 	_, err := q.db.Exec(ctx, upsertPlayerData,
 		arg.ID,
-		arg.UnlockedSlots,
 		arg.LastPlayedMap,
 		arg.LastEditedMap,
 		arg.ContestSlot,

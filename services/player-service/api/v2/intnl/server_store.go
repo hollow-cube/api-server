@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/authz"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 )
@@ -203,19 +202,27 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 }
 
 func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error) {
-	startTime, term, err := s.authzClient.GetHypercubeStats(ctx, request.PlayerId, authz.NoKey)
-	if errors.Is(err, authz.ErrNotFound) {
+	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+	if errors.Is(err, db.ErrNoRows) {
 		return GetPlayerHypercube404Response{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get hypercube stats: %w", err)
 	}
 
-	until := startTime.Add(term)
 	return GetPlayerHypercube200JSONResponse{
 		Exp:   0,
-		Since: &startTime,
-		Until: &until,
+		Since: pd.HypercubeStart,
+		Until: pd.HypercubeEnd,
 	}, nil
+}
+
+var upgradeMap = map[string]struct{ slots, size int }{
+	"map_slot_3": {slots: 1},
+	"map_slot_4": {slots: 2},
+	"map_slot_5": {slots: 3},
+	"map_size_2": {size: 1},
+	"map_size_3": {size: 2},
+	"map_size_4": {size: 3},
 }
 
 func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
@@ -234,12 +241,12 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 		// Filled during transaction
 	}
 
-	// We need to update SpiceDB, so we apply the change as a 2-phase commit
-
-	if err := s.authzClient.UnlockUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); err != nil { // 2pc: Update SpiceDB
-		return nil, fmt.Errorf("failed to unlock upgrade: %w", err)
+	upgrade, ok := upgradeMap[request.Body.UpgradeId]
+	if !ok {
+		return BuyNamedUpgrade404Response{}, nil
 	}
-	err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error { // 2pc: Begin transaction
+
+	err := db.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *db.Store) error {
 
 		if request.Body.Cubits != nil && *request.Body.Cubits > 0 {
 			newCubits, err := tx.AddCurrency(ctx, request.PlayerId, db.Cubits, -*request.Body.Cubits,
@@ -250,16 +257,16 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 			update.Cubits = &newCubits
 		}
 
+		// will set to max(current, given) so safe to set the 0s
+		if err := tx.SetPlayerUnlocks(ctx, request.PlayerId, int16(upgrade.slots), int16(upgrade.size)); err != nil {
+			return fmt.Errorf("failed to set player unlocks: %w", err)
+		}
+
 		return nil
-	}) // 2pc: Commit transaction
+	})
 	if errors.Is(err, db.ErrBalanceTooLow) {
 		return BuyNamedUpgrade409Response{}, nil
 	} else if err != nil {
-		if errRevert := s.authzClient.RemoveUpgrade(ctx, request.PlayerId, request.Body.UpgradeId, authz.NoKey); errRevert != nil { // 2pc: Revert SpiceDB
-			s.log.Errorw("Failed to revert upgrade unlock", "player", request.PlayerId,
-				"upgrade", request.Body.UpgradeId, "err", errRevert)
-		}
-
 		return nil, err
 	}
 
