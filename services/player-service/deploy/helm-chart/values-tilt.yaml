@@ -13,7 +13,6 @@ base:
     PLAYERS_HTTP_ADDRESS: "0.0.0.0"
     PLAYERS_HTTP_PORT: "9124"
     PLAYERS_POSTGRES_URI: "postgres://postgres:postgres@postgres-postgresql:5432/player-service?sslmode=disable"
-    PLAYERS_KAFKA_BROKERS: "kafka:9093"
     PLAYERS_NATS_SERVERS: "nats://nats:4222"
     PLAYERS_REDIS_ADDRESS: "redis-master:6379"
 

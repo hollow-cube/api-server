@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
@@ -74,9 +73,6 @@ func main() {
 			jetstream.New,
 			natsutil.NewJetStreamWrapper,
 		),
-
-		// Kafka
-		kafkafx.Module,
 
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
 		fx.Provide(newTebexHeadlessClient),
@@ -146,7 +142,6 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
-	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -154,7 +149,6 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "player-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
-		Kafka:   conf.Kafka,
 	}
 }
 

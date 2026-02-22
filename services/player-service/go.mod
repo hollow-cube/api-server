@@ -19,7 +19,6 @@ require (
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/posthog/posthog-go v1.3.1
 	github.com/redis/rueidis v1.0.72
-	github.com/segmentio/kafka-go v0.4.47
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/viper v1.19.0
 	go.opentelemetry.io/otel/sdk v1.39.0
@@ -82,7 +81,6 @@ require (
 	github.com/opencontainers/runc v1.2.4 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/prometheus/client_golang v1.21.0 // indirect

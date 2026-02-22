@@ -22,5 +22,4 @@ base:
 
     MAPS_S3_ENDPOINT: "https://bdb9cb2904188b760591dc1589a1ccf3.r2.cloudflarestorage.com"
     MAPS_REDIS_ADDRESS: "redis-master:6379"
-    MAPS_KAFKA_BROKERS: "kafka.mapmaker.svc.cluster.local:9093"
     MAPS_NATS_SERVERS: "nats://nats:4222"

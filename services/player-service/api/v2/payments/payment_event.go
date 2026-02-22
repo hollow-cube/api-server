@@ -18,7 +18,7 @@ import (
 func (s *server) processStoredEventStream(ctx context.Context, msg jetstream.Msg) error {
 	s.log.Infow("read tebex message", "subject", msg.Subject())
 	event, err := tebex.ParseEvent(msg.Data())
-	if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
+	if err != nil { // This is really a sanity check because we parsed the message before writing it to nats
 		return fmt.Errorf("failed to parse tebex event: %w", err)
 	}
 

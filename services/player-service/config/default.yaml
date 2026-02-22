@@ -12,9 +12,6 @@ postgres:
 nats:
   servers: nats://localhost:4222
 
-kafka:
-  brokers: kafka:9092
-
 redis:
   address: localhost:6379
 

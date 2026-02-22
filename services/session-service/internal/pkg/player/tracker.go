@@ -3,15 +3,12 @@ package player
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
@@ -20,7 +17,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -29,7 +25,6 @@ import (
 type Tracker struct {
 	queries   *db.Queries
 	jetStream *natsutil.JetStreamWrapper
-	producer  kafkafx.SyncProducer
 
 	countReportCtx    context.Context
 	countReportCancel context.CancelFunc
@@ -42,7 +37,6 @@ type TrackerParams struct {
 	Redis     rueidis.Client
 	Queries   *db.Queries
 	JetStream *natsutil.JetStreamWrapper
-	Producer  kafkafx.SyncProducer
 }
 
 func NewTracker(p TrackerParams) (*Tracker, error) {
@@ -76,7 +70,6 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 	return &Tracker{
 		queries:           p.Queries,
 		jetStream:         p.JetStream,
-		producer:          p.Producer,
 		countReportCtx:    reportCtx,
 		countReportCancel: reportCancel,
 		countReportLocker: locker,
@@ -312,28 +305,7 @@ func (t *Tracker) UpdateSessionWithMetadata(ctx context.Context, s *db.PlayerSes
 }
 
 func (t *Tracker) sendSessionUpdate(ctx context.Context, msg kafkaModel.SessionUpdateMessage) {
-	msgContent, err := json.Marshal(msg)
-	if err != nil {
-		zap.S().Errorw("failed to marshal session update message", "error", err)
-		return
-	}
-
-	zap.S().Infow("sending session update", "session", msgContent)
-
-	// Use a new context to avoid inheriting a canceled request context
-	writeCtx, cancel := context.WithTimeout(tracefx.NewCtxWithTraceCtx(ctx), 15*time.Second)
-	defer cancel()
-
-	if err = t.jetStream.PublishJSONAsync(writeCtx, msg); err != nil {
+	if err := t.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		zap.S().Errorw("failed to publish session update message", "error", err)
-	}
-
-	err = t.producer.WriteMessages(writeCtx, kafka.Message{
-		Topic: kafkafx.TopicSessionUpdates,
-		Key:   []byte(msg.PlayerId),
-		Value: msgContent,
-	})
-	if err != nil {
-		zap.S().Errorw("failed to send session update message", "error", err)
 	}
 }

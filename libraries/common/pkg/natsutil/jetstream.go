@@ -69,14 +69,14 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 
 				err = handler(ctx, msg)
 				if err != nil {
-					w.log.Errorf("failed to handle kafka message: %v", err)
+					w.log.Errorf("failed to handle nats message: %v", err)
 					span.RecordError(err)
 					span.SetStatus(codes.Error, err.Error())
 
 					// If we have acks enabled, we should Nak the message to trigger redelivery.
 					if config.AckPolicy != jetstream.AckNonePolicy {
 						if err = msg.Nak(); err != nil {
-							w.log.Errorf("failed to nak kafka message: %v", err)
+							w.log.Errorf("failed to nak nats message: %v", err)
 						}
 					}
 				}
@@ -92,6 +92,9 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 	}, nil
 }
 
+// PublishJSONAsync
+// Note that the ctx passed is only used for tracing data, and is not required after this
+// method returns so its valid to use a request (or otherwise temporary) context.
 func (w *JetStreamWrapper) PublishJSONAsync(ctx context.Context, msg Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {

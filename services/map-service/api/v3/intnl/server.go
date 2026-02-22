@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
@@ -28,7 +27,6 @@ type ServerParams struct {
 
 	Store     *db.Store
 	Redis     rueidis.Client
-	Producer  kafkafx.SyncProducer
 	JetStream *natsutil.JetStreamWrapper
 	Metrics   metric.Writer
 	Players   playerService.ClientWithResponsesInterface
@@ -41,7 +39,6 @@ type server struct {
 
 	store     *db.Store
 	redis     rueidis.Client
-	producer  kafkafx.SyncProducer
 	jetStream *natsutil.JetStreamWrapper
 	metrics   metric.Writer
 	players   playerService.ClientWithResponsesInterface
@@ -66,7 +63,6 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 		log:          params.Log,
 		store:        params.Store,
 		redis:        params.Redis,
-		producer:     params.Producer,
 		jetStream:    params.JetStream,
 		metrics:      params.Metrics,
 		players:      params.Players,

@@ -32,7 +32,6 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
-	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -40,7 +39,6 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "session-service", Env: conf.Env},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
-		Kafka:   conf.Kafka,
 	}
 }
 

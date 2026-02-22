@@ -5,12 +5,10 @@ package intnl
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
@@ -20,7 +18,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/util"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -34,7 +31,6 @@ type ServerParams struct {
 	Config     *config.Config
 	Metrics    metric.Writer
 	JetStream  *natsutil.JetStreamWrapper
-	Producer   kafkafx.SyncProducer
 	TBHeadless *tebex.HeadlessClient
 
 	Store             *db.Store
@@ -100,7 +96,6 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		metrics:           p.Metrics,
 		store:             p.Store,
 		jetStream:         p.JetStream,
-		producer:          p.Producer,
 		tbHeadless:        p.TBHeadless,
 		punishmentLadders: p.PunishmentLadders,
 		punishmentAliases: punishmentAliases,
@@ -113,7 +108,6 @@ type server struct {
 
 	store      *db.Store
 	jetStream  *natsutil.JetStreamWrapper
-	producer   kafkafx.SyncProducer
 	tbHeadless *tebex.HeadlessClient
 
 	punishmentLadders map[string]*model.PunishmentLadder
@@ -363,20 +357,10 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 
 func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
-		return fmt.Errorf("failed to publish invite message: %w", err)
+		return fmt.Errorf("failed to publish player data update message: %w", err)
 	}
 
-	content, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	kafkaRecord := kafka.Message{
-		Topic: kafkafx.TopicPlayerDataUpdate,
-		Key:   []byte(msg.Id),
-		Value: content,
-	}
-	return s.producer.WriteMessages(context.Background(), kafkaRecord)
+	return nil
 }
 
 var (

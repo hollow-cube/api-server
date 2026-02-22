@@ -2,14 +2,11 @@ package intnl
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
-	"github.com/segmentio/kafka-go"
 )
 
 const notificationsPerPage = 21
@@ -132,19 +129,9 @@ func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlay
 		Key:      request.Body.Key,
 		Data:     request.Body.Data,
 	}
-
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
-		return fmt.Errorf("failed to publish invite message: %w", err)
+		return fmt.Errorf("failed to publish notification message: %w", err)
 	}
 
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: kafkafx.TopicNotificationUpdate,
-		Key:   []byte(request.PlayerId),
-		Value: raw,
-	})
+	return nil
 }

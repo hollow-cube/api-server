@@ -68,7 +68,6 @@ type Config struct {
 	Metrics           Metrics            `mapstructure:"metrics"`
 	Postgres          Postgres           `mapstructure:"postgres"`
 	NATS              NATS               `mapstructure:"nats"`
-	Kafka             common.KafkaConfig `mapstructure:"kafka"`
 	Tebex             Tebex              `mapstructure:"tebex"`
 	Votifier          Votifier           `mapstructure:"votifier"`
 	OTLP              common.OtlpConfig  `mapstructure:"otlp"`

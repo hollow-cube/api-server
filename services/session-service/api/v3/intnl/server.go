@@ -13,12 +13,12 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
+	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
 
 	"github.com/google/go-github/v56/github"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
@@ -28,7 +28,6 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/world"
 	"github.com/prometheus/common/expfmt"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -39,7 +38,6 @@ var _ StrictServerInterface = (*serverImpl)(nil)
 type serverImpl struct {
 	invites   *handler.InviteManager
 	jetStream *natsutil.JetStreamWrapper
-	producer  kafkafx.SyncProducer
 	gh        *github.Client
 
 	queries *db.Queries
@@ -57,7 +55,6 @@ type ServerParams struct {
 
 	Invites   *handler.InviteManager
 	JetStream *natsutil.JetStreamWrapper
-	Producer  kafkafx.SyncProducer
 	GitHub    *github.Client
 
 	Queries *db.Queries
@@ -86,7 +83,6 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	return &serverImpl{
 		invites:       params.Invites,
 		jetStream:     params.JetStream,
-		producer:      params.Producer,
 		gh:            params.GitHub,
 		queries:       params.Queries,
 		playerClient:  params.PlayerClient,
@@ -122,10 +118,10 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	}
 	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
-	//if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
-	//	!pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
-	//	return CreateSession401Response{}, nil
-	//}
+	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
+		!pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+		return CreateSession401Response{}, nil
+	}
 
 	protocolVersion := 0
 	if request.Body.ProtocolVersion != nil {
@@ -506,16 +502,7 @@ func (s *serverImpl) sendMapJoinMessage(ctx context.Context, msg model.MapJoinIn
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
-
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to encode map join message: %w", err)
-	}
-
-	return s.producer.WriteMessages(ctx, kafka.Message{
-		Topic: kafkafx.TopicMapJoin,
-		Value: raw,
-	})
+	return nil
 }
 
 type rawPlayerDataResponse []byte

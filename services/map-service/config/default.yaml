@@ -22,10 +22,6 @@ redis:
 nats:
   servers: nats://localhost:4222
 
-kafka:
-  brokers: kafka:9092
-  schema_registry_url: http://localhost:8081
-
 otlp:
   endpoint: ""
 

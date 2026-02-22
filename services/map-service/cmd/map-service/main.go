@@ -15,7 +15,6 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	httpTransport "github.com/hollow-cube/hc-services/libraries/common/pkg/http"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/httpfx"
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
@@ -39,8 +38,6 @@ import (
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 )
-
-const serviceName = "map-service"
 
 func main() {
 	fx.New(
@@ -74,9 +71,6 @@ func main() {
 			jetstream.New,
 			natsutil.NewJetStreamWrapper,
 		),
-
-		// Kafka
-		kafkafx.Module,
 
 		// Metrics
 		fx.Provide(newPosthogClient, metric.NewPosthogWriter),
@@ -170,7 +164,6 @@ type CommonConfigResources struct {
 	Service common.ServiceConfig
 	HTTP    common.HTTPConfig
 	OTLP    common.OtlpConfig
-	Kafka   common.KafkaConfig
 }
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
@@ -178,7 +171,6 @@ func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 		Service: common.ServiceConfig{Name: "map-service"},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
-		Kafka:   conf.Kafka,
 	}
 }
 

@@ -12,9 +12,6 @@ otlp:
 redis:
   address: localhost:6379
 
-kafka:
-  brokers: kafka:9092
-
 nats:
   servers: nats://localhost:4222
 

@@ -2,13 +2,10 @@ package intnl
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/map-service/internal/pkg/model"
-	"github.com/segmentio/kafka-go"
 )
 
 func (s *server) getMapSlotIndex(ctx context.Context, pd *db.MapPlayerData, mapId string, slot *int) (int, error) {
@@ -76,15 +73,6 @@ func (s *server) writeMapUpdate(ctx context.Context, update *model.MapUpdateMess
 		return fmt.Errorf("failed to publish map update message: %w", err)
 	}
 
-	updateMessageData, err := json.Marshal(update)
-	if err != nil {
-		return fmt.Errorf("failed to marshal map update message: %w", err)
-	}
-	go s.producer.WriteMessages(context.Background(), kafka.Message{
-		Topic: kafkafx.TopicMapUpdate,
-		Key:   []byte(update.ID),
-		Value: updateMessageData,
-	})
 	return nil
 }
 

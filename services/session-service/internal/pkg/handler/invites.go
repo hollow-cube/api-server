@@ -2,18 +2,15 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
-	"github.com/segmentio/kafka-go"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -24,7 +21,6 @@ type InviteManager struct {
 
 	redis         rueidis.Client
 	jetStream     *natsutil.JetStreamWrapper
-	producer      kafkafx.SyncProducer
 	playerTracker *player.Tracker
 }
 
@@ -40,7 +36,6 @@ type InviteManagerParams struct {
 
 	Redis         rueidis.Client
 	JetStream     *natsutil.JetStreamWrapper
-	Producer      kafkafx.SyncProducer
 	PlayerTracker *player.Tracker
 }
 
@@ -62,7 +57,6 @@ func NewInviteManager(params InviteManagerParams) (*InviteManager, error) {
 
 		redis:         params.Redis,
 		jetStream:     params.JetStream,
-		producer:      params.Producer,
 		playerTracker: params.PlayerTracker,
 	}, nil
 }
@@ -171,15 +165,7 @@ func (i *InviteManager) sendInviteMessage(ctx context.Context, invite *model.Map
 		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
 
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	return i.producer.WriteMessages(ctx, kafka.Message{
-		Topic: kafkafx.TopicInvites,
-		Value: raw,
-	})
+	return nil
 }
 
 func (i *InviteManager) sendAcceptedOrRejectedMessage(ctx context.Context, invite *model.MapInvite, accepted bool) error {
@@ -194,16 +180,7 @@ func (i *InviteManager) sendAcceptedOrRejectedMessage(ctx context.Context, invit
 	if err := i.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish invite message: %w", err)
 	}
-
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	return i.producer.WriteMessages(ctx, kafka.Message{
-		Topic: kafkafx.TopicInviteAcceptReject,
-		Value: raw,
-	})
+	return nil
 }
 
 func (i *InviteManager) getDefaultKey(ctx context.Context, senderId string) (string, error) {

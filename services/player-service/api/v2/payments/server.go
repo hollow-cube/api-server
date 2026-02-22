@@ -164,7 +164,7 @@ func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params O
 		"Nats-Msg-Id": []string{event.Id},
 	}
 	if err = s.jetStream.PublishAsyncWithHeader(r.Context(), subject, body, header); err != nil {
-		s.log.Errorw("failed to write to kafka", "err", err)
+		s.log.Errorw("failed to write to nats", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
