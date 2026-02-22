@@ -12,10 +12,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-type Metrics struct {
-	Password string `mapstructure:"password"`
-}
-
 type Postgres struct {
 	URI string `mapstructure:"uri"`
 }
@@ -28,11 +24,6 @@ type Tebex struct {
 	PrivateKey            string `mapstructure:"private_key"`
 	Secret                string `mapstructure:"secret"`
 	DisputeDiscordWebhook string `mapstructure:"dispute_discord_webhook"`
-}
-
-type Votifier struct {
-	ListenAddr string `mapstructure:"listen_addr"`
-	Token      string `mapstructure:"token"`
 }
 
 type Posthog struct {
@@ -62,19 +53,24 @@ type Redis struct {
 	Address string `mapstructure:"address"`
 }
 
+type Discord struct {
+	ApplicationID string `mapstructure:"application_id"`
+	PublicKey     string `mapstructure:"public_key"`
+	Token         string `mapstructure:"token"`
+}
+
 type Config struct {
 	Env               string             `mapstructure:"env"`
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
-	Metrics           Metrics            `mapstructure:"metrics"`
 	Postgres          Postgres           `mapstructure:"postgres"`
 	NATS              NATS               `mapstructure:"nats"`
 	Tebex             Tebex              `mapstructure:"tebex"`
-	Votifier          Votifier           `mapstructure:"votifier"`
 	OTLP              common.OtlpConfig  `mapstructure:"otlp"`
 	Posthog           Posthog            `mapstructure:"posthog"`
 	Unleash           Unleash            `mapstructure:"unleash"`
 	PunishmentLadders []PunishmentLadder `mapstructure:"punishment_ladders"`
 	Redis             Redis              `mapstructure:"redis"`
+	Discord           Discord            `mapstructure:"discord"`
 }
 
 //go:embed default.yaml

@@ -20,10 +20,6 @@ tebex:
   secret: "abc"
   dispute_discord_webhook: ""
 
-votifier:
-  listen_addr: ":8192"
-  token: ""
-
 otlp:
   endpoint: ""
 
@@ -33,6 +29,11 @@ posthog:
 
 unleash:
   address: "http://unleash.mgmt.svc.cluster.local:4242/api"
+  token: ""
+
+discord:
+  application_id: ""
+  public_key: ""
   token: ""
 
 punishment_ladders:

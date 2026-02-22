@@ -15,5 +15,3 @@ base:
     PLAYERS_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
 
     PLAYERS_REDIS_ADDRESS: "redis-master.mapmaker.svc.cluster.local:6379"
-
-    PLAYERS_VOTIFIER_LISTEN_ADDR: "0.0.0.0:30192"

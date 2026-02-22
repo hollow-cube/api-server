@@ -60,6 +60,15 @@ type ServerParams struct {
 	Posthog   posthog.Client
 }
 
+type server struct {
+	log         *zap.SugaredLogger
+	tebexSecret []byte
+
+	jetStream *natsutil.JetStreamWrapper
+	store     *db.Store
+	posthog   posthog.Client
+}
+
 func NewServer(lc fx.Lifecycle, params ServerParams) (ServerInterface, error) {
 	tebexSecret := params.Config.Tebex.Secret
 	if tebexSecret == "" {
@@ -112,15 +121,6 @@ func NewServer(lc fx.Lifecycle, params ServerParams) (ServerInterface, error) {
 	lc.Append(fx.StartStopHook(cons.Start, cons.Stop))
 
 	return s, nil
-}
-
-type server struct {
-	log         *zap.SugaredLogger
-	tebexSecret []byte
-
-	jetStream *natsutil.JetStreamWrapper
-	store     *db.Store
-	posthog   posthog.Client
 }
 
 func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params OnTebexWebhookParams) {

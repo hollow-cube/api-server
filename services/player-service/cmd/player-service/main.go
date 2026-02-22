@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/player-service/api/auth"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/consumers"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/player-service/internal/discord"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/nats-io/nats.go"
@@ -80,6 +83,8 @@ func main() {
 		// Converted punishment ladders - for internal handler
 		fx.Provide(newLaddersFromConfig),
 
+		fx.Provide(newDiscordClient, discord.NewHandler),
+
 		// HTTP server
 		fx.Provide(newDynamicExporter),
 		tracefx.Module,
@@ -106,6 +111,7 @@ type v2RouteHandlerImpl struct {
 	internal v2Internal.StrictServerInterface
 	payments v2Payments.ServerInterface
 	posthog  *posthogProxy.Proxy
+	discord  *discord.Handler
 }
 
 func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
@@ -113,15 +119,28 @@ func (v *v2RouteHandlerImpl) Apply(r chi.Router) {
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
 	r.Handle("/v2/payments/*", v2Payments.HandlerFromMuxWithBaseURL(v.payments, nil, "/v2/payments"))
 	r.Handle("/posthog/*", v.posthog)
+
+	if v.discord != nil {
+		r.Post("/_external/discord", v.discord.OnDiscordWebhook)
+	}
 }
 
-func makeV2RouteHandler(
-	public v2Public.StrictServerInterface,
-	internal v2Internal.StrictServerInterface,
-	payments v2Payments.ServerInterface,
-	posthog *posthogProxy.Proxy,
-) httpTransport.RouteProvider {
-	return &v2RouteHandlerImpl{public, internal, payments, posthog}
+func makeV2RouteHandler(params struct {
+	fx.In
+
+	Public   v2Public.StrictServerInterface
+	Internal v2Internal.StrictServerInterface
+	Payments v2Payments.ServerInterface
+	Posthog  *posthogProxy.Proxy
+	Discord  *discord.Handler `optional:"true"`
+}) httpTransport.RouteProvider {
+	return &v2RouteHandlerImpl{
+		params.Public,
+		params.Internal,
+		params.Payments,
+		params.Posthog,
+		params.Discord,
+	}
 }
 
 func newZapLogger(conf *config.Config) (*zap.Logger, error) {
@@ -257,4 +276,19 @@ func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error
 	})
 
 	return c, nil
+}
+
+func newDiscordClient(conf *config.Config) (*discordgo.Session, error) {
+	if conf.Discord.Token == "" {
+		return nil, nil
+	}
+
+	s, err := discordgo.New(fmt.Sprintf("Bot %s", conf.Discord.Token))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create discord client: %w", err)
+	}
+
+	// Note that we do not connect to the gateway. The bot is http interactions only for now.
+
+	return s, nil
 }
