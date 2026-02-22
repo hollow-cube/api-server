@@ -114,3 +114,17 @@ func (w *JetStreamWrapper) PublishAsync(ctx context.Context, subject string, dat
 	_, err := w.js.PublishMsgAsync(msg)
 	return err
 }
+
+func (w *JetStreamWrapper) PublishAsyncWithHeader(ctx context.Context, subject string, data []byte, header nats.Header) error {
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+		Header:  header,
+	}
+
+	carrier := headerCarrier(msg.Header)
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	_, err := w.js.PublishMsgAsync(msg)
+	return err
+}

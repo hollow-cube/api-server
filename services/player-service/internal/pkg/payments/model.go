@@ -21,8 +21,10 @@ var (
 		name     string
 		Duration time.Duration
 	}{
-		6018860: {"hypercube_1mo", 31 * 24 * time.Hour},
-		6282911: {"hypercube_1y", 365 * 24 * time.Hour},
+		// 1 day longer because tebex seems to have a weird definition of month
+		// and it expires before we get the next payment event.
+		6018860: {"hypercube_1mo", 32 * 24 * time.Hour},
+		6282911: {"hypercube_1y", 366 * 24 * time.Hour},
 	}
 	PackageNameMap map[string]int // filled by init func
 )

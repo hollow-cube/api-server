@@ -6,68 +6,66 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
-	"github.com/segmentio/kafka-go"
 )
 
-func (s *server) processStoredEventStream(c kafkafx.Consumer) {
-	c.Subscribe(kafkafx.TopicTebexMessages, "session-service", func(ctx context.Context, m kafka.Message) error {
-		s.log.Infow("read tebex message", "key", string(m.Key), "offset", m.Offset)
-		event, err := tebex.ParseEvent(m.Value)
-		if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
-			return fmt.Errorf("failed to parse tebex event: %w", err)
-		}
+func (s *server) processStoredEventStream(ctx context.Context, msg jetstream.Msg) error {
+	s.log.Infow("read tebex message", "subject", msg.Subject())
+	event, err := tebex.ParseEvent(msg.Data())
+	if err != nil { // This is really a sanity check because we parsed the message before writing it to Kafka
+		return fmt.Errorf("failed to parse tebex event: %w", err)
+	}
 
-		switch sub := event.Subject.(type) {
-		case *tebex.PaymentCompletedEvent:
-			err = s.handlePaymentCompletedEvent(ctx, event, sub)
-		case *tebex.PaymentDeclinedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.PaymentRefundedEvent:
-			err = s.handlePaymentRefundedEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeOpenedEvent:
-			err = s.handlePaymentDisputeOpenedEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeWonEvent:
-			err = s.handlePaymentDisputeWonEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeLostEvent:
-			err = s.handlePaymentDisputeLostEvent(ctx, event, sub)
-		case *tebex.PaymentDisputeClosedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentStartedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentRenewedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentEndedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		case *tebex.RecurringPaymentStatusChangedEvent:
-			err = logTebexEvent(ctx, s.store, event)
-		}
+	switch sub := event.Subject.(type) {
+	case *tebex.PaymentCompletedEvent:
+		err = s.handlePaymentCompletedEvent(ctx, event, sub)
+	case *tebex.PaymentDeclinedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.PaymentRefundedEvent:
+		err = s.handlePaymentRefundedEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeOpenedEvent:
+		err = s.handlePaymentDisputeOpenedEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeWonEvent:
+		err = s.handlePaymentDisputeWonEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeLostEvent:
+		err = s.handlePaymentDisputeLostEvent(ctx, event, sub)
+	case *tebex.PaymentDisputeClosedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentStartedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentRenewedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentEndedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	case *tebex.RecurringPaymentStatusChangedEvent:
+		err = logTebexEvent(ctx, s.store, event)
+	}
 
-		// If we have an error processing the message for whatever reason, we should put it in the DLQ.
-		// todo need to figure out what to do with these, but don't want to completely lose them for now
-		if err != nil {
-			s.log.Errorw("failed to process tebex event", "error", err)
-			dlqMessage := kafka.Message{
-				Topic: kafkafx.TopicTebexDlqMessages,
-				Key:   m.Key,
-				Value: m.Value,
-			}
-			if err = s.producer.WriteMessages(ctx, dlqMessage); err != nil {
-				return fmt.Errorf("failed to write to kafka dlq: %w", err)
+	// If we have an error processing the message for whatever reason, we should put it in the DLQ.
+	// todo need to figure out what to do with these, but don't want to completely lose them for now
+	if err != nil {
+		s.log.Errorw("failed to process tebex event", "error", err)
+
+		// If last attempt, send to DLQ to preserve
+		metadata, _ := msg.Metadata()
+		if metadata.NumDelivered >= uint64(tebexMaxDeliver) {
+			if err = s.jetStream.PublishAsync(ctx, msg.Subject(), msg.Data()); err != nil {
+				s.log.Errorw("failed to publish tebex event to dlq", "error", err)
 			}
 		}
+	}
 
-		// Parsing the message went fine. Returning a nil error will make kafkafx commit the message
-		s.log.Infow("finished handling tebex message...", "key", string(m.Key), "offset", m.Offset)
-
-		return nil
-	})
+	s.log.Infow("finished handling tebex message...")
+	if err = msg.Ack(); err != nil {
+		return fmt.Errorf("failed to ack tebex message: %w", err)
+	}
+	return nil
 }
 
 func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentCompletedEvent) error {
@@ -82,7 +80,10 @@ func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Eve
 		return err
 	}
 
-	s.writePurchaseUpdates(ctx, changes, newBalances)
+	if err = s.writePurchaseUpdates(ctx, changes, newBalances); err != nil {
+		// Log but dont fail over this.
+		s.log.Errorw("failed to write purchase updates", "error", err)
+	}
 
 	product := event.Products[0]
 	props := posthog.NewProperties().
@@ -111,7 +112,7 @@ func (s *server) handlePaymentCompletedEvent(ctx context.Context, raw *tebex.Eve
 	return nil
 }
 
-func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.TebexChange, newBalances map[string]int) {
+func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.TebexChange, newBalances map[string]int) error {
 	cubitUpdates := make(map[string]int)
 	hypercubeUpdates := make(map[string]int)
 	for _, change := range changes {
@@ -126,7 +127,7 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 
 	// Send out cubit changes
 	for playerId, newBalance := range newBalances {
-		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
+		update := model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     playerId,
 			Cubits: &newBalance,
@@ -134,26 +135,28 @@ func (s *server) writePurchaseUpdates(ctx context.Context, changes []*model.Tebe
 				Type:     model.UpdateReason_Cubits,
 				Quantity: cubitUpdates[playerId],
 			},
-		})
-		if err != nil {
-			s.log.Errorw("failed to send player data update message", "error", err)
+		}
+		if err = s.jetStream.PublishJSONAsync(ctx, &update); err != nil {
+			return fmt.Errorf("failed to publish player data update message: %w", err)
 		}
 	}
 
 	// Send out hypercube changes
 	for player, hypercubeAdd := range hypercubeUpdates {
-		err = s.sendPlayerDataUpdateMessage(ctx, &model.PlayerDataUpdateMessage{
+		update := model.PlayerDataUpdateMessage{
 			Action: model.PlayerDataUpdate_Modify,
 			Id:     player,
 			Reason: &model.UpdateReason{
 				Type:     model.UpdateReason_Hypercube,
 				Quantity: hypercubeAdd,
 			},
-		})
-		if err != nil {
-			s.log.Errorw("failed to send player data update message", "error", err)
+		}
+		if err = s.jetStream.PublishJSONAsync(ctx, &update); err != nil {
+			return fmt.Errorf("failed to publish player data update message: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func (s *server) handlePaymentRefundedEvent(ctx context.Context, raw *tebex.Event, event *tebex.PaymentRefundedEvent) error {
@@ -345,24 +348,6 @@ func extractTargetFromEvent(event interface{}) string {
 }
 
 func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
-	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
-		return fmt.Errorf("failed to publish invite message: %w", err)
-	}
-
-	content, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal invite message: %w", err)
-	}
-
-	kafkaRecord := kafka.Message{
-		Topic: kafkafx.TopicPlayerDataUpdate,
-		Key:   []byte(msg.Id),
-		Value: content,
-	}
-
-	if err = s.producer.WriteMessages(context.Background(), kafkaRecord); err != nil {
-		return fmt.Errorf("failed to write to kafka: %w", err)
-	}
 
 	return nil
 }

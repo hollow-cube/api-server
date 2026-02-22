@@ -10,22 +10,39 @@
 package payments
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
-	"github.com/hollow-cube/hc-services/libraries/common/pkg/kafkafx"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/services/player-service/config"
 	"github.com/hollow-cube/hc-services/services/player-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/player-service/internal/pkg/payments"
 	"github.com/hollow-cube/tebex-go"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/posthog/posthog-go"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+)
+
+var (
+	tebexStream         = "TEBEX_PAYMENTS"
+	tebexDlqStream      = "TEBEX_PAYMENTS_DLQ"
+	tebexMaxDeliver     = 5
+	tebexConsumerConfig = jetstream.ConsumerConfig{
+		Name:          "tebex-processor",
+		Durable:       "tebex-processor",
+		FilterSubject: "tebex.>",
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		AckWait:       30 * time.Second,
+		MaxDeliver:    tebexMaxDeliver,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+		MaxAckPending: 50,
+	}
 )
 
 var _ ServerInterface = (*server)(nil)
@@ -38,14 +55,12 @@ type ServerParams struct {
 	Log        *zap.SugaredLogger
 	Config     *config.Config
 
-	Consumer  kafkafx.Consumer
 	JetStream *natsutil.JetStreamWrapper
-	Producer  kafkafx.SyncProducer
 	Store     *db.Store
 	Posthog   posthog.Client
 }
 
-func NewServer(params ServerParams) (ServerInterface, error) {
+func NewServer(lc fx.Lifecycle, params ServerParams) (ServerInterface, error) {
 	tebexSecret := params.Config.Tebex.Secret
 	if tebexSecret == "" {
 		return nil, fmt.Errorf("tebex secret is required")
@@ -56,16 +71,45 @@ func NewServer(params ServerParams) (ServerInterface, error) {
 		params.Log.Info("tebex secret is explicitly ignored")
 	}
 
+	err := params.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       tebexStream,
+		Subjects:   []string{"tebex.>"},
+		Storage:    jetstream.FileStorage,
+		Retention:  jetstream.WorkQueuePolicy,
+		MaxAge:     30 * 24 * time.Hour,
+		Duplicates: 5 * time.Minute,
+		MaxMsgs:    -1,
+		MaxBytes:   -1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = params.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:      tebexDlqStream,
+		Subjects:  []string{"tebex-dlq.>"},
+		Storage:   jetstream.FileStorage,
+		Retention: jetstream.LimitsPolicy,
+		MaxAge:    365 * 24 * time.Hour,
+		Discard:   jetstream.DiscardOld,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	s := &server{
 		log:         params.Log.With("handler", "payments"),
 		tebexSecret: []byte(tebexSecret),
 		jetStream:   params.JetStream,
-		producer:    params.Producer,
 		store:       params.Store,
 		posthog:     params.Posthog,
 	}
 
-	s.processStoredEventStream(params.Consumer)
+	cons, err := params.JetStream.Subscribe(context.Background(), tebexStream, tebexConsumerConfig, s.processStoredEventStream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to payment events: %w", err)
+	}
+	lc.Append(fx.StartStopHook(cons.Start, cons.Stop))
 
 	return s, nil
 }
@@ -75,7 +119,6 @@ type server struct {
 	tebexSecret []byte
 
 	jetStream *natsutil.JetStreamWrapper
-	producer  kafkafx.SyncProducer
 	store     *db.Store
 	posthog   posthog.Client
 }
@@ -116,13 +159,11 @@ func (s *server) OnTebexWebhook(w http.ResponseWriter, r *http.Request, params O
 		return
 	}
 
-	kafkaRecord := kafka.Message{
-		Topic: kafkafx.TopicTebexMessages,
-		Time:  event.Date,
-		Key:   []byte(payments.GetEventTarget(event.Subject)),
-		Value: body,
+	subject := fmt.Sprintf("tebex.%s", event.Type)
+	header := nats.Header{
+		"Nats-Msg-Id": []string{event.Id},
 	}
-	if err = s.producer.WriteMessages(r.Context(), kafkaRecord); err != nil {
+	if err = s.jetStream.PublishAsyncWithHeader(r.Context(), subject, body, header); err != nil {
 		s.log.Errorw("failed to write to kafka", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
