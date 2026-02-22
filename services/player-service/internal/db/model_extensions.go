@@ -64,10 +64,12 @@ type PlayerSkin struct {
 }
 
 func (pd PlayerData) EffectiveRole() player.Role {
-	if pd.HypercubeEnd != nil && pd.HypercubeEnd.After(time.Now()) {
+	// Can promote default to hypercube, but otherwise pass through default
+	hasHypercube := pd.HypercubeEnd != nil && pd.HypercubeEnd.After(time.Now())
+	if pd.Role == player.DefaultRole && hasHypercube {
 		return player.HypercubeRole
 	}
-	return player.DefaultRole
+	return pd.Role
 }
 
 func (pd PlayerData) Flags() player.Flags {

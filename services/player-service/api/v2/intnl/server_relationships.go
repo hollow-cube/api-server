@@ -41,7 +41,7 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 	blocks := make([]BlockedPlayer, 0, len(rows))
 	for _, row := range rows {
 		// Ignore blocked players that are staff members (they became staff after they were already blocked)
-		if row.PlayerData.Has(player.FlagBypassBlock) {
+		if row.PlayerData.Has(player.FlagGenericStaff) {
 			continue
 		}
 
@@ -74,7 +74,7 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 	if err != nil && !errors.Is(err, db.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
-	if pd.Has(player.FlagBypassBlock) {
+	if pd.Has(player.FlagGenericStaff) {
 		return BlockPlayer409Response{}, nil
 	}
 
@@ -128,7 +128,7 @@ func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksB
 		if err != nil && !errors.Is(err, db.ErrNoRows) {
 			return nil, fmt.Errorf("failed to get block player data: %w", err)
 		}
-		if !pd.Has(player.FlagBypassBlock) {
+		if !pd.Has(player.FlagGenericStaff) {
 			continue
 		}
 

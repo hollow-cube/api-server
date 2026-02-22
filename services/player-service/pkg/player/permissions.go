@@ -19,9 +19,9 @@ const (
 
 	FlagMapDelete
 
-	FlagBypassWhitelist
-	FlagBypassBlock
-	FlagPunish // ban, mute, kick
+	// FlagGenericStaff is a bunch of existing permissions flattened. Likely we should remove
+	// this and split it up in the future. Not sure a good granularity yet.
+	FlagGenericStaff = 1 << 63
 )
 
 type Role string
@@ -50,7 +50,7 @@ const (
 
 	hypercubeFlags = FlagExtendedLimits
 	mediaFlags     = hypercubeFlags
-	adminFlags     = hypercubeFlags
+	adminFlags     = hypercubeFlags | FlagGenericStaff
 )
 
 func (r Role) Flags() Flags {

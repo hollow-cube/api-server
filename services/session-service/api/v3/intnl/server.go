@@ -13,7 +13,6 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
-	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
@@ -123,10 +122,10 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	}
 	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
-	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
-		!pplayer.Has(pd.Permissions, pplayer.FlagBypassWhitelist) {
-		return CreateSession401Response{}, nil
-	}
+	//if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
+	//	!pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+	//	return CreateSession401Response{}, nil
+	//}
 
 	protocolVersion := 0
 	if request.Body.ProtocolVersion != nil {
