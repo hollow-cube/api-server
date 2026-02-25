@@ -13,7 +13,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 )
 
-func (s *server) LookupPlayerDataBySocial(ctx context.Context, request LookupPlayerDataBySocialRequestObject) (LookupPlayerDataBySocialResponseObject, error) {
+func (s *Server) LookupPlayerDataBySocial(ctx context.Context, request LookupPlayerDataBySocialRequestObject) (LookupPlayerDataBySocialResponseObject, error) {
 	pd, err := s.store.LookupPlayerDataBySocialId(ctx, request.Platform, request.PlatformId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return LookupPlayerDataBySocial404Response{}, nil
@@ -28,7 +28,7 @@ func (s *server) LookupPlayerDataBySocial(ctx context.Context, request LookupPla
 	return LookupPlayerDataBySocial200JSONResponse(*apiPlayer), nil
 }
 
-func (s *server) LookupSocialByPlayerId(ctx context.Context, request LookupSocialByPlayerIdRequestObject) (LookupSocialByPlayerIdResponseObject, error) {
+func (s *Server) LookupSocialByPlayerId(ctx context.Context, request LookupSocialByPlayerIdRequestObject) (LookupSocialByPlayerIdResponseObject, error) {
 	socialId, err := s.store.LookupSocialIdByPlayerId(ctx, request.Platform, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return LookupSocialByPlayerId404Response{}, nil
@@ -39,7 +39,7 @@ func (s *server) LookupSocialByPlayerId(ctx context.Context, request LookupSocia
 	return LookupSocialByPlayerId200JSONResponse{SocialId: socialId}, nil
 }
 
-func (s *server) AttemptVerification(ctx context.Context, request AttemptVerificationRequestObject) (AttemptVerificationResponseObject, error) {
+func (s *Server) AttemptVerification(ctx context.Context, request AttemptVerificationRequestObject) (AttemptVerificationResponseObject, error) {
 	request.Body.PlayerId = util.RemapUUID(request.Body.PlayerId)
 	verificationType := model.VerificationType(request.Body.VerificationType)
 
@@ -65,7 +65,7 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 		return AttemptVerification409Response{}, nil
 	}
 
-	// Ensure the player exists already - they always should so error if not as they must have logged into the server before.
+	// Ensure the player exists already - they always should so error if not as they must have logged into the Server before.
 	if pExists, err := s.store.PlayerExistsById(ctx, request.Body.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
 	} else if !pExists {
@@ -97,7 +97,7 @@ func (s *server) AttemptVerification(ctx context.Context, request AttemptVerific
 	}, nil
 }
 
-func (s *server) BeginVerifyDiscord(ctx context.Context, request BeginVerifyDiscordRequestObject) (BeginVerifyDiscordResponseObject, error) {
+func (s *Server) BeginVerifyDiscord(ctx context.Context, request BeginVerifyDiscordRequestObject) (BeginVerifyDiscordResponseObject, error) {
 	_, err := s.store.LookupPlayerDataBySocialId(ctx, "discord", request.Body.DiscordId)
 	if !errors.Is(err, playerdb.ErrNoRows) {
 		return BeginVerifyDiscord409Response{}, nil

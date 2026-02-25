@@ -9,7 +9,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 )
 
-func (s *server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) (*PlayerData, error) {
+func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) (*PlayerData, error) {
 	// Can test empty code to see if TOTP is disabled
 	_, err := s.testTotpCode(ctx, pd.ID, "", false)
 	totpEnabled := true

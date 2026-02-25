@@ -23,9 +23,6 @@ postgres:
   players_uri: "postgres://postgres:postgres@localhost:5432/player-service?sslmode=disable"
   maps_uri: "postgres://postgres:postgres@localhost:5432/map-service?sslmode=disable"
 
-player_service_url: http://localhost:9126
-map_service_url: http://localhost:9125
-
 posthog:
   endpoint: "http://localhost:9126/posthog"
   personal_api_key: ""

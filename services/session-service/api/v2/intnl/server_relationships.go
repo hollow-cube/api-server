@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
+func (s *Server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error) {
 	page := request.Params.Page
 	pageSize := request.Params.PageSize
 
@@ -59,7 +59,7 @@ func (s *server) GetBlockedPlayers(ctx context.Context, request GetBlockedPlayer
 	}, nil
 }
 
-func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error) {
+func (s *Server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error) {
 	alreadyBlocked, err := s.store.IsBlocked(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if player is blocked: %w", err)
@@ -97,7 +97,7 @@ func (s *server) BlockPlayer(ctx context.Context, request BlockPlayerRequestObje
 	return BlockPlayer201Response{}, nil
 }
 
-func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error) {
+func (s *Server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error) {
 	modified, err := s.store.DeletePlayerBlock(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unblock player: %w", err)
@@ -110,7 +110,7 @@ func (s *server) UnblockPlayer(ctx context.Context, request UnblockPlayerRequest
 	return UnblockPlayer204Response{}, nil
 }
 
-func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksBetweenPlayersRequestObject) (GetBlocksBetweenPlayersResponseObject, error) {
+func (s *Server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksBetweenPlayersRequestObject) (GetBlocksBetweenPlayersResponseObject, error) {
 	blocks, err := s.store.GetBlocksBetween(ctx, request.PlayerId, request.TargetId, request.Params.Bidirectional)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocks between players: %w", err)
@@ -142,7 +142,7 @@ func (s *server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksB
 	return GetBlocksBetweenPlayers200JSONResponse(blocksToReturn), nil
 }
 
-func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {
+func (s *Server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error) {
 	page := request.Params.Page
 	pageSize := request.Params.PageSize
 
@@ -192,7 +192,7 @@ func (s *server) GetPlayerFriends(ctx context.Context, request GetPlayerFriendsR
 	}, nil
 }
 
-func (s *server) GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error) {
+func (s *Server) GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error) {
 	outgoing := request.Params.Direction == Outgoing
 	page := request.Params.Page
 	pageSize := request.Params.PageSize
@@ -261,7 +261,7 @@ const (
 	hypercubeFriendLimit = 150
 )
 
-func (s *server) SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error) {
+func (s *Server) SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error) {
 	// Check if they are already friends
 	alreadyFriends, err := s.store.FriendshipExists(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
@@ -405,7 +405,7 @@ func (s *server) SendFriendRequest(ctx context.Context, request SendFriendReques
 	return SendFriendRequest201JSONResponse{IsRequest: true}, nil
 }
 
-func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error) {
+func (s *Server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error) {
 	var deletedReq FriendRequest
 	if request.Params.Bidirectional {
 		row, err := s.store.DeleteFriendRequestBidirectional(ctx, request.PlayerId, request.TargetId)
@@ -440,7 +440,7 @@ func (s *server) DeleteFriendRequest(ctx context.Context, request DeleteFriendRe
 	return DeleteFriendRequest200JSONResponse(deletedReq), nil
 }
 
-func (s *server) RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error) {
+func (s *Server) RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error) {
 	modified, err := s.store.DeletePlayerFriendBidirectional(ctx, request.PlayerId, request.TargetId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove friend: %w", err)

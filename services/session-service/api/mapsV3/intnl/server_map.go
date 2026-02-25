@@ -893,7 +893,7 @@ func (s *server) hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapDataJSONRespons
 		Settings: MapSettings{
 			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
 			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
-			Size:       mapSizeToAPI(m.Size),
+			Size:       MapSizeToAPI(m.Size),
 			Variant:    mapVariantToAPI(m.OptVariant),
 			Subvariant: m.OptSubvariant,
 			Tags:       apiTags,
@@ -946,7 +946,7 @@ func (s *server) hydratePublishedMap(m mapdb.PublishedMap) MapDataJSONResponse {
 		Settings: MapSettings{
 			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
 			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
-			Size:       mapSizeToAPI(m.Size),
+			Size:       MapSizeToAPI(m.Size),
 			Variant:    mapVariantToAPI(m.OptVariant),
 			Subvariant: m.OptSubvariant,
 			Tags:       m.OptTags,
@@ -970,7 +970,7 @@ func (s *server) hydratePublishedMap(m mapdb.PublishedMap) MapDataJSONResponse {
 	}
 }
 
-func mapSizeToAPI(size int64) MapSize {
+func MapSizeToAPI(size int64) MapSize {
 	switch size {
 	case model.MapSizeNormal:
 		return Normal

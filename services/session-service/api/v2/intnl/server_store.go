@@ -10,7 +10,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 )
 
-func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (FaucetResponseObject, error) {
+func (s *Server) Faucet(ctx context.Context, request FaucetRequestObject) (FaucetResponseObject, error) {
 	var currency playerdb.CurrencyType
 	if request.Body.Type == nil || *request.Body.Type == "coins" {
 		currency = playerdb.Coins // Default value also
@@ -55,7 +55,7 @@ func (s *server) Faucet(ctx context.Context, request FaucetRequestObject) (Fauce
 	return Faucet200Response{}, nil
 }
 
-func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error) {
+func (s *Server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
 	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
@@ -134,7 +134,7 @@ func (s *server) BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObje
 	return BuyCosmetic200Response{}, nil
 }
 
-func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error) {
+func (s *Server) GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
 	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
@@ -201,7 +201,7 @@ func (s *server) GivePlayerItems(ctx context.Context, request GivePlayerItemsReq
 	}, nil
 }
 
-func (s *server) GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error) {
+func (s *Server) GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error) {
 	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return GetPlayerHypercube404Response{}, nil
@@ -225,7 +225,7 @@ var upgradeMap = map[string]struct{ slots, size int }{
 	"map_size_4": {size: 3},
 }
 
-func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
+func (s *Server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
 	// Ensure the player exists first because the following requests are not valid otherwise
 	if pExists, err := s.store.PlayerExistsById(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
@@ -278,7 +278,7 @@ func (s *server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 	return BuyNamedUpgrade200Response{}, nil
 }
 
-func (s *server) TebexCheckout(ctx context.Context, request TebexCheckoutRequestObject) (TebexCheckoutResponseObject, error) {
+func (s *Server) TebexCheckout(ctx context.Context, request TebexCheckoutRequestObject) (TebexCheckoutResponseObject, error) {
 	packageId, ok := payments.PackageNameMap[request.Body.Package]
 	if !ok {
 		return nil, fmt.Errorf("invalid package: %s", request.Body.Package)

@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
+	mapIntnlV3 "github.com/hollow-cube/hc-services/services/session-service/api/mapsV3/intnl"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
@@ -71,27 +73,29 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 		zap.S().Infow("using workflow run image", "imageTag", imageTag)
 	}
 
-	mapResponse, err := t.maps.GetMapWithResponse(ctx, mapId)
+	m, err := t.mapStore.GetMapById(ctx, mapId)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
-	} else if mapResponse.JSON200 == nil {
-		span.SetStatus(codes.Error, "non-200 response for map")
-		span.RecordError(fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode))
-		return "", "", fmt.Errorf("non 200 response for map: %d", mapResponse.HTTPResponse.StatusCode)
 	}
-	m := mapResponse.JSON200
 
 	instanceName := t.isolateConfig.DefaultSize
 	instanceSize := t.isolateConfig.Instances[t.isolateConfig.DefaultSize]
-	if rawWorldSize, ok := t.isolateConfig.WorldSizeMapping[string(m.Settings.Size)]; ok && rawWorldSize != "" {
+	if rawWorldSize, ok := t.isolateConfig.WorldSizeMapping[string(mapIntnlV3.MapSizeToAPI(m.Size))]; ok && rawWorldSize != "" {
 		if worldSize, ok := t.isolateConfig.Instances[rawWorldSize]; ok {
 			instanceName = rawWorldSize
 			instanceSize = worldSize
 		}
 	}
-	if rawOverrideSize, ok := m.Settings.Extra["instance_size"].(string); ok && rawOverrideSize != "" {
+
+	// gross, should handle this in sqlc gen
+	extra := make(map[string]interface{})
+	if m.OptExtra != nil {
+		_ = json.Unmarshal(m.OptExtra, &extra)
+	}
+
+	if rawOverrideSize, ok := extra["instance_size"].(string); ok && rawOverrideSize != "" {
 		if overrideSize, ok := t.isolateConfig.Instances[rawOverrideSize]; ok {
 			instanceName = rawOverrideSize
 			instanceSize = overrideSize

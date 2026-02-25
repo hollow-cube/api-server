@@ -466,7 +466,7 @@ type PerformTabCompleteJSONRequestBody PerformTabCompleteJSONBody
 // TebexCheckoutJSONRequestBody defines body for TebexCheckout for application/json ContentType.
 type TebexCheckoutJSONRequestBody TebexCheckoutJSONBody
 
-// ServerInterface represents all server handlers.
+// ServerInterface represents all Server handlers.
 type ServerInterface interface {
 	// Endpoint to give players currency
 	// (POST /faucet)
@@ -3386,7 +3386,7 @@ func (response TebexCheckout200JSONResponse) VisitTebexCheckoutResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-// StrictServerInterface represents all server handlers.
+// StrictServerInterface represents all Server handlers.
 type StrictServerInterface interface {
 	// Endpoint to give players currency
 	// (POST /faucet)

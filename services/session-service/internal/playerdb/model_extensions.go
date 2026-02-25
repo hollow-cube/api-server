@@ -15,6 +15,7 @@ type PlayerSetting struct {
 
 var (
 	PlayerSettingAutoRejectFriendRequests = PlayerSetting{Key: "auto_reject_friend_requests", DefaultValue: false}
+	PlayerSettingAllowDMs                 = PlayerSetting{Key: "allow_direct_messages", DefaultValue: true}
 )
 
 type PlayerSettings map[string]interface{}

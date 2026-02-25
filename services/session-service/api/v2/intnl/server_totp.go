@@ -16,7 +16,7 @@ var (
 	errNotConfigured = errors.New("not configured")
 )
 
-func (s *server) CheckTotp(ctx context.Context, request CheckTotpRequestObject) (CheckTotpResponseObject, error) {
+func (s *Server) CheckTotp(ctx context.Context, request CheckTotpRequestObject) (CheckTotpResponseObject, error) {
 	var code string
 	if request.Params.Code != nil {
 		code = *request.Params.Code
@@ -36,7 +36,7 @@ func (s *server) CheckTotp(ctx context.Context, request CheckTotpRequestObject) 
 	return CheckTotp200Response{}, nil
 }
 
-func (s *server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupRequestObject) (BeginTotpSetupResponseObject, error) {
+func (s *Server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupRequestObject) (BeginTotpSetupResponseObject, error) {
 	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return BeginTotpSetup404Response{}, nil
@@ -92,7 +92,7 @@ func (s *server) BeginTotpSetup(ctx context.Context, request BeginTotpSetupReque
 	}}, nil
 }
 
-func (s *server) CompleteTotpSetup(ctx context.Context, request CompleteTotpSetupRequestObject) (CompleteTotpSetupResponseObject, error) {
+func (s *Server) CompleteTotpSetup(ctx context.Context, request CompleteTotpSetupRequestObject) (CompleteTotpSetupResponseObject, error) {
 	code := request.Body.Code
 
 	config, err := s.testTotpCode(ctx, request.PlayerId, code, true)
@@ -114,7 +114,7 @@ func (s *server) CompleteTotpSetup(ctx context.Context, request CompleteTotpSetu
 	return CompleteTotpSetup200Response{}, nil
 }
 
-func (s *server) RemoveTotp(ctx context.Context, request RemoveTotpRequestObject) (RemoveTotpResponseObject, error) {
+func (s *Server) RemoveTotp(ctx context.Context, request RemoveTotpRequestObject) (RemoveTotpResponseObject, error) {
 	if err := s.store.DeleteTOTP(ctx, request.PlayerId); err != nil {
 		return nil, fmt.Errorf("failed to delete totp record: %w", err)
 	}
@@ -130,7 +130,7 @@ func (s *server) RemoveTotp(ctx context.Context, request RemoveTotpRequestObject
 //
 // It is valid to test an empty string and check for errNotConfigured to determine if TOTP is setup or not
 // unsafeAllowInactive will still test an inactive totp entry. Should not be set unless you know why its set.
-func (s *server) testTotpCode(ctx context.Context, playerId, code string, unsafeAllowInactive bool) (*playerdb.PlayerTotp, error) {
+func (s *Server) testTotpCode(ctx context.Context, playerId, code string, unsafeAllowInactive bool) (*playerdb.PlayerTotp, error) {
 	if code != "" && len(code) != 6 {
 		return nil, errInvalidCode
 	}

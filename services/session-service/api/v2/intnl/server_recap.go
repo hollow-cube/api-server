@@ -8,7 +8,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 )
 
-func (s *server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error) {
+func (s *Server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error) {
 	recap, err := s.store.GetRecapByPlayerId(ctx, request.PlayerId, request.Year)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return GetPlayerRecap404Response{}, nil

@@ -5,6 +5,7 @@ package intnl
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
+	v2Internal "github.com/hollow-cube/hc-services/services/session-service/api/v2/intnl"
+	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	pplayer "github.com/hollow-cube/hc-services/services/session-service/pkg/player"
 	"github.com/nats-io/nats.go/jetstream"
@@ -42,7 +45,8 @@ type serverImpl struct {
 
 	queries *db.Queries
 
-	playerClient  playerService.ClientWithResponsesInterface
+	playerHandler *v2Internal.Server
+	playerStore   *playerdb.Store
 	playerTracker *player.Tracker
 	serverTracker *server.Tracker
 	worldTracker  *world.Tracker
@@ -59,7 +63,8 @@ type ServerParams struct {
 
 	Queries *db.Queries
 
-	PlayerClient  playerService.ClientWithResponsesInterface
+	PlayerHandler v2Internal.StrictServerInterface
+	PlayerStore   *playerdb.Store
 	PlayerTracker *player.Tracker
 	ServerTracker *server.Tracker
 	WorldTracker  *world.Tracker
@@ -85,7 +90,8 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 		jetStream:     params.JetStream,
 		gh:            params.GitHub,
 		queries:       params.Queries,
-		playerClient:  params.PlayerClient,
+		playerHandler: params.PlayerHandler.(*v2Internal.Server),
+		playerStore:   params.PlayerStore,
 		playerTracker: params.PlayerTracker,
 		serverTracker: params.ServerTracker,
 		worldTracker:  params.WorldTracker,
@@ -94,29 +100,32 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 }
 
 func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error) {
-	punishmentResp, err := s.playerClient.GetActivePunishmentWithResponse(ctx, request.PlayerId, &playerService.GetActivePunishmentParams{
-		PunishmentType: string(playerService.PunishmentTypeBan),
-	})
-	if err != nil {
+	punishment, err := s.playerStore.GetActivePunishment(ctx, string(playerService.PunishmentTypeBan), request.PlayerId)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get active punishment: %w", err)
-	}
-	if punishmentResp.StatusCode() == 200 && punishmentResp.JSON200 != nil {
-		// Return the body flat out not the parsed object so that this is not suceptible to the client reference going out of date.
-		rawPlayerResponse := make(map[string]interface{})
-		if err = json.Unmarshal(punishmentResp.Body, &rawPlayerResponse); err != nil {
-			return nil, err
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		// This sequence is obviously very gross, needs fixing.
+		r1 := v2Internal.PunishmentToAPI(punishment)
+		r2, err := json.Marshal(r1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal punishment: %w", err)
 		}
-		return &CreateSession403JSONResponse{rawPlayerResponse}, nil
+		var raw map[string]interface{}
+		if err = json.Unmarshal(r2, &raw); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal punishment: %w", err)
+		}
+
+		return &CreateSession403JSONResponse{raw}, nil
 	}
 
 	// TODO check if already online
 
 	// Get/create/update the player data object
-	pd, pdRaw, err := s.getOrCreatePlayerData(ctx, request.PlayerId, request.Body.Username, request.Body.Ip, request.Body.Skin)
+	pd, err := s.getOrCreatePlayerData(ctx, request.PlayerId, request.Body.Username, request.Body.Ip, request.Body.Skin)
 	if err != nil {
 		return nil, err
 	}
-	pdRaw = s.updatePlayerDataFromJoin(pd, pdRaw, request.Body.Username, request.Body.Ip, request.Body.Skin)
+	s.updatePlayerDataFromJoin(pd, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
 	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
 		!pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
@@ -145,6 +154,10 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
+	pdRaw, err := json.Marshal(pd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal player data: %w", err)
+	}
 	return rawPlayerDataResponse(pdRaw), nil
 }
 
@@ -157,22 +170,28 @@ func (s *serverImpl) DeleteSession(ctx context.Context, request DeleteSessionReq
 		return DeleteSession404Response{}, nil
 	}
 
-	_, err = s.playerClient.UpdatePlayerDataWithResponse(ctx, request.PlayerId,
-		playerService.PlayerDataUpdateRequest{PlaytimeInc: &duration})
+	r, err := s.playerHandler.UpdatePlayerData(ctx, v2Internal.UpdatePlayerDataRequestObject{
+		PlayerId: request.PlayerId,
+		Body:     &v2Internal.PlayerDataUpdateRequest{PlaytimeInc: &duration},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update player data: %w", err)
+	}
+	if _, ok := r.(playerService.UpdatePlayerData200Response); !ok {
+		return nil, fmt.Errorf("unexpected response from player service: %v", r)
 	}
 
 	return DeleteSession200Response{}, nil
 }
 
 func (s *serverImpl) TransferSession(ctx context.Context, request TransferSessionRequestObject) (TransferSessionResponseObject, error) {
-	pdResp, err := s.playerClient.GetPlayerDataWithResponse(ctx, request.PlayerId)
+	pdResp, err := s.playerHandler.GetPlayerData(ctx, v2Internal.GetPlayerDataRequestObject{PlayerId: request.PlayerId})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get player data: %w", err)
-	} else if pdResp.StatusCode() != 200 {
-		return nil, fmt.Errorf("unexpected response from player service (%d): %s",
-			pdResp.StatusCode(), pdResp.Body)
+	}
+	pd, ok := pdResp.(v2Internal.GetPlayerData200JSONResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response from player service: %v", pdResp)
 	}
 
 	session, isFirstTransfer, err := s.playerTracker.TransferSession(ctx, request.PlayerId, &kafkaModel.Presence{
@@ -187,8 +206,13 @@ func (s *serverImpl) TransferSession(ctx context.Context, request TransferSessio
 		return TransferSession404Response{}, nil
 	}
 
+	// TODO: obviously gross, should fix
+	s1, err := json.Marshal(pd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal player data: %w", err)
+	}
 	pdIf := make(map[string]interface{})
-	if err = json.Unmarshal(pdResp.Body, &pdIf); err != nil {
+	if err = json.Unmarshal(s1, &pdIf); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal player data: %w", err)
 	}
 
@@ -404,14 +428,15 @@ func (s *serverImpl) findExistingMapState(ctx context.Context, mapId string) boo
 	return err == nil
 }
 
-func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, username, ip string, skin *PlayerSkin) (*playerService.PlayerData, []byte, error) {
-	pdResp, err := s.playerClient.GetPlayerDataWithResponse(ctx, playerId)
+func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, username, ip string, skin *PlayerSkin) (*v2Internal.PlayerData, error) {
+	pdResp, err := s.playerHandler.GetPlayerData(ctx, v2Internal.GetPlayerDataRequestObject{PlayerId: playerId})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get player data: %w", err)
+		return nil, fmt.Errorf("failed to get player data: %w", err)
 	}
-	if pdResp.StatusCode() == 200 {
-		return pdResp.JSON200, pdResp.Body, nil
-	} else if pdResp.StatusCode() == 404 {
+	switch pdResp := pdResp.(type) {
+	case v2Internal.GetPlayerData200JSONResponse:
+		return new(playerService.PlayerData(pdResp)), nil
+	case v2Internal.GetPlayerData404Response:
 		var playerSkin *playerService.PlayerSkin
 		if skin != nil {
 			playerSkin = &playerService.PlayerSkin{
@@ -420,25 +445,28 @@ func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, userna
 			}
 		}
 
-		createResp, err := s.playerClient.CreatePlayerDataWithResponse(ctx, playerService.CreatePlayerDataJSONRequestBody{
-			Id:       playerId,
-			Ip:       ip,
-			Username: username,
-			Skin:     playerSkin,
+		createResp, err := s.playerHandler.CreatePlayerData(ctx, v2Internal.CreatePlayerDataRequestObject{
+			Body: &v2Internal.CreatePlayerDataJSONRequestBody{
+				Id:       playerId,
+				Ip:       ip,
+				Username: username,
+				Skin:     playerSkin,
+			},
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create player data: %w", err)
-		} else if createResp.StatusCode() != 201 {
-			return nil, nil, fmt.Errorf("failed to create player data (%d): %s", createResp.StatusCode(), createResp.Body)
+			return nil, fmt.Errorf("failed to create player data: %w", err)
+		}
+		if pd, ok := createResp.(playerService.CreatePlayerData201JSONResponse); ok {
+			return new(playerService.PlayerData(pd)), nil
 		}
 
-		return createResp.JSON201, createResp.Body, nil
+		return nil, fmt.Errorf("unexpected create response from player service: %T", createResp)
+	default:
+		return nil, fmt.Errorf("unexpected get response from player service: %T", pdResp)
 	}
-
-	return nil, nil, fmt.Errorf("failed to get player data (%d): %s", pdResp.StatusCode(), pdResp.Body)
 }
 
-func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRaw []byte, newUsername, newIp string, newSkin *PlayerSkin) []byte {
+func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUsername, newIp string, newSkin *PlayerSkin) {
 	syncUpdate := false
 	now := time.Now()
 	pd.LastOnline = now
@@ -465,9 +493,15 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 		// Do not use request context because it gets cancelled
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		_, err := s.playerClient.UpdatePlayerDataWithResponse(ctx, pd.Id, pdUpdate)
+		r, err := s.playerHandler.UpdatePlayerData(ctx, v2Internal.UpdatePlayerDataRequestObject{
+			PlayerId: pd.Id,
+			Body:     &pdUpdate,
+		})
 		if err != nil {
 			zap.S().Errorw("failed to update player data", "update", pdUpdate, "error", err)
+		}
+		if _, ok := r.(playerService.UpdatePlayerData200Response); !ok {
+			zap.S().Errorw("unexpected response from player service when updating player data", "update", pdUpdate, "response", r)
 		}
 	}
 	if syncUpdate {
@@ -475,27 +509,6 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *playerService.PlayerData, pdRa
 	} else {
 		go updateFunc()
 	}
-
-	if pdUpdate.Username == nil && pdUpdate.Skin == nil {
-		return pdRaw
-	}
-
-	// This is kind of weird logic to pass through this "raw" object, but its relevant to ensure that this service's
-	// version of the PlayerData object can correctly pass down backwards compatible changes.
-	// We just parse the raw object and update the username field.
-	var raw map[string]interface{}
-	if err := json.Unmarshal(pdRaw, &raw); err != nil {
-		zap.S().Errorw("failed to unmarshal player data", "error", err)
-		return pdRaw
-	}
-	raw["username"] = newUsername
-	raw["skin"] = newSkin
-	newRaw, err := json.Marshal(raw)
-	if err != nil {
-		zap.S().Errorw("failed to marshal player data", "error", err)
-		return pdRaw
-	}
-	return newRaw
 }
 
 func (s *serverImpl) sendMapJoinMessage(ctx context.Context, msg model.MapJoinInfoMessage) error {

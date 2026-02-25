@@ -29,9 +29,7 @@ import (
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
 	"github.com/hollow-cube/hc-services/services/session-service/api/auth"
-	mapService "github.com/hollow-cube/hc-services/services/session-service/api/mapsV3/intnl"
 	posthogProxy "github.com/hollow-cube/hc-services/services/session-service/api/posthog"
-	playerService2 "github.com/hollow-cube/hc-services/services/session-service/api/v2/intnl"
 	intnlV3 "github.com/hollow-cube/hc-services/services/session-service/api/v3/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/consumers"
@@ -91,7 +89,6 @@ func main() {
 		),
 
 		fx.Provide(newRedisClient),
-		fx.Provide(newPlayerSvc2, newMapServiceClient),
 		fx.Provide(newSessionPostgresStore, newPlayerPostgresStore, newMapsPostgresStore),
 		fx.Provide(newGithubClient),
 		fx.Provide(newTebexHeadlessClient),
@@ -172,14 +169,6 @@ func main() {
 	).Run()
 }
 
-func newPlayerSvc2(conf *config.Config) (playerService2.ClientWithResponsesInterface, error) {
-	return playerService2.NewClientWithResponses(conf.PlayerServiceUrl+"/v2/internal", playerService2.WithHTTPClient(tracefx.DefaultHTTPClient))
-}
-
-func newMapServiceClient(conf *config.Config) (mapService.ClientWithResponsesInterface, error) {
-	return mapService.NewClientWithResponses(conf.MapServiceUrl+"/v3/internal", mapService.WithHTTPClient(tracefx.DefaultHTTPClient))
-}
-
 func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 	if conf.Kubernetes.Namespace == "disabled" {
 		return nil, nil
@@ -221,7 +210,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 		[]mapIntnlV3.StrictMiddlewareFunc{mapIntnlV3.AuthMiddleware}), nil, "/v3/internal")
 	r.Handle("/v3/internal/maps", mapV3Int)
 	r.Handle("/v3/internal/maps/*", mapV3Int)
-	r.Handle("/v3/internal/map-player-data/*", mapV3Int)
+	r.Handle("/v3/internal/map-players/*", mapV3Int)
 	r.Handle("/v3/internal/terraform/*", mapTerraformV3.HandlerFromMuxWithBaseURL(mapTerraformV3.NewStrictHandler(v.mapTerraform,
 		[]mapTerraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
 	r.Handle("/v3/obungus/*", mapObungusV3.HandlerFromMuxWithBaseURL(mapObungusV3.NewStrictHandler(v.mapObungus,

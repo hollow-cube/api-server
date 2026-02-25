@@ -11,7 +11,7 @@ import (
 
 const notificationsPerPage = 21
 
-func (s *server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
+func (s *Server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
 	rows, err := s.store.DeleteNotification(ctx, request.PlayerId, request.NotificationId)
 	if rows == 0 {
 		return DeletePlayerNotification404Response{}, nil
@@ -21,7 +21,7 @@ func (s *server) DeletePlayerNotification(ctx context.Context, request DeletePla
 	return DeletePlayerNotification200Response{}, nil
 }
 
-func (s *server) GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error) {
+func (s *Server) GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error) {
 	var unreadOnly = request.Params.Unread != nil && *request.Params.Unread
 
 	var page int32 = 0
@@ -67,7 +67,7 @@ func (s *server) GetPlayerNotifications(ctx context.Context, request GetPlayerNo
 	}, nil
 }
 
-func (s *server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
+func (s *Server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
 	var rows int64
 	var err error
 	if request.Body.Read {
@@ -85,7 +85,7 @@ func (s *server) UpdatePlayerNotification(ctx context.Context, request UpdatePla
 	return UpdatePlayerNotification200Response{}, nil
 }
 
-func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error) {
+func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error) {
 	if err := s.createPlayerNotification(ctx, request); err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *server) CreatePlayerNotification(ctx context.Context, request CreatePla
 }
 
 // createPlayerNotification exists to allow local creation of notifications without an HTTP request to itself.
-func (s *server) createPlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
+func (s *Server) createPlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
 	var replace = request.Params.ReplaceUnread != nil && *request.Params.ReplaceUnread
 	var expiresAt *time.Time = nil
 	if request.Body.ExpiresIn != nil {
@@ -121,7 +121,7 @@ func (s *server) createPlayerNotification(ctx context.Context, request CreatePla
 	return nil
 }
 
-func (s *server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
+func (s *Server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
 	msg := model.NotificationUpdateMessage{
 		Action:   model.NotificationCreateAction,
 		PlayerId: request.PlayerId,

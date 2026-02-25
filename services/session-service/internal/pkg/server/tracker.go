@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
-	mapService "github.com/hollow-cube/hc-services/services/session-service/api/mapsV3/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
@@ -41,7 +41,7 @@ type TrackerParams struct {
 	Redis      rueidis.Client
 	Kubernetes *kubernetes.Clientset
 	Players    *player.Tracker
-	Maps       mapService.ClientWithResponsesInterface
+	MapStore   *mapdb.Store
 	GitHub     *github.Client
 }
 
@@ -52,7 +52,7 @@ type Tracker struct {
 	locker  rueidislock.Locker
 	gh      *github.Client
 
-	maps mapService.ClientWithResponsesInterface
+	mapStore *mapdb.Store
 
 	isolateConfig *config.MapIsolate
 
@@ -108,7 +108,7 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		k8s:           p.Kubernetes,
 		k8sLock:       k8sLock,
 		isolateConfig: &p.Config.MapIsolate,
-		maps:          p.Maps,
+		mapStore:      p.MapStore,
 	}, nil
 }
 

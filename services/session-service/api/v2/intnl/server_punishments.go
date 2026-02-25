@@ -12,7 +12,7 @@ import (
 	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 )
 
-func (s *server) GetActivePunishment(ctx context.Context, request GetActivePunishmentRequestObject) (GetActivePunishmentResponseObject, error) {
+func (s *Server) GetActivePunishment(ctx context.Context, request GetActivePunishmentRequestObject) (GetActivePunishmentResponseObject, error) {
 	ty := model.PunishmentType(request.Params.PunishmentType)
 	if ty != model.PunishmentTypeBan && ty != model.PunishmentTypeMute {
 		return nil, fmt.Errorf("invalid active punishment type: %s", ty)
@@ -25,10 +25,10 @@ func (s *server) GetActivePunishment(ctx context.Context, request GetActivePunis
 		return nil, fmt.Errorf("failed to get active punishment: %w", err)
 	}
 
-	return GetActivePunishment200JSONResponse(punishmentToAPI(p)), nil
+	return GetActivePunishment200JSONResponse(PunishmentToAPI(p)), nil
 }
 
-func (s *server) GetPunishments(ctx context.Context, request GetPunishmentsRequestObject) (GetPunishmentsResponseObject, error) {
+func (s *Server) GetPunishments(ctx context.Context, request GetPunishmentsRequestObject) (GetPunishmentsResponseObject, error) {
 	punishmentType := ""
 	if request.Params.PunishmentType != nil {
 		punishmentType = string(*request.Params.PunishmentType)
@@ -50,12 +50,12 @@ func (s *server) GetPunishments(ctx context.Context, request GetPunishmentsReque
 
 	result := make(GetPunishments200JSONResponse, 0, len(punishments))
 	for _, punishment := range punishments {
-		result = append(result, punishmentToAPI(punishment))
+		result = append(result, PunishmentToAPI(punishment))
 	}
 	return result, nil
 }
 
-func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentRequestObject) (CreatePunishmentResponseObject, error) {
+func (s *Server) CreatePunishment(ctx context.Context, request CreatePunishmentRequestObject) (CreatePunishmentResponseObject, error) {
 	if ok := punishmentTypeValidationMap[request.Body.PunishmentType]; !ok {
 		return nil, fmt.Errorf("invalid punishment type: %s", request.Body.PunishmentType)
 	}
@@ -174,10 +174,10 @@ func (s *server) CreatePunishment(ctx context.Context, request CreatePunishmentR
 		}
 	}()
 
-	return CreatePunishment200JSONResponse(punishmentToAPI(punishment)), nil
+	return CreatePunishment200JSONResponse(PunishmentToAPI(punishment)), nil
 }
 
-func (s *server) GetPunishmentLadders(_ context.Context, request GetPunishmentLaddersRequestObject) (GetPunishmentLaddersResponseObject, error) {
+func (s *Server) GetPunishmentLadders(_ context.Context, request GetPunishmentLaddersRequestObject) (GetPunishmentLaddersResponseObject, error) {
 	var punishmentType model.PunishmentType
 	if request.Params.PunishmentType != nil && *request.Params.PunishmentType != "" {
 		punishmentType = model.PunishmentType(*request.Params.PunishmentType)
@@ -210,7 +210,7 @@ func (s *server) GetPunishmentLadders(_ context.Context, request GetPunishmentLa
 	return result, nil
 }
 
-func (s *server) GetPunishmentLadderEntry(_ context.Context, request GetPunishmentLadderEntryRequestObject) (GetPunishmentLadderEntryResponseObject, error) {
+func (s *Server) GetPunishmentLadderEntry(_ context.Context, request GetPunishmentLadderEntryRequestObject) (GetPunishmentLadderEntryResponseObject, error) {
 	ladder := s.punishmentLadders[request.Params.LadderId]
 	if ladder == nil || request.Params.Index == "" {
 		return GetPunishmentLadderEntry404Response{}, nil
@@ -232,7 +232,7 @@ func (s *server) GetPunishmentLadderEntry(_ context.Context, request GetPunishme
 	}, nil
 }
 
-func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentRequestObject) (RevokePunishmentResponseObject, error) {
+func (s *Server) RevokePunishment(ctx context.Context, request RevokePunishmentRequestObject) (RevokePunishmentResponseObject, error) {
 	p, err := s.store.RevokePunishment(ctx, playerdb.RevokePunishmentParams{
 		Type:          string(request.Body.Type),
 		PlayerID:      request.Body.PlayerId,
@@ -265,7 +265,7 @@ func (s *server) RevokePunishment(ctx context.Context, request RevokePunishmentR
 	return RevokePunishment200Response{}, nil
 }
 
-func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.PunishmentUpdateAction, punishment *playerdb.Punishment) error {
+func (s *Server) sendPunishmentUpdateMessage(ctx context.Context, action model.PunishmentUpdateAction, punishment *playerdb.Punishment) error {
 	msg := &model.PunishmentUpdateMessage{
 		Action:     action,
 		Punishment: punishment,
@@ -278,7 +278,7 @@ func (s *server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 	return nil
 }
 
-func punishmentToAPI(p playerdb.Punishment) Punishment {
+func PunishmentToAPI(p playerdb.Punishment) Punishment {
 	return Punishment{
 		PlayerId:   p.PlayerID,
 		ExecutorId: p.ExecutorID,

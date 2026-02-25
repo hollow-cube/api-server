@@ -1,5 +1,4 @@
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -o server.gen.go -package intnl -generate types,strict-server,std-http-server openapi.yaml
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -o client.gen.go -package intnl -generate client openapi.yaml
 
 package intnl
 
@@ -22,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ StrictServerInterface = (*server)(nil)
+var _ StrictServerInterface = (*Server)(nil)
 
 type ServerParams struct {
 	fx.In
@@ -91,7 +90,7 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 		return nil, err
 	}
 
-	return &server{
+	return &Server{
 		log:               p.Log.With("handler", "internal"),
 		metrics:           p.Metrics,
 		store:             p.Store,
@@ -102,7 +101,7 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 	}, nil
 }
 
-type server struct {
+type Server struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
@@ -114,7 +113,7 @@ type server struct {
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder
 }
 
-func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
+func (s *Server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
 	pd, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return GetPlayerData404Response{}, nil
@@ -129,7 +128,7 @@ func (s *server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 	return GetPlayerData200JSONResponse(*apiPlayer), nil
 }
 
-func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
+func (s *Server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
 	var skin *playerdb.PlayerSkin
 	if request.Body.Skin != nil {
 		skin = &playerdb.PlayerSkin{
@@ -158,7 +157,7 @@ func (s *server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 	return CreatePlayerData201JSONResponse(*apiPlayer), nil
 }
 
-func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
+func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
 	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return PlayerNotFoundResponse{}, nil
@@ -235,11 +234,11 @@ func (s *server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 	return UpdatePlayerData200Response{}, nil
 }
 
-func (s *server) GetPlayerBackpack(_ context.Context, _ GetPlayerBackpackRequestObject) (GetPlayerBackpackResponseObject, error) {
+func (s *Server) GetPlayerBackpack(_ context.Context, _ GetPlayerBackpackRequestObject) (GetPlayerBackpackResponseObject, error) {
 	return GetPlayerBackpack200JSONResponse{}, nil
 }
 
-func (s *server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmeticsRequestObject) (GetPlayerCosmeticsResponseObject, error) {
+func (s *Server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmeticsRequestObject) (GetPlayerCosmeticsResponseObject, error) {
 	cosmetics, err := s.store.GetUnlockedCosmetics(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get unlocked cosmetics: %w", err)
@@ -248,7 +247,7 @@ func (s *server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmet
 	return GetPlayerCosmetics200JSONResponse(cosmetics), nil
 }
 
-func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error) {
+func (s *Server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error) {
 	if orgName, ok := orgMapNames[request.PlayerId]; ok {
 		return GetPlayerDisplayNameV2200JSONResponse(orgName), nil
 	}
@@ -266,7 +265,7 @@ func (s *server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	return GetPlayerDisplayNameV2200JSONResponse(displayName), nil
 }
 
-func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error) {
+func (s *Server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error) {
 	playerIPs, err := s.store.GetPlayerIPHistory(ctx, request.PlayerId)
 	if err != nil {
 		return nil, err
@@ -292,7 +291,7 @@ func (s *server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequest
 	return GetPlayerAlts200JSONResponse{Results: results}, nil
 }
 
-func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
+func (s *Server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
 	res, err := playerdb.Tx(ctx, s.store, func(ctx context.Context, txStore *playerdb.Store) (*CyclePlayerApiKey200JSONResponse, error) {
 		_, err := txStore.GetPlayerData(ctx, request.PlayerId)
 		if errors.Is(err, playerdb.ErrNoRows) {
@@ -324,7 +323,7 @@ func (s *server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKe
 	return res, nil
 }
 
-func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
+func (s *Server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObject) (GetPlayerIdResponseObject, error) {
 	pid, err := s.store.SafeLookupPlayerIdByIdOrUsername(ctx, request.IdOrUsername)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return PlayerNotFoundResponse{}, nil
@@ -335,7 +334,7 @@ func (s *server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObje
 	return GetPlayerId200TextResponse(pid), nil
 }
 
-func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error) {
+func (s *Server) PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error) {
 	if request.Body.Query == "" {
 		return PerformTabComplete200JSONResponse{Result: []TabCompleteEntry{}}, nil
 	}
@@ -355,7 +354,7 @@ func (s *server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 	return &PerformTabComplete200JSONResponse{Result: result}, nil
 }
 
-func (s *server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
+func (s *Server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish player data update message: %w", err)
 	}

@@ -10,11 +10,11 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
-	playerService "github.com/hollow-cube/hc-services/services/session-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/text"
+	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 	pplayer "github.com/hollow-cube/hc-services/services/session-service/pkg/player"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
@@ -49,7 +49,7 @@ type ChatHandler struct {
 	redis   rueidis.Client
 	js      *natsutil.JetStreamWrapper
 
-	playerClient  playerService.ClientWithResponsesInterface
+	playerStore   *playerdb.Store
 	playerTracker *player.Tracker
 }
 
@@ -61,7 +61,7 @@ type ChatHandlerParams struct {
 	Queries          *db.Queries
 	KubernetesClient *kubernetes.Clientset
 	Redis            rueidis.Client
-	PlayerClient     playerService.ClientWithResponsesInterface
+	PlayerStore      *playerdb.Store
 	PlayerTracker    *player.Tracker
 	JS               *natsutil.JetStreamWrapper
 }
@@ -76,7 +76,7 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 		redis:   p.Redis,
 		js:      p.JS,
 
-		playerClient:  p.PlayerClient,
+		playerStore:   p.PlayerStore,
 		playerTracker: p.PlayerTracker,
 	}
 
@@ -113,8 +113,6 @@ func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) 
 	return handler, nil
 }
 
-const playerSettingAllowDMs = "allow_direct_messages"
-
 func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.ClientChatMessage) error {
 	// Sanitize the message for invalid characters
 	text := text.StripDisallowed(msg.Message)
@@ -127,7 +125,7 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		return nil // Error system message was already sent
 	}
 
-	sender, err := h.playerClient.GetPlayerDataWithResponse(ctx, msg.Sender)
+	sender, err := h.playerStore.GetPlayerData(ctx, msg.Sender)
 	if err != nil {
 		return fmt.Errorf("failed to get sender player data: %w", err)
 	}
@@ -135,7 +133,7 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 	// We've already resolved the reply channel here so all dms look the same.
 	if common.IsUUID(string(channel)) {
 		// If sender is not accepting DMs, dont allow them to send DMs either
-		if allow, ok := sender.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
+		if !sender.Settings.GetBool(playerdb.PlayerSettingAllowDMs) {
 			h.sendMessageToServer(ctx, &model.ChatMessage{
 				Type:   model.ChatSystem,
 				Target: msg.Sender,
@@ -144,12 +142,12 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 			return nil
 		}
 
-		target, err := h.playerClient.GetPlayerDataWithResponse(ctx, string(channel))
+		target, err := h.playerStore.GetPlayerData(ctx, string(channel))
 		if err != nil {
 			return fmt.Errorf("failed to get target player data: %w", err)
 		}
 		// If target is not accepting DMs, notify the sender and drop.
-		if allow, ok := target.JSON200.Settings[playerSettingAllowDMs].(bool); ok && !allow {
+		if !target.Settings.GetBool(playerdb.PlayerSettingAllowDMs) {
 			h.sendMessageToServer(ctx, &model.ChatMessage{
 				Type:   model.ChatSystem,
 				Target: msg.Sender,
@@ -219,14 +217,13 @@ func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.
 		}
 	})
 
-	hasHyperCube := pplayer.Has(sender.JSON200.Permissions, pplayer.FlagExtendedLimits)
 	h.sendMessageToServer(ctx, &model.ChatMessage{
 		Type:               model.ChatUnsigned,
 		Channel:            channel,
 		Sender:             msg.Sender,
 		Parts:              parts,
 		Seed:               msg.Seed,
-		SenderHasHypercube: hasHyperCube,
+		SenderHasHypercube: sender.Has(pplayer.FlagExtendedLimits),
 	})
 
 	// If this is a DM (NOT REPLY), update the reply channels for both sides

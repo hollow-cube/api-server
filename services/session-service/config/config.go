@@ -102,8 +102,6 @@ type Config struct {
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
 	Metrics           Metrics            `mapstructure:"metrics"`
 	OTLP              common.OtlpConfig  `mapstructure:"otlp"`
-	PlayerServiceUrl  string             `mapstructure:"player_service_url"`
-	MapServiceUrl     string             `mapstructure:"map_service_url"`
 	Redis             Redis              `mapstructure:"redis"`
 	NATS              NATS               `mapstructure:"nats"`
 	Kubernetes        Kubernetes         `mapstructure:"kubernetes"`
