@@ -34,7 +34,9 @@ type Kubernetes struct {
 }
 
 type Postgres struct {
-	URI string `mapstructure:"uri"`
+	URI        string `mapstructure:"uri"`
+	PlayersURI string `mapstructure:"players_uri"`
+	MapsURI    string `mapstructure:"maps_uri"`
 }
 
 type Posthog struct {
@@ -45,6 +47,39 @@ type Posthog struct {
 type Unleash struct {
 	Address string `mapstructure:"address"`
 	Token   string `mapstructure:"token"`
+}
+
+type Tebex struct {
+	PrivateKey            string `mapstructure:"private_key"`
+	Secret                string `mapstructure:"secret"`
+	DisputeDiscordWebhook string `mapstructure:"dispute_discord_webhook"`
+}
+
+type PunishmentLadder struct {
+	Id      string `mapstructure:"id"`
+	Name    string `mapstructure:"name"`
+	Type    string `mapstructure:"type"`
+	Entries []struct {
+		Duration string `mapstructure:"duration"`
+	} `mapstructure:"entries"`
+	Reasons []struct {
+		Id      string   `mapstructure:"id"`
+		Aliases []string `mapstructure:"aliases"`
+	} `mapstructure:"reasons"`
+}
+
+type Discord struct {
+	ApplicationID string `mapstructure:"application_id"`
+	PublicKey     string `mapstructure:"public_key"`
+	Token         string `mapstructure:"token"`
+}
+
+type S3 struct {
+	Endpoint   string `mapstructure:"endpoint"`
+	Region     string `mapstructure:"region"`
+	AccessKey  string `mapstructure:"access_key"`
+	SecretKey  string `mapstructure:"secret_key"`
+	MapsBucket string `mapstructure:"maps_bucket"`
 }
 
 type MapIsolate struct {
@@ -63,20 +98,24 @@ type Github struct {
 }
 
 type Config struct {
-	Env              string            `mapstructure:"env"`
-	HTTP             common.HTTPConfig `mapstructure:"http"`
-	Metrics          Metrics           `mapstructure:"metrics"`
-	OTLP             common.OtlpConfig `mapstructure:"otlp"`
-	PlayerServiceUrl string            `mapstructure:"player_service_url"`
-	MapServiceUrl    string            `mapstructure:"map_service_url"`
-	Redis            Redis             `mapstructure:"redis"`
-	NATS             NATS              `mapstructure:"nats"`
-	Kubernetes       Kubernetes        `mapstructure:"kubernetes"`
-	Postgres         Postgres          `mapstructure:"postgres"`
-	Posthog          Posthog           `mapstructure:"posthog"`
-	Unleash          Unleash           `mapstructure:"unleash"`
-	MapIsolate       MapIsolate        `mapstructure:"map_isolate"`
-	Github           Github            `mapstructure:"github"`
+	Env               string             `mapstructure:"env"`
+	HTTP              common.HTTPConfig  `mapstructure:"http"`
+	Metrics           Metrics            `mapstructure:"metrics"`
+	OTLP              common.OtlpConfig  `mapstructure:"otlp"`
+	PlayerServiceUrl  string             `mapstructure:"player_service_url"`
+	MapServiceUrl     string             `mapstructure:"map_service_url"`
+	Redis             Redis              `mapstructure:"redis"`
+	NATS              NATS               `mapstructure:"nats"`
+	Kubernetes        Kubernetes         `mapstructure:"kubernetes"`
+	Postgres          Postgres           `mapstructure:"postgres"`
+	Posthog           Posthog            `mapstructure:"posthog"`
+	Unleash           Unleash            `mapstructure:"unleash"`
+	MapIsolate        MapIsolate         `mapstructure:"map_isolate"`
+	Github            Github             `mapstructure:"github"`
+	PunishmentLadders []PunishmentLadder `mapstructure:"punishment_ladders"`
+	Tebex             Tebex              `mapstructure:"tebex"`
+	S3                S3                 `mapstructure:"s3"`
+	Discord           Discord            `mapstructure:"discord"`
 }
 
 //go:embed default.yaml

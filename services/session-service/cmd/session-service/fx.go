@@ -5,9 +5,12 @@ import (
 	"time"
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/common"
+	"github.com/hollow-cube/hc-services/libraries/common/pkg/metric"
 	posthog2 "github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
+	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
+	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -65,39 +68,38 @@ func newRedisClient(lc fx.Lifecycle, conf *config.Config) (rueidis.Client, error
 	return c, nil
 }
 
-func setupPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) error {
-	// Making 2 clients here is kinda cursed, but some cases like maintenance we want to always eval the flag
-	// remotely no matter what and the normal client doesnt support that.
-
+func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecycle) (posthog.Client, error) {
 	apiKey := "phc_mK0jji1aC3hvMBGLOLjuVARqolDGPS9AiuNUOhMwVyA" // Not a secret, included on website
-	if conf.Env == "tilt" {
-		log.Info("dropping posthog api key because we are in tilt")
-		posthog2.InitFixedValue(true)
-		return nil
-	}
 
 	client, err := posthog.NewWithConfig(apiKey, posthog.Config{
 		Endpoint:       conf.Posthog.Endpoint,
 		PersonalApiKey: conf.Posthog.PersonalApiKey,
 	})
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	if conf.Env == "tilt" {
+		log.Info("dropping posthog client because tilt is enabled")
+		posthog2.InitFixedValue(true)
+		apiKey = ""
+		return client, nil
 	}
 
 	nonLocalClient, err := posthog.NewWithConfig(apiKey, posthog.Config{
 		Endpoint: conf.Posthog.Endpoint,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	lc.Append(fx.StopHook(client.Close))
 	lc.Append(fx.StopHook(nonLocalClient.Close))
 	posthog2.Init(client, nonLocalClient)
-	return nil
+	return client, nil
 }
 
-func newDbQuerySet(lc fx.Lifecycle, conf *config.Config) (*db.Queries, error) {
+func newSessionPostgresStore(lc fx.Lifecycle, conf *config.Config) (*db.Queries, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -109,4 +111,32 @@ func newDbQuerySet(lc fx.Lifecycle, conf *config.Config) (*db.Queries, error) {
 	lc.Append(fx.StopHook(pool.Close))
 
 	return queries, nil
+}
+
+func newPlayerPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*playerdb.Store, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	store, pool, err := playerdb.NewQuerySet(ctx, metrics, conf.Postgres.PlayersURI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return store, nil
+}
+
+func newMapsPostgresStore(conf *config.Config, metrics metric.Writer, lc fx.Lifecycle) (*mapdb.Store, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	store, pool, err := mapdb.NewQuerySet(ctx, metrics, conf.Postgres.MapsURI)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.StopHook(pool.Close))
+
+	return store, nil
 }

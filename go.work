@@ -2,6 +2,5 @@ go 1.26.0
 
 use (
 	libraries/common
-	services/player-service
 	services/session-service
 )

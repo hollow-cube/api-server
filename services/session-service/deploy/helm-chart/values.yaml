@@ -18,3 +18,8 @@ base:
     - name: mapmaker-map-isolate-config
       mountPath: /etc/map-isolate
       readOnly: true
+
+  service:
+    extraPorts:
+      - name: grpc
+        containerPort: 9001

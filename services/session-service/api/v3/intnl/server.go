@@ -13,14 +13,14 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
-	pplayer "github.com/hollow-cube/hc-services/services/player-service/pkg/player"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
+	pplayer "github.com/hollow-cube/hc-services/services/session-service/pkg/player"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
 
 	"github.com/google/go-github/v56/github"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/tracefx"
-	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
+	playerService "github.com/hollow-cube/hc-services/services/session-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/handler"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"

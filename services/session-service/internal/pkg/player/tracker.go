@@ -9,9 +9,8 @@ import (
 
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/natsutil"
 	"github.com/hollow-cube/hc-services/libraries/common/pkg/posthog"
-	playerService "github.com/hollow-cube/hc-services/services/player-service/api/v2/intnl"
+	playerService "github.com/hollow-cube/hc-services/services/session-service/api/v2/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
 	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
 	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go/jetstream"
@@ -112,7 +111,7 @@ func (t *Tracker) CreateSession(
 		ServerID:        serverId,
 		ProxyID:         proxyId,
 		Hidden:          isHidden,
-		Username:        util.Pointer(pd.Username),
+		Username:        new(pd.Username),
 		SkinTexture:     skinTexture,
 		SkinSignature:   skinSignature,
 		ProtocolVersion: int32(protocolVersion),
@@ -226,7 +225,7 @@ func (t *Tracker) TransferSession(ctx context.Context, playerId string, newPrese
 	}
 
 	s.ServerID = &newPresence.InstanceId
-	s.PType = util.Pointer(string(newPresence.Type))
+	s.PType = new(string(newPresence.Type))
 	s.PState = &newPresence.State
 	s.PInstanceID = &newPresence.InstanceId
 	s.PMapID = &newPresence.MapId

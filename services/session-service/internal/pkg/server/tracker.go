@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
-	mapService "github.com/hollow-cube/hc-services/services/player-service/api/mapsV3/intnl"
+	mapService "github.com/hollow-cube/hc-services/services/session-service/api/mapsV3/intnl"
 	"github.com/hollow-cube/hc-services/services/session-service/config"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
 	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"

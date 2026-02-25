@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
@@ -19,9 +18,9 @@ import (
 
 var (
 	defaultSecurityContext = &coreV1.SecurityContext{
-		RunAsNonRoot:             util.Pointer(true),
-		RunAsUser:                util.Pointer(int64(65532)),
-		AllowPrivilegeEscalation: util.Pointer(false),
+		RunAsNonRoot:             new(true),
+		RunAsUser:                new(int64(65532)),
+		AllowPrivilegeEscalation: new(false),
 		Capabilities: &coreV1.Capabilities{
 			Drop: []coreV1.Capability{"ALL"},
 		},
@@ -131,7 +130,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 				"kubernetes.io/hostname": "ovh-02",
 			},
 			ServiceAccountName:           "mapmaker-map-isolate",
-			AutomountServiceAccountToken: util.Pointer(false),
+			AutomountServiceAccountToken: new(false),
 			RestartPolicy:                coreV1.RestartPolicyNever,
 			ImagePullSecrets: []coreV1.LocalObjectReference{
 				{Name: "dockerio"},
