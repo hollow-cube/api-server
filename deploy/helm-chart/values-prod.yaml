@@ -16,7 +16,7 @@ base:
 
     SESSION_POSTHOG_ENDPOINT: "http://api-server.mapmaker.svc.cluster.local:9124/posthog"
 
-    SESSION_REDIS_ADDRESS: "redis-master.mapmaker.svc.cluster.local:6379"
+    SESSION_REDIS_ADDRESS: "dragonfly:6379"
     SESSION_NATS_SERVERS: "nats://nats:4222"
 
     SESSION_OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
