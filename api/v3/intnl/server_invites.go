@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/handler"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/handler"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
 )
 
 func (s *serverImpl) InviteToMap(ctx context.Context, request InviteToMapRequestObject) (InviteToMapResponseObject, error) {

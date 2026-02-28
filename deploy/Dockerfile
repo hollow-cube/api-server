@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 alpine:3.17.3
 
 WORKDIR /app
-COPY ./session-service /app/session-service
+COPY ./api-server /app/api-server
 
-ENTRYPOINT ["/app/session-service"]
+ENTRYPOINT ["/app/api-server"]

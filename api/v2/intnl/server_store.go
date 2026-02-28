@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/payments"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
 func (s *Server) Faucet(ctx context.Context, request FaucetRequestObject) (FaucetResponseObject, error) {

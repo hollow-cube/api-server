@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
+	"github.com/hollow-cube/api-server/internal/pkg/posthog"
 	"go.uber.org/zap"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/tebex-go"
 	"go.uber.org/zap"
 )

@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
-	httpTransport "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/http"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
+	httpTransport "github.com/hollow-cube/api-server/internal/pkg/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"

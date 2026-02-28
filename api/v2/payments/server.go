@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/config"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/natsutil"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/config"
+	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"github.com/spf13/viper"
 )
 

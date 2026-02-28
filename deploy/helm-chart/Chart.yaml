@@ -1,6 +1,6 @@
 apiVersion: v2
-name: session-service
-description: Helm chart for the session-service
+name: api-server
+description: Helm chart for the api-server
 type: application
 
 version: 0.1.0

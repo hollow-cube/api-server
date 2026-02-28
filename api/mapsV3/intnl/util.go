@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
 )
 
 func (s *server) getMapSlotIndex(ctx context.Context, pd *mapdb.MapPlayerData, mapId string, slot *int) (int, error) {

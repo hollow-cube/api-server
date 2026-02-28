@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/natsutil"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/player"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"github.com/vmihailenco/msgpack/v5"

@@ -54,7 +54,7 @@ sql:
 
           - column: "player_data.role"
             go_type:
-              import: "github.com/hollow-cube/hc-services/services/session-service/pkg/player"
+              import: "github.com/hollow-cube/api-server/pkg/player"
               type: "Role"
 
           - { column: "tx_log.meta", go_type: { type: "map[string]any" } }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v56/github"
-	"github.com/hollow-cube/hc-services/services/session-service/config"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/tracefx"
+	"github.com/hollow-cube/api-server/config"
+	"github.com/hollow-cube/api-server/internal/pkg/tracefx"
 )
 
 const (

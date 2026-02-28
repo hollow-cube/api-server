@@ -2,7 +2,7 @@ replicaCount: 1
 
 base:
   image:
-    repository: session-service
+    repository: api-server
 
   imagePullSecrets: []
   volumes: []

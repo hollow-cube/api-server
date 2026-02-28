@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/totp"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/totp"
+	"github.com/hollow-cube/api-server/internal/pkg/util"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/skip2/go-qrcode"
 )
 

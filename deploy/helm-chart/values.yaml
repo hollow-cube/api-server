@@ -1,10 +1,10 @@
 global:
-  nameOverride: session-service
-  fullnameOverride: session-service
+  nameOverride: api-server
+  fullnameOverride: api-server
 
 base:
   image:
-    repository: mworzala/session-service
+    repository: mworzala/api-server
 
   serviceAccount:
     extraPerms: true

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/natsutil"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
+	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/kafkaModel"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/fx"
 )

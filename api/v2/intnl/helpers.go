@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
 func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) (*PlayerData, error) {

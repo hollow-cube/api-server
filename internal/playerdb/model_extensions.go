@@ -3,7 +3,7 @@ package playerdb
 import (
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/player"
+	"github.com/hollow-cube/api-server/pkg/player"
 )
 
 // This is not an exhaustive list of player settings - only those used by the player service.

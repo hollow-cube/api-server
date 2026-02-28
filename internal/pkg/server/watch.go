@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
+	"github.com/hollow-cube/api-server/internal/db"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
@@ -24,7 +24,7 @@ const (
 	anyServerLabelSelector = roleLabel + ` in (hub,map,map-isolate)`
 )
 
-var otelTracer = otel.Tracer("github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server")
+var otelTracer = otel.Tracer("github.com/hollow-cube/api-server/internal/pkg/server")
 
 func (t *Tracker) podWatchLeadershipLoop() {
 	for {

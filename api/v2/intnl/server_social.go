@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/util"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
 func (s *Server) LookupPlayerDataBySocial(ctx context.Context, request LookupPlayerDataBySocialRequestObject) (LookupPlayerDataBySocialResponseObject, error) {

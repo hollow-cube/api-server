@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/kafkaModel"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/pkg/kafkaModel"
 )
 
 func (i *InviteManager) Accept(ctx context.Context, senderId string, targetId string) (*model.MapInvite, error) {

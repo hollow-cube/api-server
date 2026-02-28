@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/player"
+	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/player"
 )
 
 var syncRolesCommand = Command{

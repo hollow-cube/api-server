@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	v31 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
 
 	auth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"

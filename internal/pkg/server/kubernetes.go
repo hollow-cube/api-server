@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
-	mapIntnlV3 "github.com/hollow-cube/hc-services/services/session-service/api/mapsV3/intnl"
+	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"

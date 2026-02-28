@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/mapdb"
 )
 
 func (s *server) SearchHeadDatabase(ctx context.Context, request SearchHeadDatabaseRequestObject) (SearchHeadDatabaseResponseObject, error) {

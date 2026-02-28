@@ -1,4 +1,4 @@
-module github.com/hollow-cube/hc-services/services/session-service
+module github.com/hollow-cube/api-server
 
 go 1.26.0
 

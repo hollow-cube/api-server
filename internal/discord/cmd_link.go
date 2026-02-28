@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/util"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
 var linkCommand = Command{

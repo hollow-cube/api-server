@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/player"
+	"github.com/hollow-cube/api-server/internal/pkg/posthog"
+	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/player"
 	"github.com/jackc/pgx/v5"
 )
 

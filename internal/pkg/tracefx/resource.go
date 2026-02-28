@@ -3,7 +3,7 @@ package tracefx
 import (
 	"os"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )

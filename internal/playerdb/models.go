@@ -7,7 +7,7 @@ package playerdb
 import (
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/pkg/player"
+	"github.com/hollow-cube/api-server/pkg/player"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 

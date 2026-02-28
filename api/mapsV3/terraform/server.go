@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/mapdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )

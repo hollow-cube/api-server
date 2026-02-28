@@ -12,8 +12,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/metric"
-	postgresUtil "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/postgres"
+	"github.com/hollow-cube/api-server/internal/pkg/metric"
+	postgresUtil "github.com/hollow-cube/api-server/internal/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

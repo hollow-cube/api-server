@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )

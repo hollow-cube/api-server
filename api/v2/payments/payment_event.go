@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/payments"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/payments"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nats-io/nats.go/jetstream"

@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           ko login docker.io --username mworzala --password ${{ env.DOCKER_PASS }}
-          ko build ./cmd/session-service --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
+          ko build ./cmd/api-server --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
           echo "Version: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
   helm-build:
@@ -73,7 +73,7 @@ jobs:
         uses: hollow-cube/actions/helm-build@main
         with:
           vault-token: ${{ secrets.VAULT_TOKEN }}
-          name: "session-service"
+          name: api-server
           path: "deploy/helm-chart"
 
   helm-deploy:
@@ -84,6 +84,6 @@ jobs:
         uses: hollow-cube/actions/helm-deploy@main
         with:
           vault-token: ${{ secrets.VAULT_TOKEN }}
-          name: session-service
+          name: api-server
           cluster: prod-v3
           values: "deploy/helm-chart/values-prod.yaml"

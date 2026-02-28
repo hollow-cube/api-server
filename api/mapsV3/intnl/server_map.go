@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/gohugoio/hashstructure"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/object"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/util"
+	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/object"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/util"
 	"github.com/redis/rueidis"
 	"go.uber.org/zap"
 )

@@ -7,8 +7,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/redis/rueidis"
 )
 

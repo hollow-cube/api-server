@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/object"
+	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/object"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )

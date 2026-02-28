@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/trace"

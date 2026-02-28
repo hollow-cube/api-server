@@ -1,7 +1,7 @@
 package zapfx
 
 import (
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )

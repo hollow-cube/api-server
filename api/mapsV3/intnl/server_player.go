@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"github.com/redis/rueidis"
 )
 

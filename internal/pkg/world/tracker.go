@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/server"
+	"github.com/hollow-cube/api-server/internal/db"
+	"github.com/hollow-cube/api-server/internal/pkg/server"
 	"go.uber.org/fx"
 )
 

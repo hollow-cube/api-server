@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/hollow-cube/hc-services/services/session-service/config"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/db"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/common"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/metric"
-	posthog2 "github.com/hollow-cube/hc-services/services/session-service/internal/pkg/posthog"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/config"
+	"github.com/hollow-cube/api-server/internal/db"
+	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/metric"
+	posthog2 "github.com/hollow-cube/api-server/internal/pkg/posthog"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -39,7 +39,7 @@ type CommonConfigResources struct {
 
 func newCommonConfigResources(conf *config.Config) CommonConfigResources {
 	return CommonConfigResources{
-		Service: common.ServiceConfig{Name: "session-service", Env: conf.Env},
+		Service: common.ServiceConfig{Name: "api-server", Env: conf.Env},
 		HTTP:    conf.HTTP,
 		OTLP:    conf.OTLP,
 	}

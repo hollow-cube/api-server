@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	mapdb2 "github.com/hollow-cube/hc-services/services/session-service/internal/mapdb"
+	mapdb2 "github.com/hollow-cube/api-server/internal/mapdb"
 )
 
 // MapmakerSpawnMapId is the hardcoded Id of the spawn map in the dev server for now

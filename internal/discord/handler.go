@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/hollow-cube/hc-services/services/session-service/config"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/pkg/tracefx"
-	"github.com/hollow-cube/hc-services/services/session-service/internal/playerdb"
+	"github.com/hollow-cube/api-server/config"
+	"github.com/hollow-cube/api-server/internal/pkg/tracefx"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
