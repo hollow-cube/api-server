@@ -25,15 +25,29 @@ func GenerateServer(api *API) ([]byte, error) {
 	fmt.Fprintf(&buf, "\t%q\n", oxImport)
 	fmt.Fprintf(&buf, ")\n\n")
 
-	// RegisterRoutes
+	// RegisterParams type
+	fmt.Fprintf(&buf, "// RegisterParams configures route registration.\n")
+	fmt.Fprintf(&buf, "type RegisterParams struct {\n")
+	fmt.Fprintf(&buf, "\tMux     *http.ServeMux\n")
+	fmt.Fprintf(&buf, "\tBaseURL string // Optional prefix for all routes\n")
+	fmt.Fprintf(&buf, "}\n\n")
+
+	// RegisterRoutes function
 	fmt.Fprintf(&buf, "// RegisterRoutes registers all API routes on the given ServeMux.\n")
-	fmt.Fprintf(&buf, "func RegisterRoutes(mux *http.ServeMux, s *%s) {\n", api.StructName)
+	fmt.Fprintf(&buf, "func RegisterRoutes(s *%s, params RegisterParams) {\n", api.StructName)
+	fmt.Fprintf(&buf, "\th := &handlers{server: s}\n")
 	for _, ep := range api.Endpoints {
-		fmt.Fprintf(&buf, "\tmux.HandleFunc(%q, handle%s(s))\n", ep.Method+" "+ep.Path, ep.Name)
+		fmt.Fprintf(&buf, "\tparams.Mux.HandleFunc(%q+params.BaseURL+%q, h.%s)\n", ep.Method+" ", ep.Path, lcFirst(ep.Name))
 	}
 	fmt.Fprintf(&buf, "}\n\n")
 
-	// Handler functions
+	// Handlers struct
+	fmt.Fprintf(&buf, "// handlers wraps the server and provides HTTP handler methods.\n")
+	fmt.Fprintf(&buf, "type handlers struct {\n")
+	fmt.Fprintf(&buf, "\tserver *%s\n", api.StructName)
+	fmt.Fprintf(&buf, "}\n\n")
+
+	// Handler methods
 	for i := range api.Endpoints {
 		writeHandler(&buf, api, &api.Endpoints[i])
 	}
@@ -42,8 +56,8 @@ func GenerateServer(api *API) ([]byte, error) {
 }
 
 func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
-	fmt.Fprintf(buf, "func handle%s(s *%s) http.HandlerFunc {\n", ep.Name, api.StructName)
-	fmt.Fprintf(buf, "\treturn func(w http.ResponseWriter, r *http.Request) {\n")
+	// Generate handler method on the handlers struct
+	fmt.Fprintf(buf, "func (h *handlers) %s(w http.ResponseWriter, r *http.Request) {\n", lcFirst(ep.Name))
 
 	// Declare and populate request struct if it has params or an embedded body
 	hasReqStruct := ep.RequestType != ""
@@ -51,16 +65,16 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 	hasEmbeddedBody := ep.RequestBody != nil && ep.RequestBody.GoName != "body"
 
 	if hasReqStruct && (hasParams || hasEmbeddedBody) {
-		fmt.Fprintf(buf, "\t\tvar req %s\n", ep.RequestType)
+		fmt.Fprintf(buf, "\tvar req %s\n", ep.RequestType)
 		for i := range ep.Params {
 			writeParamBinding(buf, &ep.Params[i])
 		}
 		// If request struct has a Body field or embedded body, decode it
 		if ep.RequestBody != nil && ep.RequestBody.GoName != "body" {
-			fmt.Fprintf(buf, "\t\tif err := runtime.DecodeJSON(r, &req.%s); err != nil {\n", ep.RequestBody.GoName)
-			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
-			fmt.Fprintf(buf, "\t\t\treturn\n")
-			fmt.Fprintf(buf, "\t\t}\n")
+			fmt.Fprintf(buf, "\tif err := runtime.DecodeJSON(r, &req.%s); err != nil {\n", ep.RequestBody.GoName)
+			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
+			fmt.Fprintf(buf, "\t\treturn\n")
+			fmt.Fprintf(buf, "\t}\n")
 		}
 	}
 
@@ -68,11 +82,11 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 	var bodyVar string
 	if ep.RequestBody != nil && ep.RequestBody.GoName == "body" {
 		bodyVar = ep.RequestBody.GoName
-		fmt.Fprintf(buf, "\t\tvar %s %s\n", bodyVar, ep.RequestBody.GoType)
-		fmt.Fprintf(buf, "\t\tif err := runtime.DecodeJSON(r, &%s); err != nil {\n", bodyVar)
-		fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
-		fmt.Fprintf(buf, "\t\t\treturn\n")
-		fmt.Fprintf(buf, "\t\t}\n")
+		fmt.Fprintf(buf, "\tvar %s %s\n", bodyVar, ep.RequestBody.GoType)
+		fmt.Fprintf(buf, "\tif err := runtime.DecodeJSON(r, &%s); err != nil {\n", bodyVar)
+		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
+		fmt.Fprintf(buf, "\t\treturn\n")
+		fmt.Fprintf(buf, "\t}\n")
 	}
 
 	// Call the handler method
@@ -88,31 +102,30 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 	useResp := hasResp && ep.Response.StatusCode != 204
 
 	if useResp {
-		fmt.Fprintf(buf, "\t\tresp, err := s.%s(%s)\n", ep.Name, callArgs)
+		fmt.Fprintf(buf, "\tresp, err := h.server.%s(%s)\n", ep.Name, callArgs)
 	} else if hasResp {
-		fmt.Fprintf(buf, "\t\t_, err := s.%s(%s)\n", ep.Name, callArgs)
+		fmt.Fprintf(buf, "\t_, err := h.server.%s(%s)\n", ep.Name, callArgs)
 	} else {
-		fmt.Fprintf(buf, "\t\terr := s.%s(%s)\n", ep.Name, callArgs)
+		fmt.Fprintf(buf, "\terr := h.server.%s(%s)\n", ep.Name, callArgs)
 	}
 
 	// Error handling
-	fmt.Fprintf(buf, "\t\tif err != nil {\n")
-	fmt.Fprintf(buf, "\t\t\truntime.HandleError(w, err)\n")
-	fmt.Fprintf(buf, "\t\t\treturn\n")
-	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\tif err != nil {\n")
+	fmt.Fprintf(buf, "\t\truntime.HandleError(w, err)\n")
+	fmt.Fprintf(buf, "\t\treturn\n")
+	fmt.Fprintf(buf, "\t}\n")
 
 	// Write response
 	if useResp {
 		if ep.Response.ContentType == "text/plain" {
-			fmt.Fprintf(buf, "\t\truntime.WriteText(w, %d, resp)\n", ep.Response.StatusCode)
+			fmt.Fprintf(buf, "\truntime.WriteText(w, %d, resp)\n", ep.Response.StatusCode)
 		} else {
-			fmt.Fprintf(buf, "\t\truntime.WriteJSON(w, %d, resp)\n", ep.Response.StatusCode)
+			fmt.Fprintf(buf, "\truntime.WriteJSON(w, %d, resp)\n", ep.Response.StatusCode)
 		}
 	} else {
-		fmt.Fprintf(buf, "\t\tw.WriteHeader(%d)\n", ep.Response.StatusCode)
+		fmt.Fprintf(buf, "\tw.WriteHeader(%d)\n", ep.Response.StatusCode)
 	}
 
-	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "}\n\n")
 }
 
@@ -123,59 +136,59 @@ func writeParamBinding(buf *bytes.Buffer, p *Param) {
 	case "query":
 		writeQueryParam(buf, p)
 	case "header":
-		fmt.Fprintf(buf, "\t\treq.%s = r.Header.Get(%q)\n", p.GoName, p.Name)
+		fmt.Fprintf(buf, "\treq.%s = r.Header.Get(%q)\n", p.GoName, p.Name)
 	}
 }
 
 func writePathParam(buf *bytes.Buffer, p *Param) {
 	switch p.GoType {
 	case "string":
-		fmt.Fprintf(buf, "\t\treq.%s = r.PathValue(%q)\n", p.GoName, p.Name)
+		fmt.Fprintf(buf, "\treq.%s = r.PathValue(%q)\n", p.GoName, p.Name)
 	case "int":
-		fmt.Fprintf(buf, "\t\tif v, err := strconv.Atoi(r.PathValue(%q)); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\t\treturn\n")
-		fmt.Fprintf(buf, "\t\t} else {\n")
-		fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t\t}\n")
+		fmt.Fprintf(buf, "\tif v, err := strconv.Atoi(r.PathValue(%q)); err != nil {\n", p.Name)
+		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
+		fmt.Fprintf(buf, "\t\treturn\n")
+		fmt.Fprintf(buf, "\t} else {\n")
+		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
+		fmt.Fprintf(buf, "\t}\n")
 	case "int64":
-		fmt.Fprintf(buf, "\t\tif v, err := strconv.ParseInt(r.PathValue(%q), 10, 64); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\t\treturn\n")
-		fmt.Fprintf(buf, "\t\t} else {\n")
-		fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t\t}\n")
+		fmt.Fprintf(buf, "\tif v, err := strconv.ParseInt(r.PathValue(%q), 10, 64); err != nil {\n", p.Name)
+		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
+		fmt.Fprintf(buf, "\t\treturn\n")
+		fmt.Fprintf(buf, "\t} else {\n")
+		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
+		fmt.Fprintf(buf, "\t}\n")
 	case "bool":
-		fmt.Fprintf(buf, "\t\tif v, err := strconv.ParseBool(r.PathValue(%q)); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\t\treturn\n")
-		fmt.Fprintf(buf, "\t\t} else {\n")
-		fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t\t}\n")
+		fmt.Fprintf(buf, "\tif v, err := strconv.ParseBool(r.PathValue(%q)); err != nil {\n", p.Name)
+		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
+		fmt.Fprintf(buf, "\t\treturn\n")
+		fmt.Fprintf(buf, "\t} else {\n")
+		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
+		fmt.Fprintf(buf, "\t}\n")
 	}
 }
 
 func writeQueryParam(buf *bytes.Buffer, p *Param) {
 	switch p.GoType {
 	case "string":
-		fmt.Fprintf(buf, "\t\treq.%s = r.URL.Query().Get(%q)\n", p.GoName, p.Name)
+		fmt.Fprintf(buf, "\treq.%s = r.URL.Query().Get(%q)\n", p.GoName, p.Name)
 	case "int":
 		if p.Required {
-			fmt.Fprintf(buf, "\t\tif v, err := strconv.Atoi(r.URL.Query().Get(%q)); err != nil {\n", p.Name)
+			fmt.Fprintf(buf, "\tif v, err := strconv.Atoi(r.URL.Query().Get(%q)); err != nil {\n", p.Name)
+			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
+			fmt.Fprintf(buf, "\t\treturn\n")
+			fmt.Fprintf(buf, "\t} else {\n")
+			fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
+			fmt.Fprintf(buf, "\t}\n")
+		} else {
+			fmt.Fprintf(buf, "\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
+			fmt.Fprintf(buf, "\t\tif v, err := strconv.Atoi(qs); err != nil {\n")
 			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
 			fmt.Fprintf(buf, "\t\t\treturn\n")
 			fmt.Fprintf(buf, "\t\t} else {\n")
 			fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
 			fmt.Fprintf(buf, "\t\t}\n")
-		} else {
-			fmt.Fprintf(buf, "\t\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
-			fmt.Fprintf(buf, "\t\t\tif v, err := strconv.Atoi(qs); err != nil {\n")
-			fmt.Fprintf(buf, "\t\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\t\t\treturn\n")
-			fmt.Fprintf(buf, "\t\t\t} else {\n")
-			fmt.Fprintf(buf, "\t\t\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t}\n")
+			fmt.Fprintf(buf, "\t}\n")
 		}
 	}
 }

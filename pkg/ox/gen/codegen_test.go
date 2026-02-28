@@ -55,15 +55,27 @@ func TestGenerateServer(t *testing.T) {
 	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
 	require.NoError(t, err, "generated code should be valid Go")
 
-	// Check route registrations
-	require.Contains(t, src, `"GET /users/{id}"`)
-	require.Contains(t, src, `"POST /users"`)
-	require.Contains(t, src, `"DELETE /users/{id}"`)
+	// Check RegisterParams type
+	require.Contains(t, src, "type RegisterParams struct")
+	require.Contains(t, src, "Mux     *http.ServeMux")
+	require.Contains(t, src, "BaseURL string")
 
-	// Check handler names
-	require.Contains(t, src, "handleGetUser")
-	require.Contains(t, src, "handleCreateUser")
-	require.Contains(t, src, "handleDeleteUser")
+	// Check RegisterRoutes signature
+	require.Contains(t, src, "func RegisterRoutes(s *Server, params RegisterParams)")
+
+	// Check route registrations - BaseURL should be after the method
+	require.Contains(t, src, `params.Mux.HandleFunc("GET "+params.BaseURL+"/users/{id}"`)
+	require.Contains(t, src, `params.Mux.HandleFunc("POST "+params.BaseURL+"/users"`)
+	require.Contains(t, src, `params.Mux.HandleFunc("DELETE "+params.BaseURL+"/users/{id}"`)
+
+	// Check handlers struct
+	require.Contains(t, src, "type handlers struct")
+	require.Contains(t, src, "server *Server")
+
+	// Check handler methods (lowercase first letter)
+	require.Contains(t, src, "func (h *handlers) getUser(w http.ResponseWriter, r *http.Request)")
+	require.Contains(t, src, "func (h *handlers) createUser(w http.ResponseWriter, r *http.Request)")
+	require.Contains(t, src, "func (h *handlers) deleteUser(w http.ResponseWriter, r *http.Request)")
 
 	// Check param bindings
 	require.Contains(t, src, `r.PathValue("id")`)
@@ -261,7 +273,7 @@ func TestGenerateServer_EmbeddedRequestBody(t *testing.T) {
 	require.Contains(t, src, "runtime.DecodeJSON(r, &req.UpdatePlayerRequestBody)")
 
 	// Should call the handler with just the request struct (not separate body param)
-	require.Contains(t, src, "s.UpdatePlayer(r.Context(), req)")
+	require.Contains(t, src, "h.server.UpdatePlayer(r.Context(), req)")
 }
 
 func TestGenerateServer_BodyField(t *testing.T) {
@@ -302,7 +314,7 @@ func TestGenerateServer_BodyField(t *testing.T) {
 	require.Contains(t, src, "runtime.DecodeJSON(r, &req.Body)")
 
 	// Should call the handler with just the request struct
-	require.Contains(t, src, "s.UpdateItem(r.Context(), req)")
+	require.Contains(t, src, "h.server.UpdateItem(r.Context(), req)")
 }
 
 func TestGenerateServer_SeparateBodyParam(t *testing.T) {
@@ -342,5 +354,56 @@ func TestGenerateServer_SeparateBodyParam(t *testing.T) {
 	require.Contains(t, src, "runtime.DecodeJSON(r, &body)")
 
 	// Should call the handler with the body parameter
-	require.Contains(t, src, "s.CreateUser(r.Context(), body)")
+	require.Contains(t, src, "h.server.CreateUser(r.Context(), body)")
+}
+
+func TestGenerateServer_BaseURLPlacement(t *testing.T) {
+	api := &API{
+		PackageName: "api",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "GetItem",
+				Method:      "GET",
+				Path:        "/items/{id}",
+				RequestType: "GetItemRequest",
+				Params: []Param{
+					{Name: "id", GoName: "ID", GoType: "string", Location: "path", Required: true},
+				},
+				Response: Response{StatusCode: 200, GoType: "Item"},
+			},
+			{
+				Name:   "CreateItem",
+				Method: "POST",
+				Path:   "/items",
+				RequestBody: &RequestBody{
+					GoName:   "body",
+					GoType:   "CreateItemRequest",
+					Required: true,
+				},
+				Response: Response{StatusCode: 201, GoType: "Item"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	// Verify it parses as valid Go
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	// BaseURL must come AFTER the HTTP method, not before
+	// Correct: "GET "+params.BaseURL+"/items/{id}"
+	// Incorrect: params.BaseURL+"GET /items/{id}"
+	require.Contains(t, src, `"GET "+params.BaseURL+"/items/{id}"`, "BaseURL should come after HTTP method for GET")
+	require.Contains(t, src, `"POST "+params.BaseURL+"/items"`, "BaseURL should come after HTTP method for POST")
+
+	// Make sure the wrong format is NOT present
+	require.NotContains(t, src, `params.BaseURL+"GET `, "BaseURL should not come before HTTP method")
+	require.NotContains(t, src, `params.BaseURL+"POST `, "BaseURL should not come before HTTP method")
 }

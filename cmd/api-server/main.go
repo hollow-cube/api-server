@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 
 	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	mapObungusV3 "github.com/hollow-cube/api-server/api/mapsV3/obungus"
@@ -13,6 +14,7 @@ import (
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
 	v2Payments "github.com/hollow-cube/api-server/api/v2/payments"
 	v2Public "github.com/hollow-cube/api-server/api/v2/public"
+	"github.com/hollow-cube/api-server/api/v4Internal"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -147,6 +149,8 @@ func main() {
 		fx.Provide(newDynamicExporter),
 		tracefx.Module,
 		fx.Provide(
+			v4Internal.NewServer,
+
 			v2Public.NewServer,
 			v2Internal.NewServer,
 			v2Payments.NewServer,
@@ -183,6 +187,8 @@ func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 }
 
 type routeHandlerImpl struct {
+	v4i *v4Internal.Server
+
 	public   v2Public.StrictServerInterface
 	internal v2Internal.StrictServerInterface
 	payments v2Payments.ServerInterface
@@ -200,6 +206,13 @@ type routeHandlerImpl struct {
 }
 
 func (v *routeHandlerImpl) Apply(r chi.Router) {
+	v4mux := http.NewServeMux()
+	v4Internal.RegisterRoutes(v.v4i, v4Internal.RegisterParams{
+		Mux:     v4mux,
+		BaseURL: "/v4/internal",
+	})
+	r.Handle("/v4/internal/*", v4mux)
+
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
 	r.Handle("/v2/payments/*", v2Payments.HandlerFromMuxWithBaseURL(v.payments, nil, "/v2/payments"))
@@ -229,6 +242,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 func makeV2RouteHandler(p struct {
 	fx.In
 
+	V4I          *v4Internal.Server
 	Public       v2Public.StrictServerInterface
 	Internal     v2Internal.StrictServerInterface
 	Payments     v2Payments.ServerInterface
@@ -241,6 +255,7 @@ func makeV2RouteHandler(p struct {
 	Discord      *discord.Handler
 }) httpTransport.RouteProvider {
 	return &routeHandlerImpl{
+		v4i:          p.V4I,
 		public:       p.Public,
 		internal:     p.Internal,
 		payments:     p.Payments,
