@@ -130,9 +130,6 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 			},
 		},
 		Spec: coreV1.PodSpec{
-			NodeSelector: map[string]string{
-				"kubernetes.io/hostname": "ovh-02",
-			},
 			ServiceAccountName:           "mapmaker-map-isolate",
 			AutomountServiceAccountToken: new(false),
 			RestartPolicy:                coreV1.RestartPolicyNever,
