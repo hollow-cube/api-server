@@ -113,6 +113,7 @@ type Server struct {
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder
 }
 
+// deprecated: v4
 func (s *Server) GetPlayerData(ctx context.Context, request GetPlayerDataRequestObject) (GetPlayerDataResponseObject, error) {
 	pd, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
 	if errors.Is(err, playerdb.ErrNoRows) {
@@ -128,6 +129,7 @@ func (s *Server) GetPlayerData(ctx context.Context, request GetPlayerDataRequest
 	return GetPlayerData200JSONResponse(*apiPlayer), nil
 }
 
+// deprecated: v4
 func (s *Server) CreatePlayerData(ctx context.Context, request CreatePlayerDataRequestObject) (CreatePlayerDataResponseObject, error) {
 	var skin *playerdb.PlayerSkin
 	if request.Body.Skin != nil {
@@ -157,6 +159,7 @@ func (s *Server) CreatePlayerData(ctx context.Context, request CreatePlayerDataR
 	return CreatePlayerData201JSONResponse(*apiPlayer), nil
 }
 
+// deprecated: v4
 func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error) {
 	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
@@ -177,8 +180,7 @@ func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 		changed = true
 	}
 	if updates.PlaytimeInc != nil {
-		newPlaytime := p.Playtime + *updates.PlaytimeInc
-		dbUpdates.Playtime = &newPlaytime
+		dbUpdates.Playtime = new(p.Playtime + *updates.PlaytimeInc)
 		changed = true
 	}
 	if updates.BetaEnabled != nil {
@@ -234,6 +236,7 @@ func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 	return UpdatePlayerData200Response{}, nil
 }
 
+// deprecated: v4 removed
 func (s *Server) GetPlayerBackpack(_ context.Context, _ GetPlayerBackpackRequestObject) (GetPlayerBackpackResponseObject, error) {
 	return GetPlayerBackpack200JSONResponse{}, nil
 }
@@ -247,6 +250,7 @@ func (s *Server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmet
 	return GetPlayerCosmetics200JSONResponse(cosmetics), nil
 }
 
+// deprecated: v4
 func (s *Server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error) {
 	if orgName, ok := orgMapNames[request.PlayerId]; ok {
 		return GetPlayerDisplayNameV2200JSONResponse(orgName), nil
@@ -265,6 +269,7 @@ func (s *Server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDi
 	return GetPlayerDisplayNameV2200JSONResponse(displayName), nil
 }
 
+// deprecated: v4
 func (s *Server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error) {
 	playerIPs, err := s.store.GetPlayerIPHistory(ctx, request.PlayerId)
 	if err != nil {
