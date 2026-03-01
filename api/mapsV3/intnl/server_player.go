@@ -87,6 +87,11 @@ func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPla
 	playerUuid := string(common.UUIDToBin(request.PlayerId))
 	cmds := make(rueidis.Commands, len(completedMaps))
 	for i, mapId := range completedMaps {
+		err = s.store.DeleteMapPlayerSaveStates(ctx, mapId, request.PlayerId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete map player save states: %w", err)
+		}
+
 		leaderboardKey := mapLeaderboardKey(mapId, "playtime")
 		cmds[i] = s.redis.B().Zrem().Key(leaderboardKey).Member(playerUuid).Build()
 	}
