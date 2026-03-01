@@ -1,0 +1,25 @@
+global:
+  nameOverride: api-server
+  fullnameOverride: api-server
+
+base:
+  image:
+    repository: mworzala/api-server
+
+  serviceAccount:
+    extraPerms: true
+
+  volumes:
+    - name: mapmaker-map-isolate-config
+      configMap:
+        name: mapmaker-map-isolate-config
+
+  volumeMounts:
+    - name: mapmaker-map-isolate-config
+      mountPath: /etc/map-isolate
+      readOnly: true
+
+  service:
+    extraPorts:
+      - name: grpc
+        containerPort: 9001

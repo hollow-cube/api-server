@@ -1,0 +1,349 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"time"
+
+	"github.com/hollow-cube/api-server/internal/db"
+	"github.com/hollow-cube/api-server/internal/pkg/common"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/pkg/player"
+	"github.com/hollow-cube/api-server/internal/pkg/text"
+	"github.com/hollow-cube/api-server/internal/playerdb"
+	pplayer "github.com/hollow-cube/api-server/pkg/player"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/redis/rueidis"
+	"go.uber.org/fx"
+	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
+)
+
+var (
+	emojiRegex = regexp.MustCompile(`:([a-zA-Z0-9\-_]+):`)
+	mapRegex   = regexp.MustCompile(`\[map]`)
+	urlRegex   = regexp.MustCompile(`(?:https?://)?[a-zA-Z0-9@:%._+~#=-]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)`)
+
+	chatRawStream       = "CHAT_RAW"
+	chatProcessedStream = "CHAT_PROCESSED"
+	chatConsumerConfig  = jetstream.ConsumerConfig{
+		Durable:       "chat-processor",
+		FilterSubject: "chat.raw.>",
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		AckWait:       10 * time.Second,
+		MaxAckPending: 1,
+		MaxDeliver:    3,
+	}
+)
+
+type ChatHandler struct {
+	log *zap.SugaredLogger
+
+	contentFilter text.Filter
+
+	queries *db.Queries
+	redis   rueidis.Client
+	js      *natsutil.JetStreamWrapper
+
+	playerStore   *playerdb.Store
+	playerTracker *player.Tracker
+}
+
+type ChatHandlerParams struct {
+	fx.In
+
+	Log *zap.SugaredLogger
+
+	Queries          *db.Queries
+	KubernetesClient *kubernetes.Clientset
+	Redis            rueidis.Client
+	PlayerStore      *playerdb.Store
+	PlayerTracker    *player.Tracker
+	JS               *natsutil.JetStreamWrapper
+}
+
+func NewChatHandler(p ChatHandlerParams, lc fx.Lifecycle) (*ChatHandler, error) {
+	handler := &ChatHandler{
+		log: p.Log.With("handler", "chat"),
+
+		contentFilter: text.NewStaticFilter(),
+
+		queries: p.Queries,
+		redis:   p.Redis,
+		js:      p.JS,
+
+		playerStore:   p.PlayerStore,
+		playerTracker: p.PlayerTracker,
+	}
+
+	err := p.JS.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       chatRawStream,
+		Subjects:   []string{"chat.raw.>"},
+		Retention:  jetstream.WorkQueuePolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.JS.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       chatProcessedStream,
+		Subjects:   []string{"chat.processed.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     30 * time.Second,
+		Duplicates: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	consumer, err := p.JS.Subscribe(context.Background(), chatRawStream, chatConsumerConfig, handler.handleJSMessage)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.StartStopHook(consumer.Start, consumer.Stop))
+
+	return handler, nil
+}
+
+func (h *ChatHandler) HandleUnsignedChatMessage(ctx context.Context, msg *model.ClientChatMessage) error {
+	// Sanitize the message for invalid characters
+	text := text.StripDisallowed(msg.Message)
+	if len(text) == 0 {
+		return nil
+	}
+
+	channel, ok := h.resolveMessageChannel(ctx, msg)
+	if !ok {
+		return nil // Error system message was already sent
+	}
+
+	sender, err := h.playerStore.GetPlayerData(ctx, msg.Sender)
+	if err != nil {
+		return fmt.Errorf("failed to get sender player data: %w", err)
+	}
+
+	// We've already resolved the reply channel here so all dms look the same.
+	if common.IsUUID(string(channel)) {
+		// If sender is not accepting DMs, dont allow them to send DMs either
+		if !sender.Settings.GetBool(playerdb.PlayerSettingAllowDMs) {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "chat.channel.dm.disabled.self",
+			})
+			return nil
+		}
+
+		target, err := h.playerStore.GetPlayerData(ctx, string(channel))
+		if err != nil {
+			return fmt.Errorf("failed to get target player data: %w", err)
+		}
+		// If target is not accepting DMs, notify the sender and drop.
+		if !target.Settings.GetBool(playerdb.PlayerSettingAllowDMs) {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "chat.channel.dm.disabled",
+				// This is a hacky way to send player names we should support this properly.
+				Args: []string{fmt.Sprintf("pdn::%s", channel)},
+			})
+			return nil
+		}
+	}
+
+	censor := h.contentFilter.Test(ctx, text)
+
+	// Record the chat message (async), even if censored
+	go func() {
+		var censoredBy, censoredDetail *string
+		if censor.Matched {
+			censoredBy = &censor.Engine
+			censoredDetail = &censor.MatchedText
+		}
+		if err := h.queries.InsertChatMessage(ctx, db.InsertChatMessageParams{
+			Timestamp:      time.Now(),
+			ServerID:       "unknown",
+			Channel:        string(channel),
+			Sender:         msg.Sender,
+			Content:        msg.Message,
+			CensoredBy:     censoredBy,
+			CensoredDetail: censoredDetail,
+		}); err != nil {
+			h.log.Errorw("failed to record chat message", "error", err)
+		}
+	}()
+
+	if censor.Matched {
+		// Reply to the player indicating that the message was censored
+		h.sendMessageToServer(ctx, &model.ChatMessage{
+			Type:   model.ChatSystem,
+			Target: msg.Sender,
+			Key:    "chat.censored",
+		})
+		return nil
+	}
+
+	parts := []model.MessagePart{&model.RawMessagePart{Text: text}}
+
+	// Replace urls
+	parts = regexReplaceInMessage(parts, urlRegex, func(match string) model.MessagePart {
+		return &model.UrlMessagePart{
+			Type: model.PartTypeUrl,
+			Text: match,
+		}
+	})
+
+	// Replace emojis with their names
+	parts = regexReplaceInMessage(parts, emojiRegex, func(match string) model.MessagePart {
+		return &model.EmojiMessagePart{
+			Type: model.PartTypeEmoji,
+			Name: match[1 : len(match)-1],
+		}
+	})
+
+	// Replace [map]
+	parts = regexReplaceInMessage(parts, mapRegex, func(match string) model.MessagePart {
+		return &model.MapMessagePart{
+			Type:  model.PartTypeMap,
+			MapID: msg.CurrentMap,
+		}
+	})
+
+	h.sendMessageToServer(ctx, &model.ChatMessage{
+		Type:               model.ChatUnsigned,
+		Channel:            channel,
+		Sender:             msg.Sender,
+		Parts:              parts,
+		Seed:               msg.Seed,
+		SenderHasHypercube: sender.Has(pplayer.FlagExtendedLimits),
+	})
+
+	// If this is a DM (NOT REPLY), update the reply channels for both sides
+	if common.IsUUID(string(msg.Channel)) {
+		h.updateLastMessageChannel(ctx, msg.Sender, msg.Channel)
+		h.updateLastMessageChannel(ctx, string(msg.Channel), model.ChatChannel(msg.Sender))
+	}
+
+	return nil
+}
+
+func (h *ChatHandler) resolveMessageChannel(ctx context.Context, msg *model.ClientChatMessage) (model.ChatChannel, bool) {
+	channel := msg.Channel
+
+	// If sending a reply, lookup the player's last dm target
+	if channel == model.ChannelReply {
+		lastTarget, err := h.redis.Do(ctx, h.redis.B().Get().Key(fmt.Sprintf("sess:player:%s:reply", msg.Sender)).Build()).ToString()
+		if errors.Is(err, rueidis.Nil) {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "chat.reply.no_target",
+			})
+			return "", false
+		}
+		if err != nil {
+			h.log.Errorw("failed to fetch last reply target", "error", err)
+			return "", false
+		}
+
+		// Ensure they are still online
+		if s, _ := h.playerTracker.GetSession(ctx, lastTarget); s == nil {
+			h.sendMessageToServer(ctx, &model.ChatMessage{
+				Type:   model.ChatSystem,
+				Target: msg.Sender,
+				Key:    "generic.player.offline",
+			})
+		}
+
+		channel = model.ChatChannel(lastTarget)
+	}
+
+	return channel, true
+}
+
+func (h *ChatHandler) updateLastMessageChannel(ctx context.Context, player string, channel model.ChatChannel) {
+	//todo this is giga cursed because we remove the key in the player manager... need to rework a lot of this
+	err := h.redis.Do(ctx, h.redis.B().Set().Key(fmt.Sprintf("sess:player:%s:reply", player)).Value(string(channel)).Build()).Error()
+	if err != nil {
+		h.log.Errorw("failed to update last reply target", "error", err)
+	}
+}
+
+func (h *ChatHandler) sendMessageToServer(ctx context.Context, msg *model.ChatMessage) {
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		h.log.Errorw("failed to marshal chat message", "error", err)
+		return
+	}
+
+	// May eventually split by channel, for now just group we dont have perf questions here right now.
+	if err = h.js.PublishAsync(ctx, "chat.processed.global", raw); err != nil {
+		h.log.Errorw("failed to publish chat message", "error", err)
+	}
+}
+
+func regexReplaceInMessage(current []model.MessagePart, expr *regexp.Regexp, f func(match string) model.MessagePart) []model.MessagePart {
+	return mapMessageParts(current, func(part model.MessagePart) []model.MessagePart {
+		switch part := part.(type) {
+		case *model.RawMessagePart:
+			loc := expr.FindStringIndex(part.Text)
+			if loc == nil {
+				return nil
+			}
+
+			var newParts []model.MessagePart
+			// Append the preceding text as a new raw part, if it exists
+			if loc[0] > 0 {
+				newParts = append(newParts, &model.RawMessagePart{Type: model.PartTypeRaw, Text: part.Text[:loc[0]]})
+			}
+
+			// Append the matching part transformed by function f
+			newParts = append(newParts, f(part.Text[loc[0]:loc[1]]))
+
+			// Append the remaining text, recursively processed, if it exists
+			if loc[1] < len(part.Text) {
+				textPart := &model.RawMessagePart{Type: model.PartTypeRaw, Text: part.Text[loc[1]:]}
+				newParts = append(newParts, regexReplaceInMessage([]model.MessagePart{textPart}, expr, f)...)
+			}
+
+			return newParts
+
+		default:
+			return nil
+		}
+	})
+}
+
+func mapMessageParts(current []model.MessagePart, mapper func(part model.MessagePart) []model.MessagePart) []model.MessagePart {
+	var result []model.MessagePart
+	for _, part := range current {
+		pieces := mapper(part)
+		if pieces == nil {
+			result = append(result, part)
+		} else {
+			result = append(result, pieces...)
+		}
+	}
+	return result
+}
+
+func (h *ChatHandler) handleJSMessage(ctx context.Context, m jetstream.Msg) error {
+	var msg model.ClientChatMessage
+	if err := json.Unmarshal(m.Data(), &msg); err != nil {
+		return fmt.Errorf("failed to unmarshal chat message: %w", err)
+	}
+
+	if err := h.HandleUnsignedChatMessage(ctx, &msg); err != nil {
+		return fmt.Errorf("failed to handle unsigned chat message: %w", err)
+	}
+
+	return m.Ack()
+}

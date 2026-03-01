@@ -1,0 +1,1033 @@
+openapi: 3.0.2
+info:
+  title: Map Service Internal API
+  version: 3.0.0
+tags:
+  - name: map
+    description: Map management
+  - name: leaderboard
+    description: Map leaderboard management
+  - name: savestate
+    description: Map save state management
+  - name: players
+    description: Map player data management
+  - name: legacy
+    description: Legacy map management
+paths:
+  /maps:
+    get:
+      operationId: getMaps
+      tags: [ map ]
+      summary: Get requested maps
+      parameters:
+        - name: mapIds
+          description: Comma separated list of map IDs to return
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Get requested maps
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MapListResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      operationId: createMap
+      tags: [ map ]
+      summary: Create a new map
+      requestBody:
+        $ref: '#/components/requestBodies/MapCreateRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/MapData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /maps/search:
+    get:
+      operationId: searchMaps
+      tags: [ map ]
+      summary: Search for maps by configurable query parameters
+      parameters:
+        - name: params
+          in: query
+          schema: { $ref: '#/components/schemas/MapSearchParams' }
+          explode: true
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MapSearchResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /maps/progress:
+    get:
+      operationId: getMapProgressBulk
+      tags: [ map ]
+      summary: Get the progress of multiple maps for a player
+      parameters:
+        - name: playerId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: mapIds
+          description: Comma separated list of map IDs to return
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/GetMapProgressBulk'
+  /maps/{mapId}:
+    get:
+      operationId: getMap
+      tags: [ map ]
+      summary: Get map info by full ID (not published ID)
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/MapData'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    patch:
+      operationId: updateMap
+      tags: [ map ]
+      summary: Update map info
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/MapUpdateRequest'
+      responses:
+        '204':
+          description: Map info successfully updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    delete:
+      operationId: deleteMap
+      tags: [ map ]
+      summary: Soft deletes a map
+      description: >-
+        The reason is required for published maps or if the authorizer is not the owner. 
+        It will default to `user_deletion` for unpublished maps by the owner.
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/MapDeleteRequest'
+      responses:
+        '200':
+          description: Map successfully deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/world:
+    get:
+      operationId: getMapWorld
+      tags: [ map ]
+      summary: Get map world data
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/MapWorldData' }
+        '204':
+          description: Map world not yet generated
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    put:
+      operationId: updateMapWorld
+      tags: [ map ]
+      summary: Update map world data
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/MapWorldDataRequest'
+      responses:
+        '200':
+          description: Map world successfully updated
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/verify:
+    post:
+      operationId: beginMapVerification
+      tags: [ map ]
+      summary: Moves a map from the unverified state to the pending state.
+      description: >-
+        A completed save state will move the map to the verified state. 
+        Will return 400 if the map is currently in any state besides 'unverified'.
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Map verification moved to pending
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    delete:
+      operationId: deleteMapVerification
+      tags: [ map ]
+      summary: Removes any pending or completed verification from a map
+      description: No-op for maps in the unverified state.
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Map successfully unverified
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/publish:
+    post:
+      operationId: publishMap
+      tags: [ map ]
+      summary: Publish a map if it meets all required criterion
+      description: Map must meet all publish critera, including verification. 400 with reason will be returned if not.
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contest: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/MapData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/report:
+    post:
+      operationId: reportMap
+      tags: [ map ]
+      summary: Submit a report for a map by its full ID
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/MapReportRequest'
+      responses:
+        '200':
+          description: Map successfully reported
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/ratings/{playerId}:
+    get:
+      operationId: getMapRating
+      tags: [ map ]
+      summary: Get a player's rating for a map (always returns a response, even with no rating)
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/GetMapRating'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+    put:
+      operationId: rateMap
+      tags: [ map ]
+      summary: Update (via upsert) a player's rating for a map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/RateMapRequest'
+      responses:
+        '200':
+          description: Rating successfully updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /maps/{mapId}/savestates/{playerId}:
+    post:
+      operationId: createSaveState
+      tags: [ savestate ]
+      summary: Create a new savestate for the given player on the given map
+      description: The type is inferred from the current map state
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/SaveStateCreateRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/SaveStateData'
+        '404':
+          $ref: '#/components/responses/MapNotFound'
+  /maps/{mapId}/savestates/{playerId}/latest:
+    get:
+      operationId: getLatestSaveState
+      tags: [ savestate ]
+      summary: Get the latest savestate for the given player on the given map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: typeFilter
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/SaveStateData'
+        '404':
+          $ref: '#/components/responses/SaveStateNotFound'
+  /maps/{mapId}/savestates/{playerId}/best:
+    get:
+      operationId: getBestSaveState
+      tags: [ savestate ]
+      summary: Get the best savestate for the given player on the given map
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/SaveStateData'
+        '404':
+          $ref: '#/components/responses/SaveStateNotFound'
+  /maps/{mapId}/savestates/{playerId}/{saveStateId}:
+    patch:
+      operationId: updateSaveState
+      tags: [ savestate ]
+      summary: Update a savestate
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: saveStateId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        $ref: '#/components/requestBodies/SaveStateUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/SaveStateUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/SaveStateNotFound'
+    delete:
+      operationId: deleteSaveState
+      tags: [ savestate ]
+      summary: Delete a savestate
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: saveStateId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          x-type: empty
+          description: Save state successfully deleted
+        '404':
+          $ref: '#/components/responses/SaveStateNotFound'
+
+  /maps/hub/leaderboard/{leaderboardName}:
+    get:
+      operationId: getGlobalLeaderboard
+      tags: [ leaderboard ]
+      summary: Get a global leaderboard by its name, optionally including player info
+      parameters:
+        - name: leaderboardName
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/LeaderboardData'
+        '404':
+          $ref: '#/components/responses/LeaderboardNotFound'
+  /maps/{mapId}/leaderboard/{leaderboardName}:
+    get:
+      operationId: getMapLeaderboard
+      tags: [ leaderboard ]
+      summary: Get a map leaderboard by its name, optionally including player info
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: leaderboardName
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/LeaderboardData'
+        '404':
+          $ref: '#/components/responses/LeaderboardNotFound'
+    delete:
+      operationId: deleteMapLeaderboard
+      tags: [ leaderboard ]
+      summary: Delete a map leaderboard entirely or for a particular player
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: leaderboardName
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Leaderboard successfully deleted
+        '404':
+          $ref: '#/components/responses/LeaderboardNotFound'
+  /maps/{mapId}/leaderboard/{leaderboardName}/restore:
+    post:
+      operationId: restoreMapLeaderboard
+      tags: [ leaderboard ]
+      summary: Restore a map leaderboard from existing save state data, optionally for a single player
+      parameters:
+        - name: mapId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: leaderboardName
+          in: path
+          required: true
+          schema: { type: string }
+        - name: playerId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Leaderboard successfully restored
+        '404':
+          $ref: '#/components/responses/LeaderboardNotFound'
+
+  /map-players/{playerId}:
+    get:
+      operationId: getMapPlayerData
+      tags: [ players ]
+      summary: Get map player data for a player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/GetMapPlayerData'
+  /map-players/{playerId}/history:
+    get:
+      operationId: getMapHistory
+      tags: [ players ]
+      summary: Get map paginated history for a given player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: params
+          in: query
+          schema: { $ref: '#/components/schemas/MapHistoryParams' }
+          explode: true
+      responses:
+        '200':
+          $ref: '#/components/responses/GetMapHistory'
+        '404':
+          $ref: '#/components/responses/MapPlayerNotFound'
+  /map-players/{playerId}/states:
+    delete:
+      operationId: deleteMapPlayerStates
+      tags: [ players ]
+      summary: Delete all save states for a player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Save states successfully deleted
+        '404':
+          $ref: '#/components/responses/MapPlayerNotFound'
+  /map-players/{playerId}/topTimes:
+    get:
+      operationId: getPlayerTopTimes
+      tags: [ players ]
+      summary: Get a player's top times sorted by leaderboard placement
+      description: Returns the player's best times across all completed maps, sorted by their rank on each map's leaderboard (best placements first).
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          $ref: '#/components/responses/GetPlayerTopTimes'
+
+components:
+  schemas:
+    Point:
+      type: object
+      required: [ x, y, z ]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+    Pos:
+      allOf:
+        - $ref: '#/components/schemas/Point'
+        - type: object
+          required: [ yaw, pitch ]
+          properties:
+            yaw: { type: number }
+            pitch: { type: number }
+
+    MapVariant:
+      type: string
+      enum: [ parkour, building ]
+    MapSize:
+      type: string
+      enum: [ normal, large, massive, colossal, unlimited, tall_2k, tall_4k ]
+    MapQuality:
+      type: string
+      enum: [ unrated, good, great, excellent, outstanding, masterpiece ]
+    MapDifficulty:
+      type: string
+      enum: [ unknown, easy, medium, hard, expert, nightmare ]
+    MapVerification:
+      type: string
+      enum: [ unverified, pending, verified ]
+    ObjectData:
+      type: object
+      required: [ id, type, pos ]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        pos: { $ref: '#/components/schemas/Point' }
+        data: { type: object, additionalProperties: true }
+
+    MapSettings:
+      type: object
+      required: [ name, icon, size, variant, spawnPoint, tags, extra ]
+      properties:
+        name: { type: string }
+        icon: { type: string, description: 'Minecraft item ID, eg minecraft:stone' }
+        size: { $ref: '#/components/schemas/MapSize' }
+
+        variant: { $ref: '#/components/schemas/MapVariant' }
+        subvariant: { type: string }
+        tags: { type: array, items: { type: string } }
+
+        spawnPoint: { $ref: '#/components/schemas/Pos' }
+
+        extra: { type: object, additionalProperties: true }
+    MapData:
+      type: object
+      required: [ id, owner, createdAt, lastModified, protocolVersion, settings, verification, objects, quality, difficulty, uniquePlays, clearRate, likes, listed ]
+      properties:
+        id: { type: string }
+        owner: { type: string }
+
+        createdAt: { type: string, format: date-time }
+        lastModified: { type: string, format: date-time }
+        protocolVersion: { type: integer }
+        settings: { $ref: '#/components/schemas/MapSettings' }
+        verification: { $ref: '#/components/schemas/MapVerification' }
+
+        objects:
+          type: array
+          items: { $ref: '#/components/schemas/ObjectData' }
+
+        # The following is only present for published maps
+        publishedId: { type: integer }
+        publishedAt: { type: string, format: date-time }
+        listed: { type: boolean }
+
+        quality: { $ref: '#/components/schemas/MapQuality' }
+        difficulty: { $ref: '#/components/schemas/MapDifficulty' }
+        uniquePlays: { type: integer }
+        clearRate: { type: number }
+        likes: { type: integer }
+
+        contest: { type: string }
+
+    MapSortType:
+      type: string
+      enum: [best, published]
+    MapSortOrder:
+      type: string
+      enum: [asc, desc]
+    MapSearchParams:
+      type: object
+      properties:
+        page: { type: string, default: 1 }
+        pageSize: { type: string, default: 10 }
+        sort: { $ref: '#/components/schemas/MapSortType' }
+        sortOrder: { $ref: '#/components/schemas/MapSortOrder' }
+
+        quality: { type: string } # Comma separated qualities to allow, or all if not present
+        difficulty: { type: string } # Comma separated difficulties to allow, or all if not present
+
+        owner: { type: string }
+        query: { type: string }
+
+        parkour: { type: boolean }
+        building: { type: boolean }
+
+        contest: { type: string }
+    MapSearchResponse:
+      type: object
+      required: [ page, pageCount, results ]
+      properties:
+        page: { type: integer }
+        pageCount:
+          description: Only returned on the first page
+          type: integer
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/MapData' }
+
+    MapProgress:
+      type: string
+      enum: [ none, started, complete ]
+    MapProgressEntry:
+      type: object
+      required: [ mapId, progress, playtime ]
+      properties:
+        mapId: { type: string }
+        progress: { $ref: '#/components/schemas/MapProgress' }
+        playtime:
+          description: Current playtime on the map, or -1 if not started.
+          type: integer
+
+    HeadDbEntry:
+      type: object
+      required: [ id, category, name, tags, texture ]
+      properties:
+        id: { type: string }
+        category: { type: string }
+        name: { type: string }
+        tags: { type: array, items: { type: string } }
+        texture: { type: string }
+
+    MapReportCategory:
+      type: string
+      enum: [ cheated, discrimination, explicit_content, spam, dmca, troll, unplayable ]
+    MapRatingState:
+      type: string
+      enum: [ unrated, liked, disliked ]
+    MapRating:
+      type: object
+      required: [ state ]
+      properties:
+        state: { $ref: '#/components/schemas/MapRatingState' }
+        comment: { type: string }
+
+    SaveStateType:
+      type: string
+      enum: [editing, playing, verifying]
+    SaveState:
+      type: object
+      required: [ id, mapId, playerId, type, created, lastModified, protocolVersion, completed, playtime, dataVersion ]
+      properties:
+        id: { type: string }
+        mapId: { type: string }
+        playerId: { type: string }
+        type: { $ref: '#/components/schemas/SaveStateType' }
+        created: { type: string, format: date-time }
+        lastModified: { type: string, format: date-time }
+        protocolVersion: { type: integer }
+        completed: { type: boolean }
+        playtime: { type: integer }
+        ticks: { type: integer }
+
+        dataVersion: { type: integer }
+        editState: { type: object, additionalProperties: true }
+        playState: { type: object, additionalProperties: true }
+
+    LeaderboardEntry:
+      type: object
+      required: [ player, score, rank ]
+      properties:
+        player: { type: string }
+        score: { type: integer }
+        rank: { type: integer }
+
+    PlayerTopTimesEntry:
+      type: object
+      required: [ mapId, publishedId, mapName, completionTime, rank ]
+      properties:
+        mapId: { type: string }
+        publishedId: { type: integer }
+        mapName: { type: string }
+        completionTime:
+          type: integer
+          description: Time to complete the map in milliseconds
+        rank:
+          type: integer
+          description: Player's rank on this map's leaderboard (1-indexed)
+    MapPlayerData:
+      type: object
+      required: [ id, mapSlots ]
+      properties:
+        id: { type: string }
+        mapSlots: { type: array, items: { type: string } }
+        contestSlot: { type: string }
+    MapHistoryParams:
+      type: object
+      properties:
+        page: { type: string, default: 1 }
+        pageSize: { type: string, default: 10 }
+
+    MapHistoryEntry:
+      type: object
+      required: [mapId]
+      properties:
+        mapId: { type: string }
+
+    MapListResponse:
+      type: object
+      required: [ results ]
+      properties:
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/MapData' }
+
+  requestBodies:
+    MapCreateRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ isOrg, owner, size ]
+            properties:
+              isOrg: { type: boolean }
+              owner: { type: string }
+              size: { $ref: '#/components/schemas/MapSize' }
+
+              # Only relevant for player maps if creating in a specific slot
+              # Slot 1_000_000 is the contest slot
+              slot: { type: integer }
+    MapUpdateRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              protocolVersion: { type: integer }
+              name: { type: string }
+              icon: { type: string }
+              size: { $ref: '#/components/schemas/MapSize' }
+
+              variant: { $ref: '#/components/schemas/MapVariant' }
+              subvariant: { type: string }
+
+              spawnPoint: { $ref: '#/components/schemas/Pos' }
+
+              onlySprint: { type: boolean }
+              noSprint: { type: boolean }
+              noJump: { type: boolean }
+              noSneak: { type: boolean }
+              extra: { type: object, additionalProperties: true }
+
+              tags: { type: array, items: { type: string } }
+
+              newObjects: { type: array, items: { $ref: '#/components/schemas/ObjectData' } }
+              removedObjects: { type: array, items: { type: string } }
+
+              qualityOverride: { $ref: '#/components/schemas/MapQuality' }
+
+              listed: { type: boolean }
+    MapDeleteRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              reason: { type: string }
+    MapWorldDataRequest:
+      content:
+        application/vnd.hollowcube.polar:
+          schema:
+            type: string
+            format: binary
+#        application/vnd.hollowcube.anvil:
+#          schema: { $ref: '#/components/schemas/AnvilData' }
+#        application/vnd.hollowcube.anvil-legacy:
+#          schema: { $ref: '#/components/schemas/Anvil2Data' }
+    MapReportRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ reporter, categories, location ]
+            properties:
+              reporter: { type: string }
+              categories: { type: array, items: { $ref: '#/components/schemas/MapReportCategory' } }
+              comment: { type: string }
+              location: { $ref: '#/components/schemas/Pos' }
+              context:
+                description: Extra context for the report, free-form and optional
+                type: object
+                additionalProperties: true
+    RateMapRequest:
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/MapRating' }
+
+    SaveStateCreateRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ protocolVersion ]
+            properties:
+              protocolVersion: { type: integer }
+
+    SaveStateUpdateRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              # Required for upsert operation
+              type: { $ref: '#/components/schemas/SaveStateType' }
+
+              protocolVersion: { type: integer }
+              completed: { type: boolean }
+              playtime: { type: integer }
+              ticks: { type: integer }
+
+              dataVersion: { type: integer }
+              editState: { type: object, additionalProperties: true }
+              playState: { type: object, additionalProperties: true }
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ error ]
+            properties:
+              error: { type: string }
+
+    MapData:
+      description: Map info
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MapData'
+    MapNotFound:
+      description: Map not found
+    MapWorldData:
+      description: >-
+        Map world data in supported formats. The response format is determined by 
+        the Accept header, though some types may not be supported in all cases.
+        
+        For example, anvil-legacy is only supported in some endpoints.
+      content:
+        application/vnd.hollowcube.polar:
+          schema:
+            type: string
+            format: binary
+        application/vnd.hollowcube.anvil:
+          schema:
+            type: string
+            format: binary
+        application/vnd.hollowcube.anvil-legacy:
+          schema:
+            type: string
+            format: binary
+    GetMapProgressBulk:
+      description: Map progress retrieved
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ results ]
+            properties:
+              results:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapProgressEntry'
+    GetMapRating:
+      description: Map rating retrieved
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/MapRating' }
+
+    SaveStateNotFound:
+      description: Save state not found
+    SaveStateData:
+      description: Save state data retrieved
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SaveState' }
+    SaveStateUpdate:
+      description: Save state updated
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              # Only included when the save state goes from incomplete to complete
+              # Structure is the player service applied rewards structure
+              rewards:
+                type: string
+                format: raw
+              # Only included if this update is going from incomplete to complete AND
+              # the player actually got a record on the map.
+              newPlacement:
+                type: integer
+
+    LeaderboardNotFound:
+      description: Leaderboard not found
+    LeaderboardData:
+      description: Leaderboard data with optional player info
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ top ]
+            properties:
+              top:
+                type: array
+                items: { $ref: '#/components/schemas/LeaderboardEntry' }
+              player: { $ref: '#/components/schemas/LeaderboardEntry' }
+
+    MapPlayerNotFound:
+      description: No known player exists for the given request
+    GetMapPlayerData:
+      description: Map player data retrieved. Always present.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/MapPlayerData' }
+    GetMapHistory:
+      description: History of maps for the given player.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [page, nextPage, results]
+            properties:
+              page: { type: integer }
+              nextPage: { type: boolean }
+              results:
+                type: array
+                items: { $ref: '#/components/schemas/MapHistoryEntry' }
+    GetPlayerTopTimes:
+      description: Player's top times sorted by leaderboard placement.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ page, totalItems, items ]
+            properties:
+              page:
+                type: integer
+                format: int32
+              totalItems:
+                type: integer
+                format: int64
+              items:
+                type: array
+                items: { $ref: '#/components/schemas/PlayerTopTimesEntry' }

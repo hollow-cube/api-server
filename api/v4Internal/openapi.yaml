@@ -1,0 +1,185 @@
+openapi: 3.0.3
+info:
+    title: Server API
+    version: "1.0"
+paths:
+    /head-database/{category}:
+        get:
+            operationId: getHeadDatabaseCategory
+            parameters:
+                - name: category
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /head-database/search:
+        get:
+            operationId: searchHeadDatabase
+            parameters:
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: query
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /interactions:
+        post:
+            operationId: executeInteraction
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /interactions/commands:
+        get:
+            operationId: getCommands
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /players:
+        post:
+            operationId: createPlayerData
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "201":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /players/{playerId}:
+        get:
+            operationId: getPlayerData
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+        patch:
+            operationId: updatePlayerData
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+    /players/{playerId}/alts:
+        get:
+            operationId: getPlayerAlts
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /players/{playerId}/display-name:
+        get:
+            operationId: getPlayerDisplayName
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /recap/{playerId}/{year}:
+        get:
+            operationId: getPlayerRecap
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: year
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        text/plain:
+                            schema:
+                                type: string

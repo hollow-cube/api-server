@@ -1,0 +1,12 @@
+apiVersion: v2
+name: api-server
+description: Helm chart for the api-server
+type: application
+
+version: 0.1.0
+appVersion: "1.16.0"
+
+dependencies:
+  - name: base
+    repository: "oci://registry-1.docker.io/mworzala"
+    version: 1.0.0

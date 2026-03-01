@@ -2,7 +2,7 @@ name: "Build and push"
 
 on:
   push:
-    branches: [ main ]
+    branches: [ no-player-service ]
 
 env:
   GO_VERSION: "1.26.0"
@@ -22,57 +22,8 @@ jobs:
   #          version: latest
   #          args: --timeout 5m0s
 
-  # Detect services that need to be built via the builder
-  detect-services:
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.detect-services.outputs.services }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: '0'
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-
-      - name: Create Go cache directories
-        run: |
-          mkdir -p ~/go/pkg/mod
-          mkdir -p ~/.cache/go-build
-
-      - name: Cache Go modules and build cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-detect-${{ hashFiles('**/go.sum', 'go.work.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-detect-
-            ${{ runner.os }}-go-
-
-      - name: detect-services
-        id: detect-services
-        env:
-          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          services=$(go run builder/main.go)
-          echo "Raw services output: $services"
-          echo "services=$services" >> $GITHUB_OUTPUT
-
-      - name: print-services
-        run: |
-          echo "Services: ${{ steps.detect-services.outputs.services }}"
-
   docker-build-and-publish:
-    needs: [ detect-services ]
-    if: needs.detect-services.outputs.services != '[]'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Import Secrets
         uses: hollow-cube/actions/secrets@main
@@ -98,9 +49,9 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ matrix.service }}-${{ hashFiles('**/go.sum', 'go.work.sum') }}
+          key: ${{ runner.os }}-go-api-server-${{ hashFiles('go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.service }}-
+            ${{ runner.os }}-go-api-server-
             ${{ runner.os }}-go-
 
       - uses: ko-build/setup-ko@v0.8
@@ -111,36 +62,28 @@ jobs:
         shell: bash
         run: |
           ko login docker.io --username mworzala --password ${{ env.DOCKER_PASS }}
-          ko build ./services/${{ matrix.service }}/cmd/${{ matrix.service }} --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
+          ko build ./cmd/api-server --base-import-paths --tags ${{ github.sha }} --platform linux/amd64
           echo "Version: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
   helm-build:
-    needs: [ detect-services, docker-build-and-publish ]
-    if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
+    needs: [ docker-build-and-publish ]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Helm build
         uses: hollow-cube/actions/helm-build@main
         with:
           vault-token: ${{ secrets.VAULT_TOKEN }}
-          name: ${{ matrix.service }}
-          path: "services/${{ matrix.service }}/deploy/helm-chart"
+          name: api-server
+          path: "deploy/helm-chart"
 
   helm-deploy:
-    needs: [ detect-services, docker-build-and-publish, helm-build ]
-    if: needs.detect-services.outputs.services != '[]' # Only run if there are services to build
+    needs: [ docker-build-and-publish, helm-build ]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Helm deploy
         uses: hollow-cube/actions/helm-deploy@main
         with:
           vault-token: ${{ secrets.VAULT_TOKEN }}
-          name: ${{ matrix.service }}
-          cluster: prod-v2
-          values: "services/${{ matrix.service }}/deploy/helm-chart/values-prod.yaml"
+          name: api-server
+          cluster: prod-v3
+          values: "deploy/helm-chart/values-prod.yaml"
