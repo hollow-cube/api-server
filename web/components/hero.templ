@@ -1,0 +1,38 @@
+package components
+
+templ Hero() {
+	<section class="relative flex h-128 items-center justify-center">
+		<div class="x-hc-top-gradient absolute inset-0 z-0 overflow-hidden bg-cover bg-center">
+			<img
+				alt="Header Background"
+				src="/static/images/header.png"
+				class="h-full w-full object-cover object-center blur-[3px]"
+			/>
+			<div class="absolute inset-0 h-full w-full bg-black/40 lg:hidden"></div>
+		</div>
+		<div class="mx-auto w-full max-w-6xl px-8">
+			<div class="relative z-10 w-full py-32 lg:py-60">
+				<div class="flex w-full flex-col items-center text-center lg:items-start lg:text-left">
+					<div class="mt-6 mb-4 space-y-3">
+						<h3 class="text-primary font-ffflauta text-2xl font-medium uppercase">
+							Map Maker
+						</h3>
+						<h1 class="text-4xl font-bold lg:text-6xl">
+							A new way to play
+							<br/>
+							Minecraft maps
+						</h1>
+					</div>
+					<p class="text-foreground/80 mb-8 max-w-xl drop-shadow-xl lg:text-xl">
+						Play, create, and share builds and parkour, all on one server!
+					</p>
+					<div class="flex w-full flex-col justify-center gap-2 sm:flex-row lg:justify-start">
+						<button class="font-ffflauta min-w-56 whitespace-nowrap uppercase inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+							play.hollowcube.net
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

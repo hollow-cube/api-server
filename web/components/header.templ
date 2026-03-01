@@ -1,0 +1,40 @@
+package components
+
+templ Header() {
+	<header class="border-border/75 bg-background/50 fixed top-0 z-50 h-14 w-screen border-b backdrop-blur">
+		<div class="flex h-full items-center justify-center">
+			<nav class="hidden w-full max-w-6xl flex-row items-center justify-between px-8 md:flex">
+				<div class="flex items-center gap-6">
+					<a href="/">
+						<img
+							src="/static/images/logo.png"
+							alt="Hollow Cube Logo"
+							width="45"
+							height="45"
+						/>
+						<span class="sr-only">Hollow Cube Logo</span>
+					</a>
+					<a href="/" class="text-sm font-medium hover:text-primary">Home</a>
+					<a href="/news" class="text-sm font-medium hover:text-primary">News</a>
+					<a href="/docs" class="text-sm font-medium hover:text-primary">Docs</a>
+					<a href="/store" class="text-sm font-medium hover:text-primary">Store</a>
+				</div>
+				<button class="font-ffflauta h-10 min-w-56 whitespace-nowrap uppercase inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+					play.hollowcube.net
+				</button>
+			</nav>
+			<!-- Mobile nav placeholder -->
+			<div class="flex w-full items-center justify-between px-4 md:hidden">
+				<a href="/">
+					<img
+						src="/static/images/logo.png"
+						alt="Hollow Cube Logo"
+						width="45"
+						height="45"
+					/>
+				</a>
+				<button class="text-sm font-medium">Menu</button>
+			</div>
+		</div>
+	</header>
+}

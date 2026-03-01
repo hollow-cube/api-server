@@ -1,0 +1,23 @@
+package components
+
+templ FeatureAd(name string, imgSrc string, flip bool) {
+	<section class="mt-20">
+		<div class="container mx-auto">
+			<div class="grid items-center gap-8 lg:grid-cols-2">
+				<img
+					src={ imgSrc }
+					alt={ name }
+					class={ "x-hc-mask-image-gradient max-h-96 w-full rounded-md object-cover", templ.KV("lg:order-last", flip) }
+				/>
+				<div class={ "my-6 flex flex-col items-center space-y-4 text-center lg:items-start lg:text-left", templ.KV("lg:order-first", flip) }>
+					<h1 class="font-ffflauta text-3xl font-bold text-pretty uppercase lg:text-4xl">
+						{ name }
+					</h1>
+					<div class="text-muted-foreground max-w-xl lg:text-lg">
+						{ children... }
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

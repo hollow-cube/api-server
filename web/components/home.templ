@@ -1,0 +1,56 @@
+package components
+
+templ HomePage() {
+	@Layout("Hollow Cube - A new way to play Minecraft maps") {
+		<div class="relative pt-14">
+			@Header()
+			@Hero()
+			<div class="relative mx-auto w-full max-w-6xl px-4 md:px-8">
+				@FeatureAd("Build Tools", "/static/images/buildtools.png", true) {
+					<p>
+						With access to your own dedicated worlds, let your creativity
+						shine! Every world has access to our lightning-fast and
+						flexible WorldEdit alternative, Terraform, as well as a suite
+						of useful add-ons from no-update block placement to
+						user-defined biome configuration. On Hollow Cube, you can
+						build on your own in private, or invite your friends to help
+						you.
+					</p>
+					<p class="mt-2">
+						Want something more advanced? Try
+						<a
+							class="text-primary inline-block font-medium hover:underline"
+							href="https://axiom.moulberry.com/"
+						>
+							<img
+								src="/static/images/axiom.svg"
+								alt="Axiom Logo"
+								width="25"
+								height="25"
+								class="inline-block translate-x-0.5"
+							/>
+							Axiom
+						</a>
+						&nbsp;on Hollow Cube!
+					</p>
+				}
+				@FeatureAd("Cosmetics", "/static/images/cosmetics.png", false) {
+					<p>
+						Express yourself with our diverse range of premium cosmetics!
+						We offer a ton of options to fit your style, whether you want
+						modern sleek, or medieval grace, the choice is yours!
+					</p>
+					<div class="mt-6">
+						<a
+							href="/store"
+							class="font-ffflauta bg-fuchsia-500 uppercase hover:bg-fuchsia-500/90 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-primary-foreground"
+						>
+							Buy Cubits
+						</a>
+					</div>
+				}
+				@Footer()
+			</div>
+		</div>
+	}
+}
