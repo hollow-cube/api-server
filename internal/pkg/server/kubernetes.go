@@ -126,6 +126,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: fmt.Sprintf("map-%s-%s", mapId[0:8], uuid.NewString()[0:4]),
 			Labels: map[string]string{
+				"app.kubernetes.io/name":       "map-isolate",
 				"mapmaker.hollowcube.net/role": "map-isolate",
 			},
 		},
