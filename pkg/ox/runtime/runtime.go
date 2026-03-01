@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/hollow-cube/api-server/pkg/ox"
+	"go.uber.org/zap"
 )
 
 // WriteJSON writes v as JSON with the given status code.
@@ -32,6 +33,8 @@ func HandleError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	// TODO: should give info about what route and everything
+	zap.S().Errorw("internal server error", "error", err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }
 

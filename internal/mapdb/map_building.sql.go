@@ -9,54 +9,35 @@ import (
 	"context"
 )
 
-const getHeadCountWithCategory = `-- name: GetHeadCountWithCategory :one
-select count(*) as head_count
-from head_db
-where category = $1::text
-`
-
-func (q *Queries) GetHeadCountWithCategory(ctx context.Context, dollar_1 string) (int64, error) {
-	row := q.db.QueryRow(ctx, getHeadCountWithCategory, dollar_1)
-	var head_count int64
-	err := row.Scan(&head_count)
-	return head_count, err
-}
-
-const getHeadCountWithSearch = `-- name: GetHeadCountWithSearch :one
-select count(*) as head_count
-from head_db
-where name ilike $1::text
-`
-
-func (q *Queries) GetHeadCountWithSearch(ctx context.Context, dollar_1 string) (int64, error) {
-	row := q.db.QueryRow(ctx, getHeadCountWithSearch, dollar_1)
-	var head_count int64
-	err := row.Scan(&head_count)
-	return head_count, err
-}
-
 const getHeadsWithCategory = `-- name: GetHeadsWithCategory :many
-select id, category, name, tags, texture
+select head_db.id, head_db.category, head_db.name, head_db.tags, head_db.texture,
+       count(*) over () as total_count
 from head_db
 where category = $1::text
 limit $2 offset $3
 `
 
-func (q *Queries) GetHeadsWithCategory(ctx context.Context, column1 string, limit int32, offset int32) ([]HeadDb, error) {
+type GetHeadsWithCategoryRow struct {
+	HeadDb     HeadDb `json:"headDb"`
+	TotalCount int64  `json:"totalCount"`
+}
+
+func (q *Queries) GetHeadsWithCategory(ctx context.Context, column1 string, limit int32, offset int32) ([]GetHeadsWithCategoryRow, error) {
 	rows, err := q.db.Query(ctx, getHeadsWithCategory, column1, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []HeadDb{}
+	items := []GetHeadsWithCategoryRow{}
 	for rows.Next() {
-		var i HeadDb
+		var i GetHeadsWithCategoryRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Category,
-			&i.Name,
-			&i.Tags,
-			&i.Texture,
+			&i.HeadDb.ID,
+			&i.HeadDb.Category,
+			&i.HeadDb.Name,
+			&i.HeadDb.Tags,
+			&i.HeadDb.Texture,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -69,27 +50,34 @@ func (q *Queries) GetHeadsWithCategory(ctx context.Context, column1 string, limi
 }
 
 const getHeadsWithSearch = `-- name: GetHeadsWithSearch :many
-select id, category, name, tags, texture
+select head_db.id, head_db.category, head_db.name, head_db.tags, head_db.texture,
+       count(*) over () as total_count
 from head_db
 where name ilike $1::text
 limit $2 offset $3
 `
 
-func (q *Queries) GetHeadsWithSearch(ctx context.Context, column1 string, limit int32, offset int32) ([]HeadDb, error) {
+type GetHeadsWithSearchRow struct {
+	HeadDb     HeadDb `json:"headDb"`
+	TotalCount int64  `json:"totalCount"`
+}
+
+func (q *Queries) GetHeadsWithSearch(ctx context.Context, column1 string, limit int32, offset int32) ([]GetHeadsWithSearchRow, error) {
 	rows, err := q.db.Query(ctx, getHeadsWithSearch, column1, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []HeadDb{}
+	items := []GetHeadsWithSearchRow{}
 	for rows.Next() {
-		var i HeadDb
+		var i GetHeadsWithSearchRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Category,
-			&i.Name,
-			&i.Tags,
-			&i.Texture,
+			&i.HeadDb.ID,
+			&i.HeadDb.Category,
+			&i.HeadDb.Name,
+			&i.HeadDb.Tags,
+			&i.HeadDb.Texture,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

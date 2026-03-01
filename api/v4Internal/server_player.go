@@ -19,7 +19,7 @@ type PlayerRequest struct {
 
 // GET /players/{playerId}
 func (s *Server) GetPlayerData(ctx context.Context, request PlayerRequest) (*PlayerData, error) {
-	pd, err := s.store.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
+	pd, err := s.playerStore.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {
@@ -46,12 +46,12 @@ func (s *Server) CreatePlayerData(ctx context.Context, body CreatePlayerDataRequ
 		}
 	}
 
-	pd, err := s.store.CreatePlayerData(ctx, body.ID, body.Username, skin)
+	pd, err := s.playerStore.CreatePlayerData(ctx, body.ID, body.Username, skin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create player data: %w", err)
 	}
 
-	err = s.store.AddPlayerIP(ctx, pd.ID, body.IP)
+	err = s.playerStore.AddPlayerIP(ctx, pd.ID, body.IP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add player ip: %w", err)
 	}
@@ -85,7 +85,7 @@ type (
 
 // PATCH /players/{playerId}
 func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequest) error {
-	p, err := s.store.GetPlayerData(ctx, request.PlayerId)
+	p, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return ox.NotFound{}
 	} else if err != nil {
@@ -125,7 +125,7 @@ func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 		changed = true
 	}
 
-	err = playerdb.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *playerdb.Store) error {
+	err = playerdb.TxNoReturn(ctx, s.playerStore, func(ctx context.Context, tx *playerdb.Store) error {
 		if request.IpHistory != nil && len(*request.IpHistory) > 0 {
 			for _, ip := range *request.IpHistory {
 				if ip == "" {
@@ -165,7 +165,7 @@ func (s *Server) GetPlayerDisplayName(ctx context.Context, request PlayerRequest
 		return orgName, nil
 	}
 
-	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
+	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {
@@ -187,12 +187,12 @@ type (
 
 // GET /players/{playerId}/alts
 func (s *Server) GetPlayerAlts(ctx context.Context, request PlayerRequest) (*GetPlayerAltsResponse, error) {
-	playerIPs, err := s.store.GetPlayerIPHistory(ctx, request.PlayerId)
+	playerIPs, err := s.playerStore.GetPlayerIPHistory(ctx, request.PlayerId)
 	if err != nil {
 		return nil, err
 	}
 
-	sharedPlayers, err := s.store.GetPlayersByIPs(ctx, playerIPs)
+	sharedPlayers, err := s.playerStore.GetPlayersByIPs(ctx, playerIPs)
 	if err != nil {
 		return nil, err
 	}

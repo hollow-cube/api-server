@@ -18,6 +18,8 @@ type RegisterParams struct {
 // RegisterRoutes registers all API routes on the given ServeMux.
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/search", h.searchHeadDatabase)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
@@ -29,6 +31,52 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 // handlers wraps the server and provides HTTP handler methods.
 type handlers struct {
 	server *Server
+}
+
+func (h *handlers) searchHeadDatabase(w http.ResponseWriter, r *http.Request) {
+	var req SearchHeadDatabaseRequest
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: page")
+		return
+	} else {
+		req.Page = v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
+		return
+	} else {
+		req.PageSize = v
+	}
+	req.Query = r.URL.Query().Get("query")
+	resp, err := h.server.SearchHeadDatabase(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getHeadDatabaseCategory(w http.ResponseWriter, r *http.Request) {
+	var req GetHeadDatabaseCategoryRequest
+	req.Category = r.PathValue("category")
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: page")
+		return
+	} else {
+		req.Page = v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
+		return
+	} else {
+		req.PageSize = v
+	}
+	resp, err := h.server.GetHeadDatabaseCategory(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
 }
 
 func (h *handlers) getPlayerData(w http.ResponseWriter, r *http.Request) {

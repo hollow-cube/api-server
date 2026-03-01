@@ -16,7 +16,7 @@ type GetPlayerRecapRequest struct {
 
 // GET /recap/{playerId}/{year}
 func (s *Server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequest) (string, error) {
-	recap, err := s.store.GetRecapByPlayerId(ctx, request.PlayerID, request.Year)
+	recap, err := s.playerStore.GetRecapByPlayerId(ctx, request.PlayerID, request.Year)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return "", ox.NotFound{}
 	} else if err != nil {
