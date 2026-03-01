@@ -9,6 +9,11 @@ select *
 from maps
 where deleted_at is null and id = $1;
 
+-- name: GetAllMaps :many
+select *
+from maps
+where deleted_at is null;
+
 -- name: GetMapWithTagsById :one
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
 from maps

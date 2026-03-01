@@ -108,6 +108,65 @@ func (q *Queries) DeleteMapTagsNotIn(ctx context.Context, mapID string, tags []M
 	return err
 }
 
+const getAllMaps = `-- name: GetAllMaps :many
+select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
+from maps
+where deleted_at is null
+`
+
+func (q *Queries) GetAllMaps(ctx context.Context) ([]Map, error) {
+	rows, err := q.db.Query(ctx, getAllMaps)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Owner,
+			&i.MType,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Verification,
+			&i.AuthzKey,
+			&i.FileID,
+			&i.LegacyMapID,
+			&i.PublishedID,
+			&i.PublishedAt,
+			&i.QualityOverride,
+			&i.OptName,
+			&i.OptIcon,
+			&i.Size,
+			&i.OptVariant,
+			&i.OptSubvariant,
+			&i.OptSpawnPoint,
+			&i.OptOnlySprint,
+			&i.OptNoSprint,
+			&i.OptNoJump,
+			&i.OptNoSneak,
+			&i.OptBoat,
+			&i.OptExtra,
+			&i.OptTags,
+			&i.Ext,
+			&i.DeletedAt,
+			&i.DeletedBy,
+			&i.DeletedReason,
+			&i.ProtocolVersion,
+			&i.Contest,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMapById = `-- name: GetMapById :one
 select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed
 from maps
