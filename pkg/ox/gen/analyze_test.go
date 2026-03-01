@@ -361,3 +361,65 @@ func TestHasParamTag(t *testing.T) {
 		})
 	}
 }
+
+func TestGetTypeName(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  types.Type
+		want string
+	}{
+		{
+			name: "basic string type",
+			typ:  types.Typ[types.String],
+			want: "string",
+		},
+		{
+			name: "basic int type",
+			typ:  types.Typ[types.Int],
+			want: "int",
+		},
+		{
+			name: "named type in same package",
+			typ: types.NewNamed(
+				types.NewTypeName(0, types.NewPackage("example.com/test", "test"), "MyType", nil),
+				types.Typ[types.String],
+				nil,
+			),
+			want: "MyType",
+		},
+		{
+			name: "pointer to named type",
+			typ: types.NewPointer(types.NewNamed(
+				types.NewTypeName(0, types.NewPackage("example.com/test", "test"), "MyType", nil),
+				types.Typ[types.String],
+				nil,
+			)),
+			want: "*MyType",
+		},
+		{
+			name: "slice of named type",
+			typ: types.NewSlice(types.NewNamed(
+				types.NewTypeName(0, types.NewPackage("example.com/test", "test"), "Item", nil),
+				types.Typ[types.String],
+				nil,
+			)),
+			want: "[]Item",
+		},
+		{
+			name: "named type from external package",
+			typ: types.NewNamed(
+				types.NewTypeName(0, types.NewPackage("example.com/internal/interaction", "interaction"), "Command", nil),
+				types.NewStruct(nil, nil),
+				nil,
+			),
+			want: "Command",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getTypeName(tt.typ)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

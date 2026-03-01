@@ -2,6 +2,7 @@ package v4Internal
 
 import (
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
+	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
@@ -15,6 +16,8 @@ type ServerParams struct {
 	PlayerStore  *playerdb.Store
 	MapStore     *mapdb.Store
 	SessionStore *sessiondb.Queries
+
+	Interactions *interaction.Handler
 }
 
 type Server struct {
@@ -23,6 +26,8 @@ type Server struct {
 	playerStore  *playerdb.Store
 	mapStore     *mapdb.Store
 	sessionStore *sessiondb.Queries
+
+	interactions *interaction.Handler
 }
 
 func NewServer(p ServerParams) (*Server, error) {
@@ -31,6 +36,7 @@ func NewServer(p ServerParams) (*Server, error) {
 		playerStore:  p.PlayerStore,
 		mapStore:     p.MapStore,
 		sessionStore: p.SessionStore,
+		interactions: p.Interactions,
 	}
 
 	return s, nil

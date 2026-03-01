@@ -371,14 +371,11 @@ func inferStatusCode(name string) int {
 
 // getTypeName extracts the short type name from a types.Type.
 // For named types, returns just the name. For pointers, adds "*" prefix.
+// Uses a qualifier that omits package paths, assuming types are either
+// in the current package or imported.
 func getTypeName(t types.Type) string {
-	switch t := t.(type) {
-	case *types.Named:
-		return t.Obj().Name()
-	case *types.Pointer:
-		return "*" + getTypeName(t.Elem())
-	default:
-		// Fallback to full type string for basic types, etc.
-		return types.TypeString(t, nil)
-	}
+	// Use a qualifier that returns empty string (no package prefix)
+	// This works because the generated code is in the same package
+	qualifier := func(*types.Package) string { return "" }
+	return types.TypeString(t, qualifier)
 }

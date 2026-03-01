@@ -20,6 +20,8 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/search", h.searchHeadDatabase)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
@@ -72,6 +74,29 @@ func (h *handlers) getHeadDatabaseCategory(w http.ResponseWriter, r *http.Reques
 		req.PageSize = v
 	}
 	resp, err := h.server.GetHeadDatabaseCategory(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getCommands(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.server.GetCommands(r.Context())
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
+	var body Interaction
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.ExecuteInteraction(r.Context(), body)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return

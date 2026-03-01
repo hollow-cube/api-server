@@ -55,6 +55,32 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /interactions:
+        post:
+            operationId: executeInteraction
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /interactions/commands:
+        get:
+            operationId: getCommands
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /players:
         post:
             operationId: createPlayerData

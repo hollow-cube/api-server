@@ -15,6 +15,7 @@ import (
 	v2Payments "github.com/hollow-cube/api-server/api/v2/payments"
 	v2Public "github.com/hollow-cube/api-server/api/v2/public"
 	"github.com/hollow-cube/api-server/api/v4Internal"
+	"github.com/hollow-cube/api-server/internal/interaction"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -97,6 +98,7 @@ func main() {
 
 		// Converted punishment ladders - for internal handler
 		fx.Provide(newLaddersFromConfig),
+		fx.Provide(interaction.NewHandler),
 
 		fx.Provide(
 			newS3Client,
