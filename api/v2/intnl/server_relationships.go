@@ -128,7 +128,7 @@ func (s *Server) GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksB
 		if err != nil && !errors.Is(err, playerdb.ErrNoRows) {
 			return nil, fmt.Errorf("failed to get block player data: %w", err)
 		}
-		if !pd.Has(player.FlagGenericStaff) {
+		if pd.Has(player.FlagGenericStaff) {
 			continue
 		}
 
