@@ -150,6 +150,7 @@ type Map struct {
 	ProtocolVersion *int       `json:"protocolVersion"`
 	Contest         *string    `json:"contest"`
 	Listed          bool       `json:"listed"`
+	TotalLikes      int        `json:"totalLikes"`
 }
 
 type MapOrgs struct {
@@ -251,10 +252,10 @@ type PublishedMap struct {
 	ProtocolVersion *int       `json:"protocolVersion"`
 	Contest         *string    `json:"contest"`
 	Listed          bool       `json:"listed"`
+	TotalLikes      int        `json:"totalLikes"`
 	Tags            []MapTag   `json:"tags"`
 	PlayCount       int        `json:"playCount"`
 	WinCount        int        `json:"winCount"`
-	TotalLikes      int64      `json:"totalLikes"`
 	ClearRate       float64    `json:"clearRate"`
 	Difficulty      int32      `json:"difficulty"`
 }
