@@ -195,7 +195,7 @@ func (s *server) RestoreMapLeaderboard(ctx context.Context, request RestoreMapLe
 
 	// Fetch all save states for this map and rewrite them into redis
 	// TODO: This should really be paged it could be a ton of entries.
-	saveStates, err := s.store.GetAllSaveStates(ctx, request.MapId)
+	saveStates, err := s.store.GetAllBestCompletedSaveStatesForMap(ctx, request.MapId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch save states: %w", err)
 	}

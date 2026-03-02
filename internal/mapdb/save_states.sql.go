@@ -106,17 +106,18 @@ func (q *Queries) DeleteVerifyingStates(ctx context.Context, mapID string) error
 	return err
 }
 
-const getAllSaveStates = `-- name: GetAllSaveStates :many
-select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
+const getAllBestCompletedSaveStatesForMap = `-- name: GetAllBestCompletedSaveStatesForMap :many
+select distinct on (player_id) id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks
 from save_states
 where deleted is null
   and completed = true
   and map_id = $1
   and (type = 'playing' or type = 'verifying')
+order by player_id, playtime asc
 `
 
-func (q *Queries) GetAllSaveStates(ctx context.Context, mapID string) ([]SaveState, error) {
-	rows, err := q.db.Query(ctx, getAllSaveStates, mapID)
+func (q *Queries) GetAllBestCompletedSaveStatesForMap(ctx context.Context, mapID string) ([]SaveState, error) {
+	rows, err := q.db.Query(ctx, getAllBestCompletedSaveStatesForMap, mapID)
 	if err != nil {
 		return nil, err
 	}

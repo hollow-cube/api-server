@@ -12,13 +12,14 @@ where deleted is null
   and map_id = $2
   and player_id = $3;
 
--- name: GetAllSaveStates :many
-select *
+-- name: GetAllBestCompletedSaveStatesForMap :many
+select distinct on (player_id) *
 from save_states
 where deleted is null
   and completed = true
   and map_id = $1
-  and (type = 'playing' or type = 'verifying');
+  and (type = 'playing' or type = 'verifying')
+order by player_id, playtime asc;
 
 -- name: GetLatestSaveState :one
 select *
