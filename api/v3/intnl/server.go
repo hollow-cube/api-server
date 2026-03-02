@@ -326,19 +326,12 @@ func (s *serverImpl) JoinMap(ctx context.Context, request JoinMapRequestObject) 
 
 func (s *serverImpl) findServerForMap(ctx context.Context, request JoinMapRequestObject) (*db.ServerState, error) {
 	if request.Body.State == "playing" {
-		// We can use a map isolate if player joining has the feature flag or they are specifically
-		// using /join and the map exists as a map isolate already.
-		// Note that this doesnt ensure they joined someone in the isolate version, but oh well its close enough.
-		useMapIsolate := posthog.IsFeatureEnabledRemote(ctx, "map_isolate", request.Body.Player) ||
-			(request.Body.Source == "join_command" && s.findExistingMapState(ctx, request.Body.Map))
-		if useMapIsolate {
-			var isolateOverride string
-			if request.Body.Isolate != nil && request.Body.Isolate.Override != nil {
-				isolateOverride = *request.Body.Isolate.Override
-			}
-			zap.S().Infow("using map isolate for request", "player", request.Body.Player, "map", request.Body.Map)
-			return s.serverTracker.AllocServerForMap(ctx, request.Body.Map, isolateOverride)
+		var isolateOverride string
+		if request.Body.Isolate != nil && request.Body.Isolate.Override != nil {
+			isolateOverride = *request.Body.Isolate.Override
 		}
+		zap.S().Infow("using map isolate for request", "player", request.Body.Player, "map", request.Body.Map)
+		return s.serverTracker.AllocServerForMap(ctx, request.Body.Map, isolateOverride)
 	}
 
 	return s.worldTracker.FindServerForMap(ctx, request.Body.Map)
