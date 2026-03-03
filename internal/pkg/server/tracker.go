@@ -18,6 +18,8 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/redis/rueidis"
 	"github.com/redis/rueidis/rueidislock"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
@@ -206,6 +208,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		return nil, fmt.Errorf("failed to watch pods: %w", err)
 	}
 	defer watchInterface.Stop()
+	span.AddEvent("watch started")
 
 	// Wait to get the IP
 	for event := range watchInterface.ResultChan() {
@@ -213,6 +216,12 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 		if !ok || pod.Name != podName {
 			continue // DNC about this event
 		}
+		span.AddEvent("watch event", trace.WithAttributes(
+			attribute.String("event.type", string(event.Type)),
+			attribute.String("pod.ip", pod.Status.PodIP),
+			attribute.String("pod.phase", string(pod.Status.Phase)),
+		))
+
 		if event.Type == watch.Deleted {
 			return nil, fmt.Errorf("pod failed to start successfully")
 		} else if event.Type == watch.Modified {
@@ -224,6 +233,9 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 
 		// Check if we have the required server fields
 		if server.ClusterIp != "" {
+			span.AddEvent("pod ip acquired", trace.WithAttributes(
+				attribute.String("cluster.ip", server.ClusterIp),
+			))
 			break
 		}
 	}

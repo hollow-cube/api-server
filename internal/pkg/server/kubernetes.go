@@ -9,7 +9,9 @@ import (
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
 	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -164,6 +166,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 		},
 	}
 
+	span.AddEvent("create pod: start", trace.WithAttributes(attribute.String("pod.name", podSpec.Name)))
 	pod, err := t.k8s.CoreV1().Pods("mapmaker").Create(ctx, &podSpec, metaV1.CreateOptions{})
 	if err != nil {
 		zap.S().Error("failed to create pod", zap.Error(err))
@@ -171,6 +174,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 		span.SetStatus(codes.Error, err.Error())
 		return "", "", err
 	}
+	span.AddEvent("create pod: end", trace.WithAttributes(attribute.String("pod.name", podSpec.Name)))
 
 	zap.S().Info("created pod", "pod", pod.Name)
 	return pod.Name, pod.ResourceVersion, nil
