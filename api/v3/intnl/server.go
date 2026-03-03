@@ -13,6 +13,7 @@ import (
 	"time"
 
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
+	"github.com/hollow-cube/api-server/config"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/posthog"
 	"github.com/hollow-cube/api-server/internal/playerdb"
@@ -51,7 +52,8 @@ type serverImpl struct {
 	serverTracker *server.Tracker
 	worldTracker  *world.Tracker
 
-	k8s *kubernetes.Clientset
+	k8s    *kubernetes.Clientset
+	config *config.Config
 }
 
 type ServerParams struct {
@@ -69,7 +71,8 @@ type ServerParams struct {
 	ServerTracker *server.Tracker
 	WorldTracker  *world.Tracker
 
-	K8s *kubernetes.Clientset
+	K8s    *kubernetes.Clientset
+	Config *config.Config
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
@@ -96,6 +99,7 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 		serverTracker: params.ServerTracker,
 		worldTracker:  params.WorldTracker,
 		k8s:           params.K8s,
+		config:        params.Config,
 	}, nil
 }
 
@@ -325,7 +329,7 @@ func (s *serverImpl) JoinMap(ctx context.Context, request JoinMapRequestObject) 
 }
 
 func (s *serverImpl) findServerForMap(ctx context.Context, request JoinMapRequestObject) (*db.ServerState, error) {
-	if request.Body.State == "playing" {
+	if request.Body.State == "playing" && s.config.MapIsolate.Enabled {
 		var isolateOverride string
 		if request.Body.Isolate != nil && request.Body.Isolate.Override != nil {
 			isolateOverride = *request.Body.Isolate.Override

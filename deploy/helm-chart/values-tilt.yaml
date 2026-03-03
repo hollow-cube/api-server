@@ -27,3 +27,5 @@ base:
     SESSION_TEBEX_SECRET: "explicit_ignore"
 
     SESSION_KUBERNETES_NAMESPACE: "mapmaker"
+
+    SESSION_MAPISOLATE_ENABLED: "false"
