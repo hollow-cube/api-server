@@ -83,7 +83,7 @@ type S3 struct {
 }
 
 type MapIsolate struct {
-	Enabled   bool `mapstructure:"enabled"`
+	Disabled  bool `mapstructure:"disabled"`
 	Instances map[string]struct {
 		Cpu    int `mapstructure:"cpu"`    // eg 1000m, 0 = no limit
 		Memory int `mapstructure:"memory"` // eg 512Mi, required.

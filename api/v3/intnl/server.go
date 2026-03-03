@@ -329,7 +329,7 @@ func (s *serverImpl) JoinMap(ctx context.Context, request JoinMapRequestObject) 
 }
 
 func (s *serverImpl) findServerForMap(ctx context.Context, request JoinMapRequestObject) (*db.ServerState, error) {
-	if request.Body.State == "playing" && s.config.MapIsolate.Enabled {
+	if request.Body.State == "playing" && !s.config.MapIsolate.Disabled {
 		var isolateOverride string
 		if request.Body.Isolate != nil && request.Body.Isolate.Override != nil {
 			isolateOverride = *request.Body.Isolate.Override
