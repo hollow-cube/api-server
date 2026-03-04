@@ -229,7 +229,7 @@ const searchPlayersFuzzy = `-- name: SearchPlayersFuzzy :many
 select id, username
 from player_data
 where username ~* $1
-limit 25
+limit $2
 `
 
 type SearchPlayersFuzzyRow struct {
@@ -238,8 +238,8 @@ type SearchPlayersFuzzyRow struct {
 }
 
 // SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
-func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string) ([]SearchPlayersFuzzyRow, error) {
-	rows, err := q.db.Query(ctx, searchPlayersFuzzy, username)
+func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string, limit int32) ([]SearchPlayersFuzzyRow, error) {
+	rows, err := q.db.Query(ctx, searchPlayersFuzzy, username, limit)
 	if err != nil {
 		return nil, err
 	}

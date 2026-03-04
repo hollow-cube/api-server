@@ -411,6 +411,7 @@ type GetActivePunishmentParams struct {
 
 // PerformTabCompleteJSONBody defines parameters for PerformTabComplete.
 type PerformTabCompleteJSONBody struct {
+	Limit *int   `json:"limit,omitempty"`
 	Query string `json:"query"`
 }
 
@@ -466,7 +467,7 @@ type PerformTabCompleteJSONRequestBody PerformTabCompleteJSONBody
 // TebexCheckoutJSONRequestBody defines body for TebexCheckout for application/json ContentType.
 type TebexCheckoutJSONRequestBody TebexCheckoutJSONBody
 
-// ServerInterface represents all Server handlers.
+// ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Endpoint to give players currency
 	// (POST /faucet)
@@ -3386,7 +3387,7 @@ func (response TebexCheckout200JSONResponse) VisitTebexCheckoutResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-// StrictServerInterface represents all Server handlers.
+// StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Endpoint to give players currency
 	// (POST /faucet)

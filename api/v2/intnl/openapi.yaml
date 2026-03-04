@@ -879,6 +879,7 @@ paths:
               required: [ query ]
               properties:
                 query: { type: string }
+
       responses:
         '200':
           description: Query completed successfully

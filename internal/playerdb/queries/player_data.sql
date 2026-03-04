@@ -52,7 +52,7 @@ returning experience as exp;
 select id, username
 from player_data
 where username ~* $1
-limit 25;
+limit $2;
 
 -- name: GetTOTP :one
 select *

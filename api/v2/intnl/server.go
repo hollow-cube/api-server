@@ -344,7 +344,12 @@ func (s *Server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 		return PerformTabComplete200JSONResponse{Result: []TabCompleteEntry{}}, nil
 	}
 
-	entries, err := s.store.SearchPlayersFuzzy(ctx, request.Body.Query)
+	limit := int32(25) // default limit
+	if request.Body.Limit != nil {
+		limit = int32(*request.Body.Limit)
+	}
+
+	entries, err := s.store.SearchPlayersFuzzy(ctx, request.Body.Query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search players: %w", err)
 	}
