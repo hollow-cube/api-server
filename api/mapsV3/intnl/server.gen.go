@@ -227,6 +227,13 @@ type MapSettings struct {
 // MapSize defines model for MapSize.
 type MapSize string
 
+// MapSlot defines model for MapSlot.
+type MapSlot struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Index     int       `json:"index"`
+	Map       MapData   `json:"map"`
+}
+
 // MapSortOrder defines model for MapSortOrder.
 type MapSortOrder string
 
@@ -559,6 +566,9 @@ type ServerInterface interface {
 	// Get map paginated history for a given player
 	// (GET /map-players/{playerId}/history)
 	GetMapHistory(w http.ResponseWriter, r *http.Request, playerId string, params GetMapHistoryParams)
+	// Get map slots for a player
+	// (GET /map-players/{playerId}/slots)
+	GetMapPlayerSlots(w http.ResponseWriter, r *http.Request, playerId string)
 	// Delete all save states for a player
 	// (DELETE /map-players/{playerId}/states)
 	DeleteMapPlayerStates(w http.ResponseWriter, r *http.Request, playerId string)
@@ -700,6 +710,31 @@ func (siw *ServerInterfaceWrapper) GetMapHistory(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMapHistory(w, r, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMapPlayerSlots operation middleware
+func (siw *ServerInterfaceWrapper) GetMapPlayerSlots(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMapPlayerSlots(w, r, playerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1701,6 +1736,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}", wrapper.GetMapPlayerData)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/history", wrapper.GetMapHistory)
+	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/slots", wrapper.GetMapPlayerSlots)
 	m.HandleFunc("DELETE "+options.BaseURL+"/map-players/{playerId}/states", wrapper.DeleteMapPlayerStates)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/topTimes", wrapper.GetPlayerTopTimes)
 	m.HandleFunc("GET "+options.BaseURL+"/maps", wrapper.GetMaps)
@@ -1837,6 +1873,23 @@ type GetMapHistory404Response = MapPlayerNotFoundResponse
 func (response GetMapHistory404Response) VisitGetMapHistoryResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
+}
+
+type GetMapPlayerSlotsRequestObject struct {
+	PlayerId string `json:"playerId"`
+}
+
+type GetMapPlayerSlotsResponseObject interface {
+	VisitGetMapPlayerSlotsResponse(w http.ResponseWriter) error
+}
+
+type GetMapPlayerSlots200JSONResponse []MapSlot
+
+func (response GetMapPlayerSlots200JSONResponse) VisitGetMapPlayerSlotsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type DeleteMapPlayerStatesRequestObject struct {
@@ -2587,6 +2640,9 @@ type StrictServerInterface interface {
 	// Get map paginated history for a given player
 	// (GET /map-players/{playerId}/history)
 	GetMapHistory(ctx context.Context, request GetMapHistoryRequestObject) (GetMapHistoryResponseObject, error)
+	// Get map slots for a player
+	// (GET /map-players/{playerId}/slots)
+	GetMapPlayerSlots(ctx context.Context, request GetMapPlayerSlotsRequestObject) (GetMapPlayerSlotsResponseObject, error)
 	// Delete all save states for a player
 	// (DELETE /map-players/{playerId}/states)
 	DeleteMapPlayerStates(ctx context.Context, request DeleteMapPlayerStatesRequestObject) (DeleteMapPlayerStatesResponseObject, error)
@@ -2742,6 +2798,32 @@ func (sh *strictHandler) GetMapHistory(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMapHistoryResponseObject); ok {
 		if err := validResponse.VisitGetMapHistoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMapPlayerSlots operation middleware
+func (sh *strictHandler) GetMapPlayerSlots(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request GetMapPlayerSlotsRequestObject
+
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMapPlayerSlots(ctx, request.(GetMapPlayerSlotsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMapPlayerSlots")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMapPlayerSlotsResponseObject); ok {
+		if err := validResponse.VisitGetMapPlayerSlotsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

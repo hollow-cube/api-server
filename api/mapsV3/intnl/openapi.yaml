@@ -497,6 +497,24 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/GetMapPlayerData'
+  /map-players/{playerId}/slots:
+    get:
+      operationId: getMapPlayerSlots
+      tags: [ players ]
+      summary: Get map slots for a player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Map slots successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapSlot' }
   /map-players/{playerId}/history:
     get:
       operationId: getMapHistory
@@ -647,6 +665,13 @@ components:
         likes: { type: integer }
 
         contest: { type: string }
+    MapSlot:
+      type: object
+      required: [ map, index, createdAt ]
+      properties:
+        map: { $ref: '#/components/schemas/MapData' }
+        index: { type: integer }
+        createdAt: { type: string, format: date-time }
 
     MapSortType:
       type: string

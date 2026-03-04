@@ -99,9 +99,10 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 }
 
 const deleteMapTagsNotIn = `-- name: DeleteMapTagsNotIn :exec
-DELETE FROM map_tags
-WHERE map_id = $1
-  AND tag != ALL($2::map_tag[])
+delete
+from map_tags
+where map_id = $1
+  and tag != all ($2::map_tag[])
 `
 
 func (q *Queries) DeleteMapTagsNotIn(ctx context.Context, mapID string, tags []MapTag) error {
@@ -217,7 +218,7 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 }
 
 const getMapWithTagsById = `-- name: GetMapWithTagsById :one
-select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes, array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
+select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes, array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
 where deleted_at is null and id = $1
 `
@@ -459,6 +460,72 @@ func (q *Queries) InsertMapReport(ctx context.Context, arg InsertMapReportParams
 		&i.Comment,
 	)
 	return i, err
+}
+
+const multiGetMapWithTagsById = `-- name: MultiGetMapWithTagsById :many
+select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes, array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id = any ($1::uuid[])
+`
+
+type MultiGetMapWithTagsByIdRow struct {
+	Map  Map      `json:"map"`
+	Tags []MapTag `json:"tags"`
+}
+
+func (q *Queries) MultiGetMapWithTagsById(ctx context.Context, dollar_1 []string) ([]MultiGetMapWithTagsByIdRow, error) {
+	rows, err := q.db.Query(ctx, multiGetMapWithTagsById, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MultiGetMapWithTagsByIdRow{}
+	for rows.Next() {
+		var i MultiGetMapWithTagsByIdRow
+		if err := rows.Scan(
+			&i.Map.ID,
+			&i.Map.Owner,
+			&i.Map.MType,
+			&i.Map.CreatedAt,
+			&i.Map.UpdatedAt,
+			&i.Map.Verification,
+			&i.Map.AuthzKey,
+			&i.Map.FileID,
+			&i.Map.LegacyMapID,
+			&i.Map.PublishedID,
+			&i.Map.PublishedAt,
+			&i.Map.QualityOverride,
+			&i.Map.OptName,
+			&i.Map.OptIcon,
+			&i.Map.Size,
+			&i.Map.OptVariant,
+			&i.Map.OptSubvariant,
+			&i.Map.OptSpawnPoint,
+			&i.Map.OptOnlySprint,
+			&i.Map.OptNoSprint,
+			&i.Map.OptNoJump,
+			&i.Map.OptNoSneak,
+			&i.Map.OptBoat,
+			&i.Map.OptExtra,
+			&i.Map.OptTags,
+			&i.Map.Ext,
+			&i.Map.DeletedAt,
+			&i.Map.DeletedBy,
+			&i.Map.DeletedReason,
+			&i.Map.ProtocolVersion,
+			&i.Map.Contest,
+			&i.Map.Listed,
+			&i.Map.TotalLikes,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const multiGetPublishedMapsById = `-- name: MultiGetPublishedMapsById :many

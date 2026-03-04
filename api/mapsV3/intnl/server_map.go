@@ -32,7 +32,7 @@ func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) 
 			Error: "Contest maps not implemented",
 		}}, nil
 	}
-	if request.Body.Slot != nil && (*request.Body.Slot < -1 || *request.Body.Slot > 4) {
+	if request.Body.Slot != nil && *request.Body.Slot < -1 {
 		return CreateMap400JSONResponse{BadRequestJSONResponse{
 			Error: "Slot out of range",
 		}}, nil
