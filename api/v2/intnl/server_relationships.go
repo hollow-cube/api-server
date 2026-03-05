@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/posthog"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/api-server/pkg/player"
@@ -330,23 +331,19 @@ func (s *Server) SendFriendRequest(ctx context.Context, request SendFriendReques
 			return nil, fmt.Errorf("failed to create friendship: %w", err)
 		}
 
-		notifReq := CreatePlayerNotificationRequestObject{
-			PlayerId: request.TargetId,
-			Params:   CreatePlayerNotificationParams{ReplaceUnread: new(false)},
-			Body: &CreatePlayerNotificationJSONRequestBody{
-				Type:      "friend_added",
-				ExpiresIn: new(0), // expire immediately, just for the toast
-				Key:       request.PlayerId,
-			},
+		notifInput := notification.CreateInput{
+			Key:           request.PlayerId,
+			Type:          "friend_added",
+			ExpiresIn:     new(0), // expire immediately, just for the toast
+			ReplaceUnread: false,
 		}
 		// Send notification of friend request (to both players)
-		if err := s.createPlayerNotification(ctx, notifReq); err != nil {
+		if err := s.notificationManager.CreateNotification(ctx, request.TargetId, notifInput); err != nil {
 			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
 		}
 
-		notifReq.PlayerId = request.PlayerId
-		notifReq.Body.Key = request.TargetId
-		if err := s.createPlayerNotification(ctx, notifReq); err != nil {
+		notifInput.Key = request.TargetId
+		if err := s.notificationManager.CreateNotification(ctx, request.PlayerId, notifInput); err != nil {
 			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
 		}
 		return SendFriendRequest201JSONResponse{IsRequest: false}, nil
@@ -391,13 +388,10 @@ func (s *Server) SendFriendRequest(ctx context.Context, request SendFriendReques
 	}
 
 	// Send notification of friend request
-	if err := s.createPlayerNotification(ctx, CreatePlayerNotificationRequestObject{
-		PlayerId: request.TargetId,
-		Params:   CreatePlayerNotificationParams{ReplaceUnread: new(true)},
-		Body: &CreatePlayerNotificationJSONRequestBody{
-			Type: "friend_request",
-			Key:  request.PlayerId, // Use the player ID as the key for a friend_request type
-		},
+	if err := s.notificationManager.CreateNotification(ctx, request.TargetId, notification.CreateInput{
+		Key:           request.PlayerId, // Use the player ID as the key for a friend_request type
+		Type:          "friend_request",
+		ReplaceUnread: true,
 	}); err != nil {
 		s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
 	}

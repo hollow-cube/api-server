@@ -9,6 +9,18 @@ import (
 	"context"
 )
 
+const acceptMapBuilder = `-- name: AcceptMapBuilder :exec
+update map_builders
+set is_pending = false
+where map_id = $1
+    and player_id = $2
+`
+
+func (q *Queries) AcceptMapBuilder(ctx context.Context, mapID string, playerID string) error {
+	_, err := q.db.Exec(ctx, acceptMapBuilder, mapID, playerID)
+	return err
+}
+
 const countMaps = `-- name: CountMaps :one
 select count(*)
 from maps
@@ -98,6 +110,25 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 	return i, err
 }
 
+const createPendingMapBuilder = `-- name: CreatePendingMapBuilder :one
+insert into map_builders (map_id, player_id)
+values ($1, $2)
+on conflict do nothing
+returning map_id, player_id, created_at, is_pending
+`
+
+func (q *Queries) CreatePendingMapBuilder(ctx context.Context, mapID string, playerID string) (MapBuilders, error) {
+	row := q.db.QueryRow(ctx, createPendingMapBuilder, mapID, playerID)
+	var i MapBuilders
+	err := row.Scan(
+		&i.MapID,
+		&i.PlayerID,
+		&i.CreatedAt,
+		&i.IsPending,
+	)
+	return i, err
+}
+
 const deleteMapTagsNotIn = `-- name: DeleteMapTagsNotIn :exec
 delete
 from map_tags
@@ -170,6 +201,37 @@ func (q *Queries) GetAllMaps(ctx context.Context) ([]Map, error) {
 	return items, nil
 }
 
+const getMapBuilders = `-- name: GetMapBuilders :many
+select player_id, is_pending
+from map_builders
+where map_id = $1
+`
+
+type GetMapBuildersRow struct {
+	PlayerID  string `json:"playerId"`
+	IsPending *bool  `json:"isPending"`
+}
+
+func (q *Queries) GetMapBuilders(ctx context.Context, mapID string) ([]GetMapBuildersRow, error) {
+	rows, err := q.db.Query(ctx, getMapBuilders, mapID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMapBuildersRow{}
+	for rows.Next() {
+		var i GetMapBuildersRow
+		if err := rows.Scan(&i.PlayerID, &i.IsPending); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMapById = `-- name: GetMapById :one
 select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes
 from maps
@@ -215,6 +277,19 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 		&i.TotalLikes,
 	)
 	return i, err
+}
+
+const getMapOwner = `-- name: GetMapOwner :one
+select owner
+from maps
+where id = $1
+`
+
+func (q *Queries) GetMapOwner(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, getMapOwner, id)
+	var owner string
+	err := row.Scan(&owner)
+	return owner, err
 }
 
 const getMapWithTagsById = `-- name: GetMapWithTagsById :one
@@ -604,6 +679,17 @@ where id = $1
 
 func (q *Queries) PublishMap(ctx context.Context, iD string, publishedID *int, contest *string) error {
 	_, err := q.db.Exec(ctx, publishMap, iD, publishedID, contest)
+	return err
+}
+
+const removeMapBuilder = `-- name: RemoveMapBuilder :exec
+delete from map_builders
+where map_id = $1
+    and player_id = $2
+`
+
+func (q *Queries) RemoveMapBuilder(ctx context.Context, mapID string, playerID string) error {
+	_, err := q.db.Exec(ctx, removeMapBuilder, mapID, playerID)
 	return err
 }
 

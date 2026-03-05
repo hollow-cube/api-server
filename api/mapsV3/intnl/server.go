@@ -10,6 +10,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/object"
 	"github.com/hollow-cube/api-server/internal/pkg/metric"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
@@ -31,6 +32,8 @@ type ServerParams struct {
 	Metrics     metric.Writer
 
 	Object object.Client `name:"object-mapmaker"`
+
+	NotificationManager notification.Manager
 }
 
 type server struct {
@@ -43,6 +46,8 @@ type server struct {
 	metrics     metric.Writer
 
 	objectClient object.Client
+
+	notificationManager notification.Manager
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
@@ -59,12 +64,13 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	}
 
 	return &server{
-		log:          params.Log,
-		store:        params.Store,
-		playerStore:  params.PlayerStore,
-		redis:        params.Redis,
-		jetStream:    params.JetStream,
-		metrics:      params.Metrics,
-		objectClient: params.Object,
+		log:                 params.Log,
+		store:               params.Store,
+		playerStore:         params.PlayerStore,
+		redis:               params.Redis,
+		jetStream:           params.JetStream,
+		metrics:             params.Metrics,
+		objectClient:        params.Object,
+		notificationManager: params.NotificationManager,
 	}, nil
 }

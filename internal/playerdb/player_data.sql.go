@@ -77,7 +77,7 @@ func (q *Queries) AppendHypercube(ctx context.Context, iD string, column2 pgtype
 const createPlayerData = `-- name: CreatePlayerData :one
 insert into player_data (id, username, first_join, last_online, skin, online)
 values ($1, $2, now(), now(), $3, false)
-returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
+returning id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size, map_builders
 `
 
 func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username string, skin *PlayerSkin) (PlayerData, error) {
@@ -101,6 +101,7 @@ func (q *Queries) CreatePlayerData(ctx context.Context, iD string, username stri
 		&i.Role,
 		&i.ExtraMapSlots,
 		&i.MaxMapSize,
+		&i.MapBuilders,
 	)
 	return i, err
 }
@@ -117,7 +118,7 @@ func (q *Queries) DeleteTOTP(ctx context.Context, playerID string) error {
 }
 
 const getPlayerData = `-- name: GetPlayerData :one
-select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size, map_builders
 from player_data
 where id = $1
 limit 1
@@ -144,6 +145,7 @@ func (q *Queries) GetPlayerData(ctx context.Context, id string) (PlayerData, err
 		&i.Role,
 		&i.ExtraMapSlots,
 		&i.MaxMapSize,
+		&i.MapBuilders,
 	)
 	return i, err
 }

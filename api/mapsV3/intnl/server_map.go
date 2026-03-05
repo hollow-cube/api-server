@@ -16,6 +16,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/object"
 	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/util"
 	"github.com/redis/rueidis"
 	"go.uber.org/zap"
@@ -753,6 +754,125 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 	//todo update map stats
 
 	return RateMap200Response{}, nil
+}
+
+func (s *server) GetMapBuilders(ctx context.Context, request GetMapBuildersRequestObject) (GetMapBuildersResponseObject, error) {
+	builders, err := s.store.GetMapBuilders(ctx, request.MapId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get map builders: %w", err)
+	}
+
+	result := make([]MapBuilder, len(builders))
+	for i, builder := range builders {
+		pending := false
+		if builder.IsPending != nil {
+			pending = *builder.IsPending
+		}
+
+		result[i] = MapBuilder{Id: builder.PlayerID, Pending: pending}
+	}
+
+	return GetMapBuilders200JSONResponse{GetMapBuildersJSONResponse{Builders: result}}, nil
+}
+
+func (s *server) InviteMapBuilder(ctx context.Context, request InviteMapBuilderRequestObject) (InviteMapBuilderResponseObject, error) {
+	_, err := s.store.CreatePendingMapBuilder(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		if errors.Is(err, mapdb.ErrNoRows) {
+			// means it didn't return anything as row already existed
+			return InviteMapBuilder409Response{}, nil
+		}
+		return nil, fmt.Errorf("failed to create pending map builder: %w", err)
+	}
+
+	owner, err := s.store.GetMapOwner(ctx, request.MapId) // get owner for inviter ID
+	if err != nil {
+		return nil, fmt.Errorf("failed to get map owner: %w", err)
+	}
+
+	err = s.notificationManager.CreateNotification(ctx, request.PlayerId, notification.CreateInput{
+		Key:       "", // key isn't used by this notification
+		Type:      "map_builder_invite",
+		ExpiresIn: nil,
+		Data: &map[string]interface{}{
+			"inviterId": owner,
+			"mapId":     request.MapId,
+		},
+		ReplaceUnread: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send invite notification: %w", err)
+	}
+
+	return InviteMapBuilder200Response{}, nil
+}
+
+func Ptr[T any](val T) *T {
+	res := new(T)
+	*res = val
+	return res
+}
+
+func (s *server) AcceptMapBuilderRequest(ctx context.Context, request AcceptMapBuilderRequestRequestObject) (AcceptMapBuilderRequestResponseObject, error) {
+	err := s.store.AcceptMapBuilder(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to approve pending map builder: %w", err)
+	}
+
+	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, err
+	}
+
+	return AcceptMapBuilderRequest200Response{}, nil
+}
+
+func (s *server) RejectMapBuilderRequest(ctx context.Context, request RejectMapBuilderRequestRequestObject) (RejectMapBuilderRequestResponseObject, error) {
+	// if they reject we can just remove them from the map builders list
+	err := s.store.RemoveMapBuilder(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to approve pending map builder: %w", err)
+	}
+
+	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, err
+	}
+
+	return RejectMapBuilderRequest200Response{}, nil
+}
+
+func (s *server) sendMapBuilderAcceptRejectNotification(ctx context.Context, mapId string, playerId string) error {
+	owner, err := s.store.GetMapOwner(ctx, mapId) // get owner for inviter ID
+	if err != nil {
+		return fmt.Errorf("failed to get map owner: %w", err)
+	}
+
+	err = s.notificationManager.CreateNotification(ctx, owner, notification.CreateInput{
+		Key:       "", // key isn't used by this notification
+		Type:      "map_builder_accept_reject",
+		ExpiresIn: nil,
+		Data: &map[string]interface{}{
+			"mapId":     mapId,
+			"builderId": playerId,
+		},
+		ReplaceUnread: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send accept/reject notification: %w", err)
+	}
+	return nil
+}
+
+func (s *server) RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderRequestObject) (RemoveMapBuilderResponseObject, error) {
+	err := s.store.RemoveMapBuilder(ctx, request.MapId, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to remove pending map builder: %w", err)
+	}
+
+	// TODO: Send notification
+
+	return RemoveMapBuilder200Response{}, nil
 }
 
 var (

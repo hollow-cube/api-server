@@ -102,6 +102,7 @@ type PlayerData struct {
 
 	// MapSlots Total number of map slots available to the player (incl. default & bonuses).
 	MapSlots int `json:"mapSlots"`
+	MapBuilders int `json:"mapBuilders"`
 
 	// Permissions String of uint64 flags
 	Permissions string         `json:"permissions"`

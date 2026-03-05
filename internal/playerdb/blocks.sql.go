@@ -49,7 +49,7 @@ func (q *Queries) DeletePlayerBlock(ctx context.Context, playerID string, target
 }
 
 const getBlockedPlayers = `-- name: GetBlockedPlayers :many
-select pb.target_id, pb.created_at, pd.id, pd.username, pd.first_join, pd.last_online, pd.playtime, pd.experience, pd.beta_enabled, pd.settings, pd.coins, pd.cubits, pd.skin, pd.online, pd.hypercube_start, pd.hypercube_end, pd.role, pd.extra_map_slots, pd.max_map_size
+select pb.target_id, pb.created_at, pd.id, pd.username, pd.first_join, pd.last_online, pd.playtime, pd.experience, pd.beta_enabled, pd.settings, pd.coins, pd.cubits, pd.skin, pd.online, pd.hypercube_start, pd.hypercube_end, pd.role, pd.extra_map_slots, pd.max_map_size, pd.map_builders
 from player_blocks pb
          join player_data pd on pd.id = pb.target_id
 where pb.player_id = $1
@@ -91,6 +91,7 @@ func (q *Queries) GetBlockedPlayers(ctx context.Context, playerID string, limit 
 			&i.PlayerData.Role,
 			&i.PlayerData.ExtraMapSlots,
 			&i.PlayerData.MaxMapSize,
+			&i.PlayerData.MapBuilders,
 		); err != nil {
 			return nil, err
 		}

@@ -39,6 +39,11 @@ select *
 from maps_published
 where id = any ($1::uuid[]);
 
+-- name: GetMapOwner :one
+select owner
+from maps
+where id = $1;
+
 -- name: CreateMap :one
 insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
                   published_at, opt_name, opt_icon,
@@ -110,6 +115,28 @@ set deleted_at     = now(),
     deleted_by     = $2,
     deleted_reason = $3
 where id = $1;
+
+-- name: GetMapBuilders :many
+select player_id, is_pending
+from map_builders
+where map_id = $1;
+
+-- name: CreatePendingMapBuilder :one
+insert into map_builders (map_id, player_id)
+values ($1, $2)
+on conflict do nothing
+returning *;
+
+-- name: AcceptMapBuilder :exec
+update map_builders
+set is_pending = false
+where map_id = $1
+    and player_id = $2;
+
+-- name: RemoveMapBuilder :exec
+delete from map_builders
+where map_id = $1
+    and player_id = $2;
 
 -- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,

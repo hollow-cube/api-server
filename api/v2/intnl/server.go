@@ -13,6 +13,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/metric"
 	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/util"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/tebex-go"
@@ -26,11 +27,12 @@ var _ StrictServerInterface = (*Server)(nil)
 type ServerParams struct {
 	fx.In
 
-	Log        *zap.SugaredLogger
-	Config     *config.Config
-	Metrics    metric.Writer
-	JetStream  *natsutil.JetStreamWrapper
-	TBHeadless *tebex.HeadlessClient
+	Log                 *zap.SugaredLogger
+	Config              *config.Config
+	Metrics             metric.Writer
+	JetStream           *natsutil.JetStreamWrapper
+	TBHeadless          *tebex.HeadlessClient
+	NotificationManager notification.Manager
 
 	Store             *playerdb.Store
 	PunishmentLadders map[string]*model.PunishmentLadder
@@ -91,13 +93,14 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 	}
 
 	return &Server{
-		log:               p.Log.With("handler", "internal"),
-		metrics:           p.Metrics,
-		store:             p.Store,
-		jetStream:         p.JetStream,
-		tbHeadless:        p.TBHeadless,
-		punishmentLadders: p.PunishmentLadders,
-		punishmentAliases: punishmentAliases,
+		log:                 p.Log.With("handler", "internal"),
+		metrics:             p.Metrics,
+		store:               p.Store,
+		jetStream:           p.JetStream,
+		tbHeadless:          p.TBHeadless,
+		notificationManager: p.NotificationManager,
+		punishmentLadders:   p.PunishmentLadders,
+		punishmentAliases:   punishmentAliases,
 	}, nil
 }
 
@@ -105,9 +108,10 @@ type Server struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	store      *playerdb.Store
-	jetStream  *natsutil.JetStreamWrapper
-	tbHeadless *tebex.HeadlessClient
+	store               *playerdb.Store
+	jetStream           *natsutil.JetStreamWrapper
+	tbHeadless          *tebex.HeadlessClient
+	notificationManager notification.Manager
 
 	punishmentLadders map[string]*model.PunishmentLadder
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder

@@ -2,20 +2,18 @@ package intnl
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/hollow-cube/api-server/internal/pkg/model"
-	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 )
 
-const notificationsPerPage = 21
-
 func (s *Server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
-	rows, err := s.store.DeleteNotification(ctx, request.PlayerId, request.NotificationId)
-	if rows == 0 {
-		return DeletePlayerNotification404Response{}, nil
-	} else if err != nil {
+	if err := s.notificationManager.DeleteNotification(ctx, request.NotificationId, request.PlayerId); err != nil {
+		if errors.Is(err, notification.ErrNotFound) {
+			return DeletePlayerNotification404Response{}, nil
+		}
 		return nil, err
 	}
 	return DeletePlayerNotification200Response{}, nil
@@ -24,101 +22,71 @@ func (s *Server) DeletePlayerNotification(ctx context.Context, request DeletePla
 func (s *Server) GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error) {
 	var unreadOnly = request.Params.Unread != nil && *request.Params.Unread
 
-	var page int32 = 0
+	var page = 0
 	if request.Params.Page != nil {
-		page = int32(*request.Params.Page)
+		page = *request.Params.Page
 	}
 	if page < 0 {
 		return GetPlayerNotifications400JSONResponse{Message: "page must be non-negative"}, nil
 	}
 
-	var pageCount int32 = 0
-	if page == 0 {
-		count, err := s.store.GetNotificationCount(ctx, request.PlayerId, unreadOnly)
-		if err != nil {
-			return nil, err
-		}
-		pageCount = int32(count / notificationsPerPage)
-	}
-
-	params := playerdb.GetNotificationsParams{PlayerID: request.PlayerId, Limit: notificationsPerPage, Offset: page * notificationsPerPage, Column4: unreadOnly}
-	notifications, err := s.store.GetNotifications(ctx, params)
+	result, err := s.notificationManager.GetNotifications(ctx, request.PlayerId, page, unreadOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]PlayerNotification, len(notifications))
-	for i, n := range notifications {
-		results[i] = PlayerNotification{
-			Id:        n.ID,
-			Type:      n.Type,
-			Key:       n.Key,
-			Data:      n.Data,
-			CreatedAt: n.CreatedAt,
-			ReadAt:    n.ReadAt,
-			ExpiresAt: n.ExpiresAt,
-		}
+	results := make([]PlayerNotification, len(result.Results))
+	for i, notif := range result.Results {
+		results[i] = notificationToApi(notif)
 	}
 
 	return GetPlayerNotifications200JSONResponse{
+		Page:      result.Page,
+		PageCount: result.PageCount,
 		Results:   results,
-		Page:      page,
-		PageCount: pageCount,
 	}, nil
 }
 
-func (s *Server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
-	var rows int64
-	var err error
-	if request.Body.Read {
-		rows, err = s.store.MarkNotificationRead(ctx, request.PlayerId, request.NotificationId)
-	} else {
-		rows, err = s.store.MarkNotificationUnread(ctx, request.PlayerId, request.NotificationId)
+func notificationToApi(n notification.Notification) PlayerNotification {
+	return PlayerNotification{
+		Id:        n.Id,
+		Type:      n.Type,
+		Key:       n.Key,
+		Data:      n.Data,
+		CreatedAt: n.CreatedAt,
+		ReadAt:    n.ReadAt,
+		ExpiresAt: n.ExpiresAt,
 	}
+}
 
-	if rows == 0 {
-		return UpdatePlayerNotification404Response{}, nil
-	} else if err != nil {
+func (s *Server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
+	if err := s.notificationManager.UpdateNotification(ctx, request.NotificationId, request.PlayerId, request.Body.Read); err != nil {
+		if errors.Is(err, notification.ErrNotFound) {
+			return UpdatePlayerNotification404Response{}, nil
+		}
 		return nil, err
 	}
-
 	return UpdatePlayerNotification200Response{}, nil
 }
 
 func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error) {
-	if err := s.createPlayerNotification(ctx, request); err != nil {
+	replaceUnread := false
+	if request.Params.ReplaceUnread != nil {
+		replaceUnread = *request.Params.ReplaceUnread
+	}
+
+	input := notification.CreateInput{
+		Key:           request.Body.Key,
+		Type:          request.Body.Type,
+		ExpiresIn:     request.Body.ExpiresIn,
+		Data:          request.Body.Data,
+		ReplaceUnread: replaceUnread,
+	}
+	if err := s.notificationManager.CreateNotification(ctx, request.PlayerId, input); err != nil {
 		return nil, err
 	}
 
 	return CreatePlayerNotification201Response{}, nil
-}
-
-// createPlayerNotification exists to allow local creation of notifications without an HTTP request to itself.
-func (s *Server) createPlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
-	var replace = request.Params.ReplaceUnread != nil && *request.Params.ReplaceUnread
-	var expiresAt *time.Time = nil
-	if request.Body.ExpiresIn != nil {
-		t := time.Now().Add(time.Duration(*request.Body.ExpiresIn) * time.Second)
-		expiresAt = &t
-	}
-
-	if err := s.store.AddNotification(
-		ctx,
-		request.PlayerId,
-		request.Body.Type,
-		request.Body.Key,
-		request.Body.Data,
-		expiresAt,
-		replace,
-	); err != nil {
-		return err
-	}
-
-	if err := s.sendNotificationMessage(ctx, request); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (s *Server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
