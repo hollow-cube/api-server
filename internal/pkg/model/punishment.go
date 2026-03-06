@@ -2,13 +2,41 @@ package model
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hollow-cube/api-server/config"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 )
+
+const PermanentBanMessage = `
+<bold><red>You are permanently banned from the server</red></bold>
+
+<white><strikethrough>                 </strikethrough> [ ɪɴꜰᴏ ] <strikethrough>                 </strikethrough></white>
+
+<gray>ʀᴇᴀꜱᴏɴ: <white>%s</white></gray>
+
+<white><strikethrough>                </strikethrough> [ ʟɪɴᴋꜱ ] <strikethrough>                </strikethrough></white>
+
+<gray>ᴅɪꜱᴄᴏʀᴅ: <click:open_url:'https://discord.hollowcube.net'><underlined><blue>discord.hollowcube.net</blue></underlined></click></gray>
+<gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
+`
+const TemporaryBanMessage = `
+<bold><red>You are temporarily banned from the server</red></bold>
+
+<white><strikethrough>                 </strikethrough> [ ɪɴꜰᴏ ] <strikethrough>                 </strikethrough></white>
+
+<gray>ʀᴇᴀꜱᴏɴ: <white>%s</white></gray>
+<gray>ᴇxᴘɪʀᴇꜱ ɪɴ: <white>%s</white></gray>
+
+<white><strikethrough>                </strikethrough> [ ʟɪɴᴋꜱ ] <strikethrough>                </strikethrough></white>
+
+<gray>ᴅɪꜱᴄᴏʀᴅ: <click:open_url:'https://discord.hollowcube.net'><underlined><blue>discord.hollowcube.net</blue></underlined></click></gray>
+<gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
+`
 
 type PunishmentType string
 
@@ -65,10 +93,27 @@ func (a PunishmentUpdateAction) String() string {
 type PunishmentUpdateMessage struct {
 	Action     PunishmentUpdateAction `json:"action"`
 	Punishment *playerdb.Punishment   `json:"punishment"`
+	Message    string                 `json:"message"`
 }
 
 func (m PunishmentUpdateMessage) Subject() string {
 	return fmt.Sprintf("punishment.%v", m.Action)
+}
+
+func FormatPunishmentMessage(p *playerdb.Punishment) string {
+	if p == nil {
+		return "You have been punished on the server."
+	} else if p.Type == "ban" {
+		if p.ExpiresAt == nil {
+			return fmt.Sprintf(PermanentBanMessage, p.Comment)
+		}
+		return fmt.Sprintf(TemporaryBanMessage, p.Comment, formatDuration(time.Until(*p.ExpiresAt)))
+	} else if p.Type == "mute" {
+		return fmt.Sprintf("You have been muted on the server for reason: %s", p.Comment)
+	} else if p.Type == "kick" {
+		return fmt.Sprintf("You have been kicked from the server for reason: %s", p.Comment)
+	}
+	return "You have been punished on the server for reason: " + p.Comment
 }
 
 func ConvertConfigLadders2Model(ladders []config.PunishmentLadder) (map[string]*PunishmentLadder, error) {
@@ -162,4 +207,22 @@ func convertPunishmentDurationStringToSeconds(text string) (int64, error) {
 	}
 
 	return amount * int64(unit), nil
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	var parts []string
+	if d.Hours() >= 24 {
+		parts = append(parts, fmt.Sprintf("%dd", int(d.Hours()/24)))
+	}
+	if math.Mod(d.Hours(), 24) >= 1 {
+		parts = append(parts, fmt.Sprintf("%dh", int(math.Mod(d.Hours(), 24))))
+	}
+	if math.Mod(d.Minutes(), 60) >= 1 {
+		parts = append(parts, fmt.Sprintf("%dm", int(math.Mod(d.Minutes(), 60))))
+	}
+	if len(parts) == 0 && math.Mod(d.Seconds(), 60) >= 1 {
+		parts = append(parts, fmt.Sprintf("%ds", int(math.Mod(d.Seconds(), 60))))
+	}
+	return strings.Join(parts, " ")
 }

@@ -269,6 +269,7 @@ func (s *Server) sendPunishmentUpdateMessage(ctx context.Context, action model.P
 	msg := &model.PunishmentUpdateMessage{
 		Action:     action,
 		Punishment: punishment,
+		Message:    model.FormatPunishmentMessage(punishment),
 	}
 
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
@@ -38,6 +39,35 @@ import (
 )
 
 var _ StrictServerInterface = (*serverImpl)(nil)
+
+const maintenanceMessage = `
+<bold><red>The server is currently undergoing maintenance.</red></bold>
+
+<white><strikethrough>                </strikethrough> [ ʟɪɴᴋꜱ ] <strikethrough>                </strikethrough></white>
+
+<gray>ᴅɪꜱᴄᴏʀᴅ: <click:open_url:'https://discord.hollowcube.net'><underlined><blue>discord.hollowcube.net</blue></underlined></click></gray>
+<gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
+`
+
+const wrongVersionMessage = `
+<bold><red>Your Minecraft version is not supported.</red></bold>
+
+<gray>Please try again on a supported version: <white>1.21.4 - 1.21.11</white></gray>
+
+<white><strikethrough>                </strikethrough> [ ʟɪɴᴋꜱ ] <strikethrough>                </strikethrough></white>
+
+<gray>ᴅɪꜱᴄᴏʀᴅ: <click:open_url:'https://discord.hollowcube.net'><underlined><blue>discord.hollowcube.net</blue></underlined></click></gray>
+<gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
+`
+
+var allowedProtocolVersions = [...]int{
+	769, // 1.21.4
+	770, // 1.21.5
+	771, // 1.21.6
+	772, // 1.21.7, 1.21.8
+	773, // 1.21.9, 1.21.10
+	774, // 1.21.11
+}
 
 type serverImpl struct {
 	invites   *handler.InviteManager
@@ -108,18 +138,17 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get active punishment: %w", err)
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		// This sequence is obviously very gross, needs fixing.
-		r1 := v2Internal.PunishmentToAPI(punishment)
-		r2, err := json.Marshal(r1)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal punishment: %w", err)
-		}
-		var raw map[string]interface{}
-		if err = json.Unmarshal(r2, &raw); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal punishment: %w", err)
-		}
+		return &CreateSession403JSONResponse{SessionDeniedResponseJSONResponse{
+			Type:    "ban",
+			Message: model.FormatPunishmentMessage(&punishment),
+		}}, nil
+	}
 
-		return &CreateSession403JSONResponse{raw}, nil
+	if request.Body.ProtocolVersion != nil && !slices.Contains(allowedProtocolVersions[:], *request.Body.ProtocolVersion) {
+		return &CreateSession403JSONResponse{SessionDeniedResponseJSONResponse{
+			Type:    "wrong_version",
+			Message: wrongVersionMessage,
+		}}, nil
 	}
 
 	// TODO check if already online
@@ -131,9 +160,11 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	}
 	s.updatePlayerDataFromJoin(pd, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
-	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) &&
-		!pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
-		return CreateSession401Response{}, nil
+	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) && !pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+		return &CreateSession403JSONResponse{SessionDeniedResponseJSONResponse{
+			Type:    "maintenance",
+			Message: maintenanceMessage,
+		}}, nil
 	}
 
 	protocolVersion := 0

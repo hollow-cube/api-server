@@ -26,13 +26,11 @@ paths:
         $ref: '#/components/requestBodies/CreateSessionRequest'
       responses:
         '201':
-          $ref: '#/components/responses/CreatedSessionResponse'
+          $ref: '#/components/responses/SessionCreatedResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          description: "maintenance mode is enabled"
         '403':
-          $ref: '#/components/responses/BannedSessionResponse'
+          $ref: '#/components/responses/SessionDeniedResponse'
     put:
       operationId: transferSession
       summary: Transfer a session to a new server
@@ -410,21 +408,23 @@ components:
           schema:
             $ref: '#/components/schemas/PlayerSession'
 
-    CreatedSessionResponse:
+    SessionCreatedResponse:
       description: Session successfully created
       content:
         application/json:
           schema:
             description: PlayerData object from the player service
             type: object
-    BannedSessionResponse:
-      description: User is banned from the server
+    SessionDeniedResponse:
+      description: Session creation denied, due to bans, maintenance, whitelist, or other factors.
       content:
         application/json:
           schema:
-            description: Ban object from player service.
             type: object
-            additionalProperties: true
+            required: [ type, message ]
+            properties:
+              type: { type: string }
+              message: { type: string }
 
     TransferSessionResponse:
       description: Session successfully transferred

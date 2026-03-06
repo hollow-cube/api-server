@@ -83,20 +83,23 @@ type BadRequest struct {
 	Error string `json:"error"`
 }
 
-// BannedSessionResponse Ban object from player service.
-type BannedSessionResponse map[string]interface{}
-
-// CreatedSessionResponse PlayerData object from the player service
-type CreatedSessionResponse = map[string]interface{}
-
 // MapJoinSuccess defines model for MapJoinSuccess.
 type MapJoinSuccess struct {
 	Server          string `json:"server"`
 	ServerClusterIP string `json:"serverClusterIP"`
 }
 
+// SessionCreatedResponse PlayerData object from the player service
+type SessionCreatedResponse = map[string]interface{}
+
 // SessionData defines model for SessionData.
 type SessionData = PlayerSession
+
+// SessionDeniedResponse defines model for SessionDeniedResponse.
+type SessionDeniedResponse struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+}
 
 // TransferSessionResponse defines model for TransferSessionResponse.
 type TransferSessionResponse struct {
@@ -641,10 +644,6 @@ type BadRequestJSONResponse struct {
 	Error string `json:"error"`
 }
 
-type BannedSessionResponseJSONResponse map[string]interface{}
-
-type CreatedSessionResponseJSONResponse map[string]interface{}
-
 type MapJoinSuccessJSONResponse struct {
 	Server          string `json:"server"`
 	ServerClusterIP string `json:"serverClusterIP"`
@@ -653,7 +652,14 @@ type MapJoinSuccessJSONResponse struct {
 type NoServerAvailableResponse struct {
 }
 
+type SessionCreatedResponseJSONResponse map[string]interface{}
+
 type SessionDataJSONResponse PlayerSession
+
+type SessionDeniedResponseJSONResponse struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+}
 
 type SessionNotFoundResponse struct {
 }
@@ -987,7 +993,7 @@ type CreateSessionResponseObject interface {
 }
 
 type CreateSession201JSONResponse struct {
-	CreatedSessionResponseJSONResponse
+	SessionCreatedResponseJSONResponse
 }
 
 func (response CreateSession201JSONResponse) VisitCreateSessionResponse(w http.ResponseWriter) error {
@@ -1006,16 +1012,8 @@ func (response CreateSession400JSONResponse) VisitCreateSessionResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-type CreateSession401Response struct {
-}
-
-func (response CreateSession401Response) VisitCreateSessionResponse(w http.ResponseWriter) error {
-	w.WriteHeader(401)
-	return nil
-}
-
 type CreateSession403JSONResponse struct {
-	BannedSessionResponseJSONResponse
+	SessionDeniedResponseJSONResponse
 }
 
 func (response CreateSession403JSONResponse) VisitCreateSessionResponse(w http.ResponseWriter) error {

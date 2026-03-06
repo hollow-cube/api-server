@@ -88,7 +88,11 @@ func (h *Handler) handleBan(ctx context.Context, i *Interaction) (*InteractionRe
 		return nil, fmt.Errorf("failed to create punishment: %w", err)
 	}
 
-	err = h.jetStream.PublishJSONAsync(ctx, model.PunishmentUpdateMessage{Action: model.PunishmentUpdateAction_Create, Punishment: &punishment})
+	err = h.jetStream.PublishJSONAsync(ctx, model.PunishmentUpdateMessage{
+		Action:     model.PunishmentUpdateAction_Create,
+		Punishment: &punishment,
+		Message:    model.FormatPunishmentMessage(&punishment),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to publish punishment create message: %w", err)
 	}
