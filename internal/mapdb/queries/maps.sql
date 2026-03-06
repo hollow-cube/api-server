@@ -121,6 +121,23 @@ select player_id, is_pending
 from map_builders
 where map_id = $1;
 
+-- name: GetMapBuilderPlayerSlotsCount :one
+select count(*)
+from map_builders
+where player_id = $1;
+
+-- name: GetMapsPlayerIsBuilderOn :many
+select
+    sqlc.embed(maps),
+    array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id in (
+    select map_id
+    from map_builders
+    where player_id = $1
+        and is_pending = false
+);
+
 -- name: CreatePendingMapBuilder :one
 insert into map_builders (map_id, player_id)
 values ($1, $2)
@@ -137,6 +154,10 @@ where map_id = $1
 delete from map_builders
 where map_id = $1
     and player_id = $2;
+
+-- name: DeleteMapBuildersForMap :exec
+delete from map_builders
+where map_id = $1;
 
 -- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,

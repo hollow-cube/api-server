@@ -459,6 +459,10 @@ func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) 
 			return fmt.Errorf("failed to remove map from slots: %w", err)
 		}
 
+		if err = tx.DeleteMapBuildersForMap(ctx, m.ID); err != nil {
+			return fmt.Errorf("failed to remove map builders from map: %w", err)
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -762,17 +766,31 @@ func (s *server) GetMapBuilders(ctx context.Context, request GetMapBuildersReque
 		return nil, fmt.Errorf("failed to get map builders: %w", err)
 	}
 
-	result := make([]MapBuilder, len(builders))
+	result := make(GetMapBuilders200JSONResponse, len(builders))
 	for i, builder := range builders {
 		pending := false
 		if builder.IsPending != nil {
 			pending = *builder.IsPending
 		}
 
-		result[i] = MapBuilder{Id: builder.PlayerID, Pending: pending}
+		result[i] = MapBuilder{MapId: request.MapId, PlayerId: builder.PlayerID, Pending: pending}
 	}
 
-	return GetMapBuilders200JSONResponse{GetMapBuildersJSONResponse{Builders: result}}, nil
+	return result, nil
+}
+
+func (s *server) GetMapsPlayerIsBuilderOn(ctx context.Context, request GetMapsPlayerIsBuilderOnRequestObject) (GetMapsPlayerIsBuilderOnResponseObject, error) {
+	slots, err := s.store.GetMapsPlayerIsBuilderOn(ctx, request.PlayerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get maps player is builder on: %w", err)
+	}
+
+	result := make(GetMapsPlayerIsBuilderOn200JSONResponse, len(slots))
+	for i, slot := range slots {
+		result[i] = MapData(s.hydrateMap(slot.Map, slot.Tags))
+	}
+
+	return result, nil
 }
 
 func (s *server) InviteMapBuilder(ctx context.Context, request InviteMapBuilderRequestObject) (InviteMapBuilderResponseObject, error) {
@@ -807,24 +825,41 @@ func (s *server) InviteMapBuilder(ctx context.Context, request InviteMapBuilderR
 	return InviteMapBuilder200Response{}, nil
 }
 
-func Ptr[T any](val T) *T {
-	res := new(T)
-	*res = val
-	return res
-}
-
 func (s *server) AcceptMapBuilderRequest(ctx context.Context, request AcceptMapBuilderRequestRequestObject) (AcceptMapBuilderRequestResponseObject, error) {
-	err := s.store.AcceptMapBuilder(ctx, request.MapId, request.PlayerId)
+	hasAvailableSlot, err := s.hasAvailableBuilderSlot(ctx, request.PlayerId)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAvailableSlot {
+		return AcceptMapBuilderRequest402Response{}, nil
+	}
+
+	err = s.store.AcceptMapBuilder(ctx, request.MapId, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to approve pending map builder: %w", err)
 	}
 
-	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId)
+	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId, true)
 	if err != nil {
 		return nil, err
 	}
 
 	return AcceptMapBuilderRequest200Response{}, nil
+}
+
+func (s *server) hasAvailableBuilderSlot(ctx context.Context, playerId string) (bool, error) {
+	pd, err := s.playerStore.GetPlayerData(ctx, playerId)
+	if err != nil {
+		return false, fmt.Errorf("failed to get player data: %w", err)
+	}
+	unlockedSlots := pd.MapBuilders
+
+	usedSlots, err := s.store.GetMapBuilderPlayerSlotsCount(ctx, playerId)
+	if err != nil {
+		return false, fmt.Errorf("failed to get used map builder slots: %w", err)
+	}
+
+	return unlockedSlots-int16(usedSlots) > 0, nil
 }
 
 func (s *server) RejectMapBuilderRequest(ctx context.Context, request RejectMapBuilderRequestRequestObject) (RejectMapBuilderRequestResponseObject, error) {
@@ -834,7 +869,7 @@ func (s *server) RejectMapBuilderRequest(ctx context.Context, request RejectMapB
 		return nil, fmt.Errorf("failed to approve pending map builder: %w", err)
 	}
 
-	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId)
+	err = s.sendMapBuilderAcceptRejectNotification(ctx, request.MapId, request.PlayerId, false)
 	if err != nil {
 		return nil, err
 	}
@@ -842,14 +877,14 @@ func (s *server) RejectMapBuilderRequest(ctx context.Context, request RejectMapB
 	return RejectMapBuilderRequest200Response{}, nil
 }
 
-func (s *server) sendMapBuilderAcceptRejectNotification(ctx context.Context, mapId string, playerId string) error {
+func (s *server) sendMapBuilderAcceptRejectNotification(ctx context.Context, mapId string, playerId string, accept bool) error {
 	owner, err := s.store.GetMapOwner(ctx, mapId) // get owner for inviter ID
 	if err != nil {
 		return fmt.Errorf("failed to get map owner: %w", err)
 	}
 
 	err = s.notificationManager.CreateNotification(ctx, owner, notification.CreateInput{
-		Key:       "", // key isn't used by this notification
+		Key:       strconv.FormatBool(accept),
 		Type:      "map_builder_accept_reject",
 		ExpiresIn: nil,
 		Data: &map[string]interface{}{
@@ -870,7 +905,16 @@ func (s *server) RemoveMapBuilder(ctx context.Context, request RemoveMapBuilderR
 		return nil, fmt.Errorf("failed to remove pending map builder: %w", err)
 	}
 
-	// TODO: Send notification
+	err = s.notificationManager.CreateNotification(ctx, request.PlayerId, notification.CreateInput{
+		Key:           request.MapId,
+		Type:          "map_builder_removed",
+		ExpiresIn:     nil,
+		Data:          nil,
+		ReplaceUnread: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send removed notification: %w", err)
+	}
 
 	return RemoveMapBuilder200Response{}, nil
 }

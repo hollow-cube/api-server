@@ -879,6 +879,9 @@ paths:
               required: [ query ]
               properties:
                 query: { type: string }
+                limit:
+                  type: integer
+                  default: 25
 
       responses:
         '200':
@@ -1335,7 +1338,7 @@ components:
             example: Invalid input
     PlayerData:
       type: object
-      required: [ id, username, displayNameV2, firstJoin, lastOnline, playtime, experience, settings, betaEnabled, coins, cubits, unlockedCosmetics, totpEnabled, permissions, mapSlots, tempMaxMapSize ]
+      required: [ id, username, displayNameV2, firstJoin, lastOnline, playtime, experience, settings, betaEnabled, coins, cubits, unlockedCosmetics, totpEnabled, permissions, mapSlots, mapBuilders, tempMaxMapSize ]
       properties:
         id: { type: string }
         username: { type: string }
@@ -1371,6 +1374,9 @@ components:
         mapSlots:
           type: integer
           description: Total number of map slots available to the player (incl. default & bonuses).
+        mapBuilders:
+          type: integer
+          description: Total number of map builder slots available to the player
         tempMaxMapSize:
           type: integer
           description: Map size enum, probably will convert to a string later when we decide about tall or custom map sizes

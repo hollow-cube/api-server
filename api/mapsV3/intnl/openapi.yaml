@@ -298,7 +298,12 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          $ref: '#/components/responses/GetMapBuilders'
+          description: Map builders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapBuilder' }
 
   /maps/{mapId}/builders/{playerId}:
     post:
@@ -363,6 +368,8 @@ paths:
           description: Map builder approved
         '400':
           $ref: '#/components/responses/BadRequest'
+        '402':
+          description: Cannot accept request as the player does not have available builder slots - must buy more
         '404':
           $ref: '#/components/responses/MapNotFound'
   /maps/{mapId}/builders/{playerId}/reject:
@@ -615,7 +622,25 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/MapSlot' }
+                items: { $ref: '#/components/schemas/MapData' }
+  /map-players/{playerId}/builder:
+    get:
+      operationId: getMapsPlayerIsBuilderOn
+      tags: [ players ]
+      summary: Get maps that the player is a builder on and not the owner of
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Maps the player is a builder on
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapData' }
   /map-players/{playerId}/history:
     get:
       operationId: getMapHistory
@@ -848,9 +873,10 @@ components:
 
     MapBuilder:
       type: object
-      required: [ id, pending ]
+      required: [ mapId, playerId, pending ]
       properties:
-        id: { type: string }
+        mapId: { type: string }
+        playerId: { type: string }
         pending: { type: boolean }
 
     SaveStateType:
@@ -1164,15 +1190,3 @@ components:
               items:
                 type: array
                 items: { $ref: '#/components/schemas/PlayerTopTimesEntry' }
-    GetMapBuilders:
-      description: Map builder player IDs for a map
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [ builders ]
-            properties:
-              builders:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MapBuilder'

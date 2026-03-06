@@ -73,19 +73,11 @@ func (s *server) GetMapPlayerSlots(ctx context.Context, request GetMapPlayerSlot
 				continue
 			}
 
-			result[i] = MapSlot{
-				Map:       MapData(s.hydrateMap(m.Map, m.Tags)),
-				CreatedAt: slot.CreatedAt,
-				Index:     slot.Index,
-			}
+			result[i] = MapData(s.hydrateMap(m.Map, m.Tags))
 		}
 	}
 	for i, m := range published {
-		result[i+len(slots)] = MapSlot{
-			Map:       MapData(s.hydratePublishedMap(m.PublishedMap)),
-			CreatedAt: *m.PublishedMap.PublishedAt,
-			Index:     -1,
-		}
+		result[i+len(slots)] = MapData(s.hydratePublishedMap(m.PublishedMap))
 	}
 	return result, nil
 }

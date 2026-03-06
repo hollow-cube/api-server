@@ -129,6 +129,16 @@ func (q *Queries) CreatePendingMapBuilder(ctx context.Context, mapID string, pla
 	return i, err
 }
 
+const deleteMapBuildersForMap = `-- name: DeleteMapBuildersForMap :exec
+delete from map_builders
+where map_id = $1
+`
+
+func (q *Queries) DeleteMapBuildersForMap(ctx context.Context, mapID string) error {
+	_, err := q.db.Exec(ctx, deleteMapBuildersForMap, mapID)
+	return err
+}
+
 const deleteMapTagsNotIn = `-- name: DeleteMapTagsNotIn :exec
 delete
 from map_tags
@@ -199,6 +209,19 @@ func (q *Queries) GetAllMaps(ctx context.Context) ([]Map, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getMapBuilderPlayerSlotsCount = `-- name: GetMapBuilderPlayerSlotsCount :one
+select count(*)
+from map_builders
+where player_id = $1
+`
+
+func (q *Queries) GetMapBuilderPlayerSlotsCount(ctx context.Context, playerID string) (int64, error) {
+	row := q.db.QueryRow(ctx, getMapBuilderPlayerSlotsCount, playerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const getMapBuilders = `-- name: GetMapBuilders :many
@@ -343,6 +366,79 @@ func (q *Queries) GetMapWithTagsById(ctx context.Context, id string) (GetMapWith
 		&i.Tags,
 	)
 	return i, err
+}
+
+const getMapsPlayerIsBuilderOn = `-- name: GetMapsPlayerIsBuilderOn :many
+select
+    maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes,
+    array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id in (
+    select map_id
+    from map_builders
+    where player_id = $1
+        and is_pending = false
+)
+`
+
+type GetMapsPlayerIsBuilderOnRow struct {
+	Map  Map      `json:"map"`
+	Tags []MapTag `json:"tags"`
+}
+
+func (q *Queries) GetMapsPlayerIsBuilderOn(ctx context.Context, playerID string) ([]GetMapsPlayerIsBuilderOnRow, error) {
+	rows, err := q.db.Query(ctx, getMapsPlayerIsBuilderOn, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMapsPlayerIsBuilderOnRow{}
+	for rows.Next() {
+		var i GetMapsPlayerIsBuilderOnRow
+		if err := rows.Scan(
+			&i.Map.ID,
+			&i.Map.Owner,
+			&i.Map.MType,
+			&i.Map.CreatedAt,
+			&i.Map.UpdatedAt,
+			&i.Map.Verification,
+			&i.Map.AuthzKey,
+			&i.Map.FileID,
+			&i.Map.LegacyMapID,
+			&i.Map.PublishedID,
+			&i.Map.PublishedAt,
+			&i.Map.QualityOverride,
+			&i.Map.OptName,
+			&i.Map.OptIcon,
+			&i.Map.Size,
+			&i.Map.OptVariant,
+			&i.Map.OptSubvariant,
+			&i.Map.OptSpawnPoint,
+			&i.Map.OptOnlySprint,
+			&i.Map.OptNoSprint,
+			&i.Map.OptNoJump,
+			&i.Map.OptNoSneak,
+			&i.Map.OptBoat,
+			&i.Map.OptExtra,
+			&i.Map.OptTags,
+			&i.Map.Ext,
+			&i.Map.DeletedAt,
+			&i.Map.DeletedBy,
+			&i.Map.DeletedReason,
+			&i.Map.ProtocolVersion,
+			&i.Map.Contest,
+			&i.Map.Listed,
+			&i.Map.TotalLikes,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getMultiMapProgress = `-- name: GetMultiMapProgress :many

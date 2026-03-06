@@ -100,9 +100,11 @@ type PlayerData struct {
 	Id             string        `json:"id"`
 	LastOnline     time.Time     `json:"lastOnline"`
 
+	// MapBuilders Total number of map builder slots available to the player
+	MapBuilders int `json:"mapBuilders"`
+
 	// MapSlots Total number of map slots available to the player (incl. default & bonuses).
 	MapSlots int `json:"mapSlots"`
-	MapBuilders int `json:"mapBuilders"`
 
 	// Permissions String of uint64 flags
 	Permissions string         `json:"permissions"`

@@ -114,8 +114,9 @@ type LeaderboardEntry struct {
 
 // MapBuilder defines model for MapBuilder.
 type MapBuilder struct {
-	Id      string `json:"id"`
-	Pending bool   `json:"pending"`
+	MapId    string `json:"mapId"`
+	Pending  bool   `json:"pending"`
+	PlayerId string `json:"playerId"`
 }
 
 // MapData defines model for MapData.
@@ -233,13 +234,6 @@ type MapSettings struct {
 // MapSize defines model for MapSize.
 type MapSize string
 
-// MapSlot defines model for MapSlot.
-type MapSlot struct {
-	CreatedAt time.Time `json:"createdAt"`
-	Index     int       `json:"index"`
-	Map       MapData   `json:"map"`
-}
-
 // MapSortOrder defines model for MapSortOrder.
 type MapSortOrder string
 
@@ -311,11 +305,6 @@ type SaveStateType string
 // BadRequest defines model for BadRequest.
 type BadRequest struct {
 	Error string `json:"error"`
-}
-
-// GetMapBuilders defines model for GetMapBuilders.
-type GetMapBuilders struct {
-	Builders []MapBuilder `json:"builders"`
 }
 
 // GetMapHistory defines model for GetMapHistory.
@@ -574,6 +563,9 @@ type ServerInterface interface {
 	// Get map player data for a player
 	// (GET /map-players/{playerId})
 	GetMapPlayerData(w http.ResponseWriter, r *http.Request, playerId string)
+	// Get maps that the player is a builder on and not the owner of
+	// (GET /map-players/{playerId}/builder)
+	GetMapsPlayerIsBuilderOn(w http.ResponseWriter, r *http.Request, playerId string)
 	// Get map paginated history for a given player
 	// (GET /map-players/{playerId}/history)
 	GetMapHistory(w http.ResponseWriter, r *http.Request, playerId string, params GetMapHistoryParams)
@@ -700,6 +692,31 @@ func (siw *ServerInterfaceWrapper) GetMapPlayerData(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMapPlayerData(w, r, playerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMapsPlayerIsBuilderOn operation middleware
+func (siw *ServerInterfaceWrapper) GetMapsPlayerIsBuilderOn(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMapsPlayerIsBuilderOn(w, r, playerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1922,6 +1939,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}", wrapper.GetMapPlayerData)
+	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/builder", wrapper.GetMapsPlayerIsBuilderOn)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/history", wrapper.GetMapHistory)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/slots", wrapper.GetMapPlayerSlots)
 	m.HandleFunc("DELETE "+options.BaseURL+"/map-players/{playerId}/states", wrapper.DeleteMapPlayerStates)
@@ -1961,10 +1979,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 type BadRequestJSONResponse struct {
 	Error string `json:"error"`
-}
-
-type GetMapBuildersJSONResponse struct {
-	Builders []MapBuilder `json:"builders"`
 }
 
 type GetMapHistoryJSONResponse struct {
@@ -2046,6 +2060,23 @@ func (response GetMapPlayerData200JSONResponse) VisitGetMapPlayerDataResponse(w 
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetMapsPlayerIsBuilderOnRequestObject struct {
+	PlayerId string `json:"playerId"`
+}
+
+type GetMapsPlayerIsBuilderOnResponseObject interface {
+	VisitGetMapsPlayerIsBuilderOnResponse(w http.ResponseWriter) error
+}
+
+type GetMapsPlayerIsBuilderOn200JSONResponse []MapData
+
+func (response GetMapsPlayerIsBuilderOn200JSONResponse) VisitGetMapsPlayerIsBuilderOnResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetMapHistoryRequestObject struct {
 	PlayerId string `json:"playerId"`
 	Params   GetMapHistoryParams
@@ -2079,7 +2110,7 @@ type GetMapPlayerSlotsResponseObject interface {
 	VisitGetMapPlayerSlotsResponse(w http.ResponseWriter) error
 }
 
-type GetMapPlayerSlots200JSONResponse []MapSlot
+type GetMapPlayerSlots200JSONResponse []MapData
 
 func (response GetMapPlayerSlots200JSONResponse) VisitGetMapPlayerSlotsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2347,7 +2378,7 @@ type GetMapBuildersResponseObject interface {
 	VisitGetMapBuildersResponse(w http.ResponseWriter) error
 }
 
-type GetMapBuilders200JSONResponse struct{ GetMapBuildersJSONResponse }
+type GetMapBuilders200JSONResponse []MapBuilder
 
 func (response GetMapBuilders200JSONResponse) VisitGetMapBuildersResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2454,6 +2485,14 @@ func (response AcceptMapBuilderRequest400JSONResponse) VisitAcceptMapBuilderRequ
 	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type AcceptMapBuilderRequest402Response struct {
+}
+
+func (response AcceptMapBuilderRequest402Response) VisitAcceptMapBuilderRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(402)
+	return nil
 }
 
 type AcceptMapBuilderRequest404Response = MapNotFoundResponse
@@ -2990,6 +3029,9 @@ type StrictServerInterface interface {
 	// Get map player data for a player
 	// (GET /map-players/{playerId})
 	GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error)
+	// Get maps that the player is a builder on and not the owner of
+	// (GET /map-players/{playerId}/builder)
+	GetMapsPlayerIsBuilderOn(ctx context.Context, request GetMapsPlayerIsBuilderOnRequestObject) (GetMapsPlayerIsBuilderOnResponseObject, error)
 	// Get map paginated history for a given player
 	// (GET /map-players/{playerId}/history)
 	GetMapHistory(ctx context.Context, request GetMapHistoryRequestObject) (GetMapHistoryResponseObject, error)
@@ -3139,6 +3181,32 @@ func (sh *strictHandler) GetMapPlayerData(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMapPlayerDataResponseObject); ok {
 		if err := validResponse.VisitGetMapPlayerDataResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMapsPlayerIsBuilderOn operation middleware
+func (sh *strictHandler) GetMapsPlayerIsBuilderOn(w http.ResponseWriter, r *http.Request, playerId string) {
+	var request GetMapsPlayerIsBuilderOnRequestObject
+
+	request.PlayerId = playerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMapsPlayerIsBuilderOn(ctx, request.(GetMapsPlayerIsBuilderOnRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMapsPlayerIsBuilderOn")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMapsPlayerIsBuilderOnResponseObject); ok {
+		if err := validResponse.VisitGetMapsPlayerIsBuilderOnResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
