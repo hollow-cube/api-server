@@ -22,7 +22,6 @@ postgres:
   uri: "postgres://postgres:postgres@localhost:5432/session-service?sslmode=disable"
   players_uri: "postgres://postgres:postgres@localhost:5432/player-service?sslmode=disable"
   maps_uri: "postgres://postgres:postgres@localhost:5432/map-service?sslmode=disable"
-  next_uri: ""
 
 posthog:
   endpoint: "http://localhost:9126/posthog"

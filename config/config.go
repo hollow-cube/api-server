@@ -37,7 +37,6 @@ type Postgres struct {
 	URI        string `mapstructure:"uri"`
 	PlayersURI string `mapstructure:"players_uri"`
 	MapsURI    string `mapstructure:"maps_uri"`
-	NextURI    string `mapstructure:"next_uri"`
 }
 
 type Posthog struct {

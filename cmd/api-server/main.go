@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"time"
 
 	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	mapObungusV3 "github.com/hollow-cube/api-server/api/mapsV3/obungus"
@@ -16,10 +15,7 @@ import (
 	v2Payments "github.com/hollow-cube/api-server/api/v2/payments"
 	v2Public "github.com/hollow-cube/api-server/api/v2/public"
 	"github.com/hollow-cube/api-server/api/v4Internal"
-	"github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
-	"github.com/hollow-cube/api-server/internal/mapdb"
-	"github.com/hollow-cube/api-server/internal/playerdb"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -97,34 +93,6 @@ func main() {
 
 		fx.Provide(newRedisClient),
 		fx.Provide(newSessionPostgresStore, newPlayerPostgresStore, newMapsPostgresStore),
-		fx.Invoke(func(conf *config.Config, metrics metric.Writer) error {
-			if conf.Postgres.NextURI == "" {
-				return nil
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-
-			_, pool, err := db.NewQuerySet(ctx, conf.Postgres.NextURI)
-			if err != nil {
-				return err
-			}
-			pool.Close()
-
-			_, pool, err = playerdb.NewQuerySet(ctx, metrics, conf.Postgres.NextURI)
-			if err != nil {
-				return err
-			}
-			pool.Close()
-
-			_, pool, err = mapdb.NewQuerySet(ctx, metrics, conf.Postgres.NextURI)
-			if err != nil {
-				return err
-			}
-			pool.Close()
-
-			return nil
-		}),
 		fx.Provide(newGithubClient),
 		fx.Provide(newTebexHeadlessClient),
 
