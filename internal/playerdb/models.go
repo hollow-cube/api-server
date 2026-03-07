@@ -45,6 +45,7 @@ type PlayerData struct {
 	Role           player.Role `json:"role"`
 	ExtraMapSlots  int16       `json:"extraMapSlots"`
 	MaxMapSize     int16       `json:"maxMapSize"`
+	MapBuilders    int16       `json:"mapBuilders"`
 }
 
 type PlayerTotp struct {

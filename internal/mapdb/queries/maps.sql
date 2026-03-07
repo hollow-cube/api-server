@@ -15,9 +15,14 @@ from maps
 where deleted_at is null;
 
 -- name: GetMapWithTagsById :one
-select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id)::map_tag[] as tags
+select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
 where deleted_at is null and id = $1;
+
+-- name: MultiGetMapWithTagsById :many
+select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id = any ($1::uuid[]);
 
 -- name: GetPublishedMapById :one
 select *
@@ -33,6 +38,11 @@ where published_id = $1;
 select *
 from maps_published
 where id = any ($1::uuid[]);
+
+-- name: GetMapOwner :one
+select owner
+from maps
+where id = $1;
 
 -- name: CreateMap :one
 insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
@@ -64,9 +74,10 @@ set opt_name         = @name,
 where id = $1;
 
 -- name: DeleteMapTagsNotIn :exec
-DELETE FROM map_tags
-WHERE map_id = @map_id
-  AND tag != ALL(@tags::map_tag[]);
+delete
+from map_tags
+where map_id = @map_id
+  and tag != all (@tags::map_tag[]);
 
 -- name: UpsertMapTags :exec
 INSERT INTO map_tags (map_id, tag)
@@ -104,6 +115,49 @@ set deleted_at     = now(),
     deleted_by     = $2,
     deleted_reason = $3
 where id = $1;
+
+-- name: GetMapBuilders :many
+select player_id, is_pending
+from map_builders
+where map_id = $1;
+
+-- name: GetMapBuilderPlayerSlotsCount :one
+select count(*)
+from map_builders
+where player_id = $1;
+
+-- name: GetMapsPlayerIsBuilderOn :many
+select
+    sqlc.embed(maps),
+    array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+from maps
+where id in (
+    select map_id
+    from map_builders
+    where player_id = $1
+        and is_pending = false
+);
+
+-- name: CreatePendingMapBuilder :one
+insert into map_builders (map_id, player_id)
+values ($1, $2)
+on conflict do nothing
+returning *;
+
+-- name: AcceptMapBuilder :exec
+update map_builders
+set is_pending = false
+where map_id = $1
+    and player_id = $2;
+
+-- name: RemoveMapBuilder :exec
+delete from map_builders
+where map_id = $1
+    and player_id = $2;
+
+-- name: DeleteMapBuildersForMap :exec
+delete from map_builders
+where map_id = $1;
 
 -- name: GetMultiMapProgress :many
 with ranked_save_states as (select m.id::text as map_id,

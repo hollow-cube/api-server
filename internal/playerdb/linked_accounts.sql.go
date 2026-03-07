@@ -52,7 +52,7 @@ func (q *Queries) GetPendingVerificationBySecret(ctx context.Context, type_ stri
 }
 
 const lookupPlayerDataBySocialId = `-- name: LookupPlayerDataBySocialId :one
-select player_data.id, player_data.username, player_data.first_join, player_data.last_online, player_data.playtime, player_data.experience, player_data.beta_enabled, player_data.settings, player_data.coins, player_data.cubits, player_data.skin, player_data.online, player_data.hypercube_start, player_data.hypercube_end, player_data.role, player_data.extra_map_slots, player_data.max_map_size
+select player_data.id, player_data.username, player_data.first_join, player_data.last_online, player_data.playtime, player_data.experience, player_data.beta_enabled, player_data.settings, player_data.coins, player_data.cubits, player_data.skin, player_data.online, player_data.hypercube_start, player_data.hypercube_end, player_data.role, player_data.extra_map_slots, player_data.max_map_size, player_data.map_builders
 from player_data
   inner join linked_accounts linked on linked.player_id = player_data.id
 where linked.type = $1
@@ -80,6 +80,7 @@ func (q *Queries) LookupPlayerDataBySocialId(ctx context.Context, type_ string, 
 		&i.Role,
 		&i.ExtraMapSlots,
 		&i.MaxMapSize,
+		&i.MapBuilders,
 	)
 	return i, err
 }
