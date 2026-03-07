@@ -116,10 +116,10 @@ set deleted_at     = now(),
     deleted_reason = $3
 where id = $1;
 
--- name: GetMapBuilders :many
-select player_id, is_pending
-from map_builders
-where map_id = $1;
+-- name: MulitGetMapBuilders :many
+select *
+from map_slots
+where map_id = any ($1::uuid[]);
 
 -- name: GetMapBuilderPlayerSlotsCount :one
 select count(*)

@@ -162,6 +162,22 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /players/{playerId}/map-slots:
+        get:
+            operationId: getMapPlayerSlots
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /recap/{playerId}/{year}:
         get:
             operationId: getPlayerRecap

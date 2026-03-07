@@ -217,6 +217,7 @@ type MapSlots struct {
 	MapID     string    `json:"mapId"`
 	Index     int       `json:"index"`
 	CreatedAt time.Time `json:"createdAt"`
+	IsPending bool      `json:"isPending"`
 }
 
 type MapStats struct {

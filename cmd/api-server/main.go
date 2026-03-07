@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
-	mapObungusV3 "github.com/hollow-cube/api-server/api/mapsV3/obungus"
 	mapPublicV3 "github.com/hollow-cube/api-server/api/mapsV3/public"
 	mapTerraformV3 "github.com/hollow-cube/api-server/api/mapsV3/terraform"
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
@@ -162,7 +161,6 @@ func main() {
 			mapPublicV3.NewServer,
 			mapIntnlV3.NewServer,
 			mapTerraformV3.NewServer,
-			mapObungusV3.NewServer,
 
 			intnlV3.NewServer,
 
@@ -200,7 +198,6 @@ type routeHandlerImpl struct {
 	mapPublic    mapPublicV3.StrictServerInterface
 	mapIntnl     mapIntnlV3.StrictServerInterface
 	mapTerraform mapTerraformV3.StrictServerInterface
-	mapObungus   mapObungusV3.StrictServerInterface
 
 	intnl intnlV3.StrictServerInterface
 
@@ -230,8 +227,6 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 	r.Handle("/v3/internal/map-players/*", mapV3Int)
 	r.Handle("/v3/internal/terraform/*", mapTerraformV3.HandlerFromMuxWithBaseURL(mapTerraformV3.NewStrictHandler(v.mapTerraform,
 		[]mapTerraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
-	r.Handle("/v3/obungus/*", mapObungusV3.HandlerFromMuxWithBaseURL(mapObungusV3.NewStrictHandler(v.mapObungus,
-		[]mapObungusV3.StrictMiddlewareFunc{}), nil, "/v3/obungus"))
 
 	r.Handle("/v3/internal/*", intnlV3.HandlerFromMuxWithBaseURL(intnlV3.NewStrictHandler(v.intnl,
 		[]intnlV3.StrictMiddlewareFunc{}), nil, "/v3/internal"))
@@ -253,7 +248,6 @@ func makeV2RouteHandler(p struct {
 	MapPublic    mapPublicV3.StrictServerInterface
 	MapIntnl     mapIntnlV3.StrictServerInterface
 	MapTerraform mapTerraformV3.StrictServerInterface
-	MapObungus   mapObungusV3.StrictServerInterface
 	Intnl        intnlV3.StrictServerInterface
 	Posthog      *posthogProxy.Proxy
 	Discord      *discord.Handler
@@ -266,7 +260,6 @@ func makeV2RouteHandler(p struct {
 		mapPublic:    p.MapPublic,
 		mapIntnl:     p.MapIntnl,
 		mapTerraform: p.MapTerraform,
-		mapObungus:   p.MapObungus,
 		intnl:        p.Intnl,
 		posthog:      p.Posthog,
 		discord:      p.Discord,

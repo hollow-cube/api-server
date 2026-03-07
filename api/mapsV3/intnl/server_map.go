@@ -760,25 +760,27 @@ func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (Rat
 	return RateMap200Response{}, nil
 }
 
+// v4 removed
 func (s *server) GetMapBuilders(ctx context.Context, request GetMapBuildersRequestObject) (GetMapBuildersResponseObject, error) {
-	builders, err := s.store.GetMapBuilders(ctx, request.MapId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get map builders: %w", err)
-	}
-
-	result := make(GetMapBuilders200JSONResponse, len(builders))
-	for i, builder := range builders {
-		pending := false
-		if builder.IsPending != nil {
-			pending = *builder.IsPending
-		}
-
-		result[i] = MapBuilder{MapId: request.MapId, PlayerId: builder.PlayerID, Pending: pending}
-	}
-
-	return result, nil
+	//builders, err := s.store.GetMapBuilders(ctx, request.MapId)
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to get map builders: %w", err)
+	//}
+	//
+	//result := make(GetMapBuilders200JSONResponse, len(builders))
+	//for i, builder := range builders {
+	//	pending := false
+	//	if builder.IsPending != nil {
+	//		pending = *builder.IsPending
+	//	}
+	//
+	//	result[i] = MapBuilder{MapId: request.MapId, PlayerId: builder.PlayerID, Pending: pending}
+	//}
+	//return result, nil
+	return nil, nil
 }
 
+// v4 removed
 func (s *server) GetMapsPlayerIsBuilderOn(ctx context.Context, request GetMapsPlayerIsBuilderOnRequestObject) (GetMapsPlayerIsBuilderOnResponseObject, error) {
 	slots, err := s.store.GetMapsPlayerIsBuilderOn(ctx, request.PlayerId)
 	if err != nil {
