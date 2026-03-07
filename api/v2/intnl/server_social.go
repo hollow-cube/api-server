@@ -13,6 +13,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
+// v4 removed
 func (s *Server) LookupPlayerDataBySocial(ctx context.Context, request LookupPlayerDataBySocialRequestObject) (LookupPlayerDataBySocialResponseObject, error) {
 	pd, err := s.store.LookupPlayerDataBySocialId(ctx, request.Platform, request.PlatformId)
 	if errors.Is(err, playerdb.ErrNoRows) {
@@ -28,6 +29,7 @@ func (s *Server) LookupPlayerDataBySocial(ctx context.Context, request LookupPla
 	return LookupPlayerDataBySocial200JSONResponse(*apiPlayer), nil
 }
 
+// v4 removed
 func (s *Server) LookupSocialByPlayerId(ctx context.Context, request LookupSocialByPlayerIdRequestObject) (LookupSocialByPlayerIdResponseObject, error) {
 	socialId, err := s.store.LookupSocialIdByPlayerId(ctx, request.Platform, request.PlayerId)
 	if errors.Is(err, playerdb.ErrNoRows) {
@@ -97,6 +99,7 @@ func (s *Server) AttemptVerification(ctx context.Context, request AttemptVerific
 	}, nil
 }
 
+// v4 removed
 func (s *Server) BeginVerifyDiscord(ctx context.Context, request BeginVerifyDiscordRequestObject) (BeginVerifyDiscordResponseObject, error) {
 	_, err := s.store.LookupPlayerDataBySocialId(ctx, "discord", request.Body.DiscordId)
 	if !errors.Is(err, playerdb.ErrNoRows) {

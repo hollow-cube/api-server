@@ -22,6 +22,7 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-slots", h.getMapPlayerSlots)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
@@ -97,6 +98,17 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.server.ExecuteInteraction(r.Context(), body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getMapPlayerSlots(w http.ResponseWriter, r *http.Request) {
+	var req PlayerRequest
+	req.PlayerId = r.PathValue("playerId")
+	resp, err := h.server.GetMapPlayerSlots(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return

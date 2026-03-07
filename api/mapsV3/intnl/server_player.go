@@ -10,6 +10,7 @@ import (
 	"github.com/redis/rueidis"
 )
 
+// v4 removed
 func (s *server) GetMapPlayerDataWithIndexedSlots(ctx context.Context, playerId string) (mapdb.MapPlayerData, error) {
 	pd, err := s.store.GetPlayerData(ctx, playerId)
 	if err != nil {
@@ -29,6 +30,7 @@ func (s *server) GetMapPlayerDataWithIndexedSlots(ctx context.Context, playerId 
 	return pd, err
 }
 
+// v4 removed
 func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataRequestObject) (GetMapPlayerDataResponseObject, error) {
 	pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, request.PlayerId)
 	if err != nil {
@@ -38,6 +40,7 @@ func (s *server) GetMapPlayerData(ctx context.Context, request GetMapPlayerDataR
 	return GetMapPlayerData200JSONResponse{playerDataToAPI(pd)}, nil
 }
 
+// v4
 func (s *server) GetMapPlayerSlots(ctx context.Context, request GetMapPlayerSlotsRequestObject) (GetMapPlayerSlotsResponseObject, error) {
 	// Get maps from existing slots
 	slots, err := s.store.GetMapSlots(ctx, request.PlayerId)
@@ -148,6 +151,7 @@ func (s *server) DeleteMapPlayerStates(ctx context.Context, request DeleteMapPla
 	return DeleteMapPlayerStates200Response{}, nil
 }
 
+// v4 removed
 func playerDataToAPI(pd mapdb.MapPlayerData) GetMapPlayerDataJSONResponse {
 	return GetMapPlayerDataJSONResponse{
 		Id:          pd.ID,
