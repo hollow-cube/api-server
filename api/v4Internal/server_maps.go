@@ -27,6 +27,12 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch maps: %w", err)
 	}
+	// we could probably get builders in the same query, but sqlc generates useless types for that scenario.
+	// TODO: can delete map_builders table
+	builders, err := s.mapStore.MulitGetMapBuilders(ctx, mapIds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch map builders: %w", err)
+	}
 
 	// Get all published maps
 	published, err := s.mapStore.SearchMaps(ctx, mapdb.SearchMapsParams{
@@ -49,10 +55,29 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 			}
 
 			// TODO: builder slots should have the created time set to the acceptance time probably
-			results = append(results, MapSlot{
+			sl := MapSlot{
 				Map:       hydrateMap(m.Map, m.Tags),
 				CreatedAt: slot.CreatedAt,
-			})
+				Builders:  []MapBuilder{},
+			}
+
+			for _, b := range builders {
+				if b.MapID != slot.MapID {
+					continue
+				}
+				// Don't include the owner in the builder list for now. In the future it may be better to include
+				if b.PlayerID == m.Map.Owner {
+					continue
+				}
+
+				sl.Builders = append(sl.Builders, MapBuilder{
+					ID:        b.PlayerID,
+					CreatedAt: b.CreatedAt,
+					Pending:   b.IsPending,
+				})
+			}
+
+			results = append(results, sl)
 		}
 	}
 	for _, m := range published {

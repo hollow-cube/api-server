@@ -91,8 +91,15 @@ const (
 )
 
 type MapSlot struct {
-	Map       MapData   `json:"map"`
+	Map       MapData      `json:"map"`
+	CreatedAt time.Time    `json:"createdAt"`
+	Builders  []MapBuilder `json:"builders"` // Present for unpublished maps
+}
+
+type MapBuilder struct {
+	ID        string    `json:"id"` // The player id
 	CreatedAt time.Time `json:"createdAt"`
+	Pending   bool      `json:"pending"`
 }
 
 func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
