@@ -353,7 +353,7 @@ func (s *Server) PerformTabComplete(ctx context.Context, request PerformTabCompl
 		limit = int32(*request.Body.Limit)
 	}
 
-	entries, err := s.store.SearchPlayersFuzzy(ctx, request.Body.Query, limit)
+	entries, err := s.store.LegacySearchPlayersFuzzy(ctx, request.Body.Query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search players: %w", err)
 	}

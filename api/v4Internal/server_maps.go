@@ -2,11 +2,153 @@ package v4Internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
+	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/ox"
 )
+
+type (
+	MapRequest struct {
+		MapID string `path:"mapId"`
+	}
+	MapPlayerRequest struct {
+		MapID    string `path:"mapId"`
+		PlayerID string `path:"playerId"`
+	}
+)
+
+type InviteMapBuilderRequest struct {
+	PlayerID string `json:"playerId"` // Player being invited
+}
+
+// POST /maps/{mapId}/builders
+func (s *Server) InviteMapBuilder(ctx context.Context, request MapRequest, body InviteMapBuilderRequest) error {
+	m, err := s.mapStore.GetMapById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to get map: %w", err)
+	}
+
+	_, err = s.mapStore.CreatePendingMapBuilder(ctx, request.MapID, body.PlayerID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		// means it didn't return anything as row already existed
+		return ox.Conflict{}
+	}
+	if err != nil {
+		return fmt.Errorf("failed to create pending map builder: %w", err)
+	}
+
+	err = s.notifications.Create(ctx, body.PlayerID, notification.CreateInput{
+		// TODO: we often have a key + subject, may be worth splitting those. For example, allows
+		//  deleting all notifs with subject {map_id} when the map is published.
+		//  OR: some subject idea like nats where you can filter with wildcards like map.builders.>
+		Key:       fmt.Sprintf("map_builder_invites_%v", m.ID),
+		Type:      "map_builder_invite",
+		ExpiresIn: nil,
+		Data: &map[string]interface{}{
+			"inviterId": m.Owner,
+			"mapId":     m.ID,
+		},
+		ReplaceUnread: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send invite notification: %w", err)
+	}
+
+	return nil
+}
+
+// DELETE /maps/{mapId}/builders/{playerId}
+func (s *Server) RemoveMapBuilder(ctx context.Context, request MapPlayerRequest) error {
+	_, err := s.mapStore.RemoveMapBuilder(ctx, request.MapID, request.PlayerID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to remove pending map builder: %w", err)
+	}
+
+	// TODO: claw back any outgoing invite notification if it exists.
+
+	return nil
+}
+
+// POST /maps/{mapId}/builders/{playerId}/accept
+func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerRequest) error {
+	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerID)
+	if errors.Is(err, playerdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to get player data: %w", err)
+	}
+
+	m, err := s.mapStore.GetMapById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to get map: %w", err)
+	}
+
+	usedSlots, err := s.mapStore.GetMapBuilderPlayerSlotsCount(ctx, pd.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get used map builder slots: %w", err)
+	}
+	if int(usedSlots) >= pd.TotalBuilderSlots() {
+		return ox.BadRequest{} // No slots available!!
+	}
+
+	_, err = s.mapStore.AcceptMapBuilder(ctx, request.MapID, pd.ID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to approve pending map builder: %w", err)
+	}
+
+	// TODO: would be nice if notifications were strongly typed structs
+	err = s.notifications.Create(ctx, m.Owner, notification.CreateInput{
+		Type:      "map_builder_accepted",
+		ExpiresIn: nil,
+		Data: &map[string]interface{}{
+			"mapId":     m.ID,
+			"builderId": pd.ID,
+		},
+	})
+
+	return nil
+}
+
+// POST /maps/{mapId}/builders/{playerId}/reject
+func (s *Server) RejectMapBuilderRequest(ctx context.Context, request MapPlayerRequest) error {
+	_, err := s.mapStore.RemoveMapBuilder(ctx, request.MapID, request.PlayerID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to remove pending map builder: %w", err)
+	}
+
+	m, err := s.mapStore.GetMapById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to get map: %w", err)
+	}
+
+	err = s.notifications.Create(ctx, m.Owner, notification.CreateInput{
+		Type:      "map_builder_rejected",
+		ExpiresIn: nil,
+		Data: &map[string]interface{}{
+			"mapId":     m.ID,
+			"builderId": request.PlayerID,
+		},
+	})
+
+	return nil
+}
 
 type GetMapSlotsResponse struct {
 	Results []MapSlot `json:"results"`

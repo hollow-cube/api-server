@@ -81,6 +81,75 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /maps/{mapId}/builders:
+        post:
+            operationId: inviteMapBuilder
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/builders/{playerId}:
+        delete:
+            operationId: removeMapBuilder
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/builders/{playerId}/accept:
+        post:
+            operationId: acceptMapBuilderRequest
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/builders/{playerId}/reject:
+        post:
+            operationId: rejectMapBuilderRequest
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
     /players:
         post:
             operationId: createPlayerData
@@ -171,6 +240,22 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /players/search:
+        post:
+            operationId: searchPlayers
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
             responses:
                 "200":
                     description: Successful response

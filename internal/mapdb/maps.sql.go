@@ -9,16 +9,25 @@ import (
 	"context"
 )
 
-const acceptMapBuilder = `-- name: AcceptMapBuilder :exec
-update map_builders
+const acceptMapBuilder = `-- name: AcceptMapBuilder :one
+update map_slots
 set is_pending = false
 where map_id = $1
-    and player_id = $2
+  and player_id = $2
+returning player_id, map_id, index, created_at, is_pending
 `
 
-func (q *Queries) AcceptMapBuilder(ctx context.Context, mapID string, playerID string) error {
-	_, err := q.db.Exec(ctx, acceptMapBuilder, mapID, playerID)
-	return err
+func (q *Queries) AcceptMapBuilder(ctx context.Context, mapID string, playerID string) (MapSlots, error) {
+	row := q.db.QueryRow(ctx, acceptMapBuilder, mapID, playerID)
+	var i MapSlots
+	err := row.Scan(
+		&i.PlayerID,
+		&i.MapID,
+		&i.Index,
+		&i.CreatedAt,
+		&i.IsPending,
+	)
+	return i, err
 }
 
 const countMaps = `-- name: CountMaps :one
@@ -111,18 +120,19 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 }
 
 const createPendingMapBuilder = `-- name: CreatePendingMapBuilder :one
-insert into map_builders (map_id, player_id)
-values ($1, $2)
+insert into map_slots (map_id, player_id, is_pending)
+values ($1, $2, true)
 on conflict do nothing
-returning map_id, player_id, created_at, is_pending
+returning player_id, map_id, index, created_at, is_pending
 `
 
-func (q *Queries) CreatePendingMapBuilder(ctx context.Context, mapID string, playerID string) (MapBuilders, error) {
+func (q *Queries) CreatePendingMapBuilder(ctx context.Context, mapID string, playerID string) (MapSlots, error) {
 	row := q.db.QueryRow(ctx, createPendingMapBuilder, mapID, playerID)
-	var i MapBuilders
+	var i MapSlots
 	err := row.Scan(
-		&i.MapID,
 		&i.PlayerID,
+		&i.MapID,
+		&i.Index,
 		&i.CreatedAt,
 		&i.IsPending,
 	)
@@ -130,7 +140,8 @@ func (q *Queries) CreatePendingMapBuilder(ctx context.Context, mapID string, pla
 }
 
 const deleteMapBuildersForMap = `-- name: DeleteMapBuildersForMap :exec
-delete from map_builders
+delete
+from map_builders
 where map_id = $1
 `
 
@@ -212,9 +223,13 @@ func (q *Queries) GetAllMaps(ctx context.Context) ([]Map, error) {
 }
 
 const getMapBuilderPlayerSlotsCount = `-- name: GetMapBuilderPlayerSlotsCount :one
-select count(*)
-from map_builders
-where player_id = $1
+select count(ms.*)
+from map_slots ms
+  inner join maps m on m.id = ms.map_id
+where ms.player_id = $1
+  and m.owner != ms.player_id
+  and ms.is_pending = false
+  and m.deleted_at is null
 `
 
 func (q *Queries) GetMapBuilderPlayerSlotsCount(ctx context.Context, playerID string) (int64, error) {
@@ -227,7 +242,8 @@ func (q *Queries) GetMapBuilderPlayerSlotsCount(ctx context.Context, playerID st
 const getMapById = `-- name: GetMapById :one
 select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes
 from maps
-where deleted_at is null and id = $1
+where deleted_at is null
+  and id = $1
 `
 
 func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
@@ -271,23 +287,11 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 	return i, err
 }
 
-const getMapOwner = `-- name: GetMapOwner :one
-select owner
-from maps
-where id = $1
-`
-
-func (q *Queries) GetMapOwner(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, getMapOwner, id)
-	var owner string
-	err := row.Scan(&owner)
-	return owner, err
-}
-
 const getMapWithTagsById = `-- name: GetMapWithTagsById :one
 select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes, array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
-where deleted_at is null and id = $1
+where deleted_at is null
+  and id = $1
 `
 
 type GetMapWithTagsByIdRow struct {
@@ -338,16 +342,13 @@ func (q *Queries) GetMapWithTagsById(ctx context.Context, id string) (GetMapWith
 }
 
 const getMapsPlayerIsBuilderOn = `-- name: GetMapsPlayerIsBuilderOn :many
-select
-    maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes,
-    array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes,
+       array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
-where id in (
-    select map_id
-    from map_builders
-    where player_id = $1
-        and is_pending = false
-)
+where id in (select map_id
+             from map_builders
+             where player_id = $1
+               and is_pending = false)
 `
 
 type GetMapsPlayerIsBuilderOnRow struct {
@@ -779,15 +780,25 @@ func (q *Queries) PublishMap(ctx context.Context, iD string, publishedID *int, c
 	return err
 }
 
-const removeMapBuilder = `-- name: RemoveMapBuilder :exec
-delete from map_builders
+const removeMapBuilder = `-- name: RemoveMapBuilder :one
+delete
+from map_slots
 where map_id = $1
-    and player_id = $2
+  and player_id = $2
+returning player_id, map_id, index, created_at, is_pending
 `
 
-func (q *Queries) RemoveMapBuilder(ctx context.Context, mapID string, playerID string) error {
-	_, err := q.db.Exec(ctx, removeMapBuilder, mapID, playerID)
-	return err
+func (q *Queries) RemoveMapBuilder(ctx context.Context, mapID string, playerID string) (MapSlots, error) {
+	row := q.db.QueryRow(ctx, removeMapBuilder, mapID, playerID)
+	var i MapSlots
+	err := row.Scan(
+		&i.PlayerID,
+		&i.MapID,
+		&i.Index,
+		&i.CreatedAt,
+		&i.IsPending,
+	)
+	return i, err
 }
 
 const searchMaps = `-- name: SearchMaps :many
@@ -1008,9 +1019,9 @@ func (q *Queries) UpdateMapVerification(ctx context.Context, iD string, verifica
 }
 
 const upsertMapTags = `-- name: UpsertMapTags :exec
-INSERT INTO map_tags (map_id, tag)
-SELECT $1, unnest($2::map_tag[])
-ON CONFLICT (map_id, tag) DO NOTHING
+insert into map_tags (map_id, tag)
+select $1, unnest($2::map_tag[])
+on conflict (map_id, tag) do nothing
 `
 
 func (q *Queries) UpsertMapTags(ctx context.Context, mapID string, tags []MapTag) error {

@@ -58,8 +58,8 @@ func (s *server) GetPublicStats(ctx context.Context, _ GetPublicStatsRequestObje
 	}
 
 	return &GetPublicStats200JSONResponse{
-		TotalPlayers:  s.cachedTotalPlayers,
-		TotalPlaytime: s.cachedTotalPlaytime / 1000,
+		TotalPlayers:  int64(s.cachedTotalPlayers),
+		TotalPlaytime: int64(s.cachedTotalPlaytime / 1000),
 	}, nil
 }
 

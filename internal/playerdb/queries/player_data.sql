@@ -48,11 +48,22 @@ where id = $1
 returning experience as exp;
 -- SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
 
--- name: SearchPlayersFuzzy :many
-select id, username
+-- name: LegacySearchPlayersFuzzy :many
+select *
 from player_data
 where username ~* $1
 limit $2;
+
+-- name: SearchPlayersFuzzy :many
+select *
+from player_data
+where id != all (@exclude_ids::uuid[])
+  and (
+    lower(username) % lower(@search)
+    or lower(username) ilike '%' || lower(@search) || '%'
+  )
+order by similarity(lower(username), lower(@search)) desc
+limit sqlc.arg('limit');
 
 -- name: GetTOTP :one
 select *
@@ -94,5 +105,5 @@ where id = $1;
 -- name: SetPlayerUnlocks :exec
 update player_data
 set extra_map_slots = greatest(extra_map_slots, $2),
-    max_map_size = greatest(max_map_size, $3)
+    max_map_size    = greatest(max_map_size, $3)
 where id = $1;

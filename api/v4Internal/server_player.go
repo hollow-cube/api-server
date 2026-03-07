@@ -13,22 +13,6 @@ import (
 	"github.com/hollow-cube/api-server/pkg/ox"
 )
 
-type PlayerRequest struct {
-	PlayerId string `path:"playerId"`
-}
-
-// GET /players/{playerId}
-func (s *Server) GetPlayerData(ctx context.Context, request PlayerRequest) (*PlayerData, error) {
-	pd, err := s.playerStore.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return nil, ox.NotFound{}
-	} else if err != nil {
-		return nil, err
-	}
-
-	return s.hydratePlayerData(ctx, pd)
-}
-
 type CreatePlayerDataRequest struct {
 	ID       string      `json:"id"`
 	IP       string      `json:"ip"`
@@ -61,6 +45,22 @@ func (s *Server) CreatePlayerData(ctx context.Context, body CreatePlayerDataRequ
 		Properties: hog.NewProperties().
 			Set("player_id", pd.ID),
 	})
+
+	return s.hydratePlayerData(ctx, pd)
+}
+
+type PlayerRequest struct {
+	PlayerId string `path:"playerId"`
+}
+
+// GET /players/{playerId}
+func (s *Server) GetPlayerData(ctx context.Context, request PlayerRequest) (*PlayerData, error) {
+	pd, err := s.playerStore.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
+	if errors.Is(err, playerdb.ErrNoRows) {
+		return nil, ox.NotFound{}
+	} else if err != nil {
+		return nil, err
+	}
 
 	return s.hydratePlayerData(ctx, pd)
 }
@@ -212,6 +212,49 @@ func (s *Server) GetPlayerAlts(ctx context.Context, request PlayerRequest) (*Get
 	return &GetPlayerAltsResponse{Results: results}, nil
 }
 
+type (
+	SearchPlayersRequest struct {
+		Query   string   `json:"query"`
+		Exclude []string `json:"exclude"` // Exclude the players in this list
+
+		Limit int `json:"limit"`
+	}
+	SearchPlayersResponse struct {
+		Results []PlayerDataStub `json:"results"`
+	}
+	PlayerDataStub struct {
+		ID          string      `json:"id"`
+		DisplayName DisplayName `json:"displayName"`
+	}
+)
+
+// POST /players/search
+func (s *Server) SearchPlayers(ctx context.Context, body SearchPlayersRequest) (*SearchPlayersResponse, error) {
+	if body.Query == "" {
+		return &SearchPlayersResponse{Results: []PlayerDataStub{}}, nil
+	}
+
+	limit := int32(body.Limit)
+	if limit == 0 {
+		limit = 25
+	}
+	limit = min(max(limit, 1), 100)
+
+	pds, err := s.playerStore.SearchPlayersFuzzy(ctx, body.Exclude, body.Query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search players: %w", err)
+	}
+
+	results := make([]PlayerDataStub, len(pds))
+	for i, entry := range pds {
+		results[i] = PlayerDataStub{
+			ID:          entry.ID,
+			DisplayName: s.computeDisplayName(entry),
+		}
+	}
+	return &SearchPlayersResponse{Results: results}, nil
+}
+
 func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) (*PlayerData, error) {
 	// Can test empty code to see if TOTP is disabled
 	//_, err := s.testTotpCode(ctx, pd.ID, "", false)
@@ -260,7 +303,7 @@ func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) 
 
 		Permissions:    strconv.FormatUint(uint64(pd.Flags()), 10),
 		MapSlots:       pd.TotalMapSlots(),
-		MapBuilders:    int(pd.MapBuilders),
+		MapBuilders:    pd.TotalBuilderSlots(),
 		TempMaxMapSize: int(pd.MaxMapSize),
 	}, nil
 }

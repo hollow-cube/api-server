@@ -82,7 +82,7 @@ func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePla
 		Data:          request.Body.Data,
 		ReplaceUnread: replaceUnread,
 	}
-	if err := s.notificationManager.CreateNotification(ctx, request.PlayerId, input); err != nil {
+	if err := s.notificationManager.Create(ctx, request.PlayerId, input); err != nil {
 		return nil, err
 	}
 

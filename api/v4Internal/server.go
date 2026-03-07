@@ -4,6 +4,7 @@ import (
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -17,7 +18,8 @@ type ServerParams struct {
 	MapStore     *mapdb.Store
 	SessionStore *sessiondb.Queries
 
-	Interactions *interaction.Handler
+	Notifications notification.Manager
+	Interactions  *interaction.Handler
 }
 
 type Server struct {
@@ -27,16 +29,18 @@ type Server struct {
 	mapStore     *mapdb.Store
 	sessionStore *sessiondb.Queries
 
-	interactions *interaction.Handler
+	notifications notification.Manager
+	interactions  *interaction.Handler
 }
 
 func NewServer(p ServerParams) (*Server, error) {
 	s := &Server{
-		log:          p.Log,
-		playerStore:  p.PlayerStore,
-		mapStore:     p.MapStore,
-		sessionStore: p.SessionStore,
-		interactions: p.Interactions,
+		log:           p.Log,
+		playerStore:   p.PlayerStore,
+		mapStore:      p.MapStore,
+		sessionStore:  p.SessionStore,
+		notifications: p.Notifications,
+		interactions:  p.Interactions,
 	}
 
 	return s, nil

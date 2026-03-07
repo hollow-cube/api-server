@@ -22,12 +22,17 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders", h.inviteMapBuilder)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/builders/{playerId}", h.removeMapBuilder)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders/{playerId}/accept", h.acceptMapBuilderRequest)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders/{playerId}/reject", h.rejectMapBuilderRequest)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-slots", h.getMapPlayerSlots)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/display-name", h.getPlayerDisplayName)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/recap/{playerId}/{year}", h.getPlayerRecap)
 }
 
@@ -105,21 +110,62 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteJSON(w, 200, resp)
 }
 
-func (h *handlers) getMapPlayerSlots(w http.ResponseWriter, r *http.Request) {
-	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
-	resp, err := h.server.GetMapPlayerSlots(r.Context(), req)
+func (h *handlers) inviteMapBuilder(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	var body InviteMapBuilderRequest
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	err := h.server.InviteMapBuilder(r.Context(), req, body)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return
 	}
-	runtime.WriteJSON(w, 200, resp)
+	w.WriteHeader(200)
 }
 
-func (h *handlers) getPlayerData(w http.ResponseWriter, r *http.Request) {
+func (h *handlers) removeMapBuilder(w http.ResponseWriter, r *http.Request) {
+	var req MapPlayerRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	err := h.server.RemoveMapBuilder(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) acceptMapBuilderRequest(w http.ResponseWriter, r *http.Request) {
+	var req MapPlayerRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	err := h.server.AcceptMapBuilderRequest(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) rejectMapBuilderRequest(w http.ResponseWriter, r *http.Request) {
+	var req MapPlayerRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	err := h.server.RejectMapBuilderRequest(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) getMapPlayerSlots(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
 	req.PlayerId = r.PathValue("playerId")
-	resp, err := h.server.GetPlayerData(r.Context(), req)
+	resp, err := h.server.GetMapPlayerSlots(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return
@@ -139,6 +185,17 @@ func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 201, resp)
+}
+
+func (h *handlers) getPlayerData(w http.ResponseWriter, r *http.Request) {
+	var req PlayerRequest
+	req.PlayerId = r.PathValue("playerId")
+	resp, err := h.server.GetPlayerData(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
 }
 
 func (h *handlers) updatePlayerData(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +228,20 @@ func (h *handlers) getPlayerAlts(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
 	req.PlayerId = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerAlts(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) searchPlayers(w http.ResponseWriter, r *http.Request) {
+	var body SearchPlayersRequest
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.SearchPlayers(r.Context(), body)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return

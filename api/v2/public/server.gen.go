@@ -238,10 +238,10 @@ type GetPublicStatsResponseObject interface {
 
 type GetPublicStats200JSONResponse struct {
 	// TotalPlayers Total number of players
-	TotalPlayers int `json:"totalPlayers"`
+	TotalPlayers int64 `json:"totalPlayers"`
 
 	// TotalPlaytime Total playtime in seconds
-	TotalPlaytime int `json:"totalPlaytime"`
+	TotalPlaytime int64 `json:"totalPlaytime"`
 }
 
 func (response GetPublicStats200JSONResponse) VisitGetPublicStatsResponse(w http.ResponseWriter) error {

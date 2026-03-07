@@ -91,3 +91,13 @@ func (pd PlayerData) TotalMapSlots() int {
 
 	return mapSlots
 }
+
+func (pd PlayerData) TotalBuilderSlots() int {
+	const maxBuilderSlots = 4
+
+	builderSlots := 2 + int(pd.MapBuilders)
+	if pd.Has(player.FlagExtendedLimits) {
+		builderSlots = maxBuilderSlots
+	}
+	return min(builderSlots, maxBuilderSlots)
+}

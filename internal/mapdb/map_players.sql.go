@@ -46,7 +46,7 @@ func (q *Queries) GetIndexedMapSlots(ctx context.Context, playerID string) ([]Ge
 const getMapSlots = `-- name: GetMapSlots :many
 select player_id, map_id, index, created_at, is_pending
 from map_slots
-where player_id = $1
+where player_id = $1 and is_pending = false
 `
 
 func (q *Queries) GetMapSlots(ctx context.Context, playerID string) ([]MapSlots, error) {

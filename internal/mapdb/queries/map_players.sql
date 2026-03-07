@@ -21,7 +21,7 @@ where player_id = $1
 -- name: GetMapSlots :many
 select *
 from map_slots
-where player_id = $1;
+where player_id = $1 and is_pending = false;
 
 -- name: InsertMapSlot :exec
 insert into map_slots(player_id, map_id, index, created_at)

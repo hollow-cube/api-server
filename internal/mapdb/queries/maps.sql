@@ -7,7 +7,8 @@ where deleted_at is null
 -- name: GetMapById :one
 select *
 from maps
-where deleted_at is null and id = $1;
+where deleted_at is null
+  and id = $1;
 
 -- name: GetAllMaps :many
 select *
@@ -17,7 +18,8 @@ where deleted_at is null;
 -- name: GetMapWithTagsById :one
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
-where deleted_at is null and id = $1;
+where deleted_at is null
+  and id = $1;
 
 -- name: MultiGetMapWithTagsById :many
 select sqlc.embed(maps), array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
@@ -38,11 +40,6 @@ where published_id = $1;
 select *
 from maps_published
 where id = any ($1::uuid[]);
-
--- name: GetMapOwner :one
-select owner
-from maps
-where id = $1;
 
 -- name: CreateMap :one
 insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
@@ -80,9 +77,9 @@ where map_id = @map_id
   and tag != all (@tags::map_tag[]);
 
 -- name: UpsertMapTags :exec
-INSERT INTO map_tags (map_id, tag)
-SELECT @map_id, unnest(@tags::map_tag[])
-ON CONFLICT (map_id, tag) DO NOTHING;
+insert into map_tags (map_id, tag)
+select @map_id, unnest(@tags::map_tag[])
+on conflict (map_id, tag) do nothing;
 
 -- name: UpdateMapVerification :exec
 update maps
@@ -122,41 +119,46 @@ from map_slots
 where map_id = any ($1::uuid[]);
 
 -- name: GetMapBuilderPlayerSlotsCount :one
-select count(*)
-from map_builders
-where player_id = $1;
+select count(ms.*)
+from map_slots ms
+  inner join maps m on m.id = ms.map_id
+where ms.player_id = $1
+  and m.owner != ms.player_id
+  and ms.is_pending = false
+  and m.deleted_at is null;
 
 -- name: GetMapsPlayerIsBuilderOn :many
-select
-    sqlc.embed(maps),
-    array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
+select sqlc.embed(maps),
+       array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps
-where id in (
-    select map_id
-    from map_builders
-    where player_id = $1
-        and is_pending = false
-);
+where id in (select map_id
+             from map_builders
+             where player_id = $1
+               and is_pending = false);
 
 -- name: CreatePendingMapBuilder :one
-insert into map_builders (map_id, player_id)
-values ($1, $2)
+insert into map_slots (map_id, player_id, is_pending)
+values ($1, $2, true)
 on conflict do nothing
 returning *;
 
--- name: AcceptMapBuilder :exec
-update map_builders
+-- name: RemoveMapBuilder :one
+delete
+from map_slots
+where map_id = $1
+  and player_id = $2
+returning *;
+
+-- name: AcceptMapBuilder :one
+update map_slots
 set is_pending = false
 where map_id = $1
-    and player_id = $2;
-
--- name: RemoveMapBuilder :exec
-delete from map_builders
-where map_id = $1
-    and player_id = $2;
+  and player_id = $2
+returning *;
 
 -- name: DeleteMapBuildersForMap :exec
-delete from map_builders
+delete
+from map_builders
 where map_id = $1;
 
 -- name: GetMultiMapProgress :many

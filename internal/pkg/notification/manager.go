@@ -14,7 +14,7 @@ import (
 
 type Manager interface {
 	GetNotifications(ctx context.Context, playerId string, page int, unreadOnly bool) (*PaginatedNotifications, error)
-	CreateNotification(ctx context.Context, playerId string, input CreateInput) error
+	Create(ctx context.Context, targetId string, input CreateInput) error
 	UpdateNotification(ctx context.Context, id string, playerId string, read bool) error
 	DeleteNotification(ctx context.Context, id string, playerId string) error
 }
@@ -85,18 +85,18 @@ func (m *managerImpl) GetNotifications(ctx context.Context, playerId string, pag
 	}, nil
 }
 
-func (m *managerImpl) CreateNotification(ctx context.Context, playerId string, input CreateInput) error {
+func (m *managerImpl) Create(ctx context.Context, targetId string, input CreateInput) error {
 	var replace = input.ReplaceUnread
 	var expiresAt *time.Time = nil
 	if input.ExpiresIn != nil {
 		expiresAt = new(time.Now().Add(time.Duration(*input.ExpiresIn) * time.Second))
 	}
 
-	if err := m.store.AddNotification(ctx, playerId, input.Type, input.Key, input.Data, expiresAt, replace); err != nil {
+	if err := m.store.AddNotification(ctx, targetId, input.Type, input.Key, input.Data, expiresAt, replace); err != nil {
 		return err
 	}
 
-	if err := m.sendNotificationMessage(ctx, playerId, &input); err != nil {
+	if err := m.sendNotificationMessage(ctx, targetId, &input); err != nil {
 		return err
 	}
 

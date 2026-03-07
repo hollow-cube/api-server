@@ -186,6 +186,54 @@ func (q *Queries) GetTOTP(ctx context.Context, playerID string) (PlayerTotp, err
 	return i, err
 }
 
+const legacySearchPlayersFuzzy = `-- name: LegacySearchPlayersFuzzy :many
+
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size, map_builders
+from player_data
+where username ~* $1
+limit $2
+`
+
+// SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
+func (q *Queries) LegacySearchPlayersFuzzy(ctx context.Context, username string, limit int32) ([]PlayerData, error) {
+	rows, err := q.db.Query(ctx, legacySearchPlayersFuzzy, username, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlayerData{}
+	for rows.Next() {
+		var i PlayerData
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.FirstJoin,
+			&i.LastOnline,
+			&i.Playtime,
+			&i.Experience,
+			&i.BetaEnabled,
+			&i.Settings,
+			&i.Coins,
+			&i.Cubits,
+			&i.Skin,
+			&i.Online,
+			&i.HypercubeStart,
+			&i.HypercubeEnd,
+			&i.Role,
+			&i.ExtraMapSlots,
+			&i.MaxMapSize,
+			&i.MapBuilders,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
 select id
 from public.player_data
@@ -227,29 +275,46 @@ func (q *Queries) PlayerExistsById(ctx context.Context, id string) (bool, error)
 }
 
 const searchPlayersFuzzy = `-- name: SearchPlayersFuzzy :many
-
-select id, username
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size, map_builders
 from player_data
-where username ~* $1
-limit $2
+where id != all ($1::uuid[])
+  and (
+    lower(username) % lower($2)
+    or lower(username) ilike '%' || lower($2) || '%'
+  )
+order by similarity(lower(username), lower($2)) desc
+limit $3
 `
 
-type SearchPlayersFuzzyRow struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-}
-
-// SQLC is a bit dumb and redeclares the 'experience' variable so we have to rename it
-func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string, limit int32) ([]SearchPlayersFuzzyRow, error) {
-	rows, err := q.db.Query(ctx, searchPlayersFuzzy, username, limit)
+func (q *Queries) SearchPlayersFuzzy(ctx context.Context, excludeIds []string, search string, limit int32) ([]PlayerData, error) {
+	rows, err := q.db.Query(ctx, searchPlayersFuzzy, excludeIds, search, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []SearchPlayersFuzzyRow{}
+	items := []PlayerData{}
 	for rows.Next() {
-		var i SearchPlayersFuzzyRow
-		if err := rows.Scan(&i.ID, &i.Username); err != nil {
+		var i PlayerData
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.FirstJoin,
+			&i.LastOnline,
+			&i.Playtime,
+			&i.Experience,
+			&i.BetaEnabled,
+			&i.Settings,
+			&i.Coins,
+			&i.Cubits,
+			&i.Skin,
+			&i.Online,
+			&i.HypercubeStart,
+			&i.HypercubeEnd,
+			&i.Role,
+			&i.ExtraMapSlots,
+			&i.MaxMapSize,
+			&i.MapBuilders,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -263,7 +328,7 @@ func (q *Queries) SearchPlayersFuzzy(ctx context.Context, username string, limit
 const setPlayerUnlocks = `-- name: SetPlayerUnlocks :exec
 update player_data
 set extra_map_slots = greatest(extra_map_slots, $2),
-    max_map_size = greatest(max_map_size, $3)
+    max_map_size    = greatest(max_map_size, $3)
 where id = $1
 `
 
