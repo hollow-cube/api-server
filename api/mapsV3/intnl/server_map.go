@@ -391,16 +391,22 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		}
 
 		if newTags != nil {
-			if err = tx.DeleteMapTagsNotIn(ctx, update.ID, newTags); err != nil {
+			if err = tx.DeleteMapTags(ctx, update.ID); err != nil {
 				return fmt.Errorf("failed to remove old tags: %w", err)
 			}
-			if err = tx.UpsertMapTags(ctx, update.ID, newTags); err != nil {
-				return fmt.Errorf("failed to upsert new tags: %w", err)
+
+			if len(newTags) > 0 {
+				if err = tx.InsertMapTags(ctx, update.ID, newTags); err != nil {
+					return fmt.Errorf("failed to upsert new tags: %w", err)
+				}
 			}
 		}
 
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to do map update: %w", err)
+	}
 
 	// If we changed the variant to parkour after publishing, delete any in-progress save states for the map
 	if m.PublishedAt != nil && request.Body.Variant != nil && *request.Body.Variant == Parkour {

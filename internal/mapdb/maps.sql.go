@@ -150,6 +150,15 @@ func (q *Queries) DeleteMapBuildersForMap(ctx context.Context, mapID string) err
 	return err
 }
 
+const deleteMapTags = `-- name: DeleteMapTags :exec
+delete from map_tags where map_id = $1
+`
+
+func (q *Queries) DeleteMapTags(ctx context.Context, mapID string) error {
+	_, err := q.db.Exec(ctx, deleteMapTags, mapID)
+	return err
+}
+
 const deleteMapTagsNotIn = `-- name: DeleteMapTagsNotIn :exec
 delete
 from map_tags
@@ -601,6 +610,17 @@ func (q *Queries) InsertMapReport(ctx context.Context, arg InsertMapReportParams
 		&i.Comment,
 	)
 	return i, err
+}
+
+const insertMapTags = `-- name: InsertMapTags :exec
+insert into map_tags (map_id, tag, index)
+select $1, tag, ord - 1
+from unnest($2::map_tag[]) with ordinality as t(tag, ord)
+`
+
+func (q *Queries) InsertMapTags(ctx context.Context, mapID string, tags []MapTag) error {
+	_, err := q.db.Exec(ctx, insertMapTags, mapID, tags)
+	return err
 }
 
 const mulitGetMapBuilders = `-- name: MulitGetMapBuilders :many

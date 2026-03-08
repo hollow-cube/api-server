@@ -81,6 +81,14 @@ insert into map_tags (map_id, tag)
 select @map_id, unnest(@tags::map_tag[])
 on conflict (map_id, tag) do nothing;
 
+-- name: DeleteMapTags :exec
+delete from map_tags where map_id = @map_id;
+
+-- name: InsertMapTags :exec
+insert into map_tags (map_id, tag, index)
+select @map_id, tag, ord - 1
+from unnest(@tags::map_tag[]) with ordinality as t(tag, ord);
+
 -- name: UpdateMapVerification :exec
 update maps
 set verification     = $2,

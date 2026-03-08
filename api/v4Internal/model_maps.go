@@ -90,9 +90,17 @@ const (
 	VariantBuilding MapVariant = "building"
 )
 
+type MapRole string
+
+const (
+	RoleOwner   MapRole = "owner"
+	RoleBuilder MapRole = "builder"
+)
+
 type MapSlot struct {
 	Map       MapData      `json:"map"`
 	CreatedAt time.Time    `json:"createdAt"`
+	Role      MapRole      `json:"role"`
 	Builders  []MapBuilder `json:"builders"` // Present for unpublished maps
 }
 

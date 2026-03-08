@@ -189,8 +189,8 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 		return nil, fmt.Errorf("failed to fetch published maps: %w", err)
 	}
 
-	results := make([]MapSlot, 0, len(slots)+len(published))
-	for _, slot := range slots {
+	unpublishedResults := make([]MapSlot, len(slots))
+	for i, slot := range slots {
 		for _, m := range maps {
 			if m.Map.ID != slot.MapID {
 				continue
@@ -201,6 +201,12 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 				Map:       hydrateMap(m.Map, m.Tags),
 				CreatedAt: slot.CreatedAt,
 				Builders:  []MapBuilder{},
+			}
+
+			if request.PlayerId == m.Map.Owner {
+				sl.Role = RoleOwner
+			} else {
+				sl.Role = RoleBuilder
 			}
 
 			for _, b := range builders {
@@ -219,19 +225,24 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 				})
 			}
 
-			results = append(results, sl)
+			unpublishedResults[i] = sl
 		}
 	}
-	for _, m := range published {
-		results = append(results, MapSlot{
-			Map:       hydratePublishedMap(m.PublishedMap),
-			CreatedAt: *m.PublishedMap.PublishedAt,
-		})
-	}
 
-	slices.SortFunc(results, func(a, b MapSlot) int {
-		return a.CreatedAt.Compare(b.CreatedAt)
+	slices.SortFunc(unpublishedResults, func(a, b MapSlot) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
 	})
 
-	return &GetMapSlotsResponse{Results: results}, nil
+	publishedResults := make([]MapSlot, len(published))
+	for i, m := range published {
+		publishedResults[i] = MapSlot{
+			Map:       hydratePublishedMap(m.PublishedMap),
+			CreatedAt: *m.PublishedMap.PublishedAt,
+			Role:      RoleOwner,
+		}
+	}
+
+	return &GetMapSlotsResponse{
+		Results: append(unpublishedResults, publishedResults...),
+	}, nil
 }
