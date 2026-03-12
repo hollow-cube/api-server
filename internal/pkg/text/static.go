@@ -2,6 +2,7 @@ package text
 
 import (
 	"context"
+	"go.uber.org/zap"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -22,6 +23,8 @@ var charactersToReplace = map[rune]rune{
 	'+': 't',
 	'$': 's',
 	'(': 'c',
+	'{': 'c',
+	'[': 'c',
 	'!': 'i',
 	'|': 'i',
 	'£': 'e',
@@ -29,6 +32,20 @@ var charactersToReplace = map[rune]rune{
 	'¥': 'y',
 	'¢': 'c',
 	'<': 'c',
+}
+var multiCharactersToReplace = map[rune]map[rune]rune{
+	'(': {
+		')': 'o',
+	},
+	'[': {
+		']': 'o',
+	},
+	'{': {
+		'}': 'o',
+	},
+	'<': {
+		'>': 'o',
+	},
 }
 
 var _ Filter = &StaticFilter{}
@@ -65,11 +82,25 @@ func sanitize(text string) string {
 		text,
 	)
 	if err != nil {
+		zap.S().Errorf("failed to sanitize text: %v", err)
 		transformed = text
 	}
 
 	builder := strings.Builder{}
-	for _, char := range transformed {
+	for i := 0; i < len(transformed); i++ {
+		char := rune(transformed[i])
+
+		multiReplacement, isPartOfMulti := multiCharactersToReplace[char]
+		if isPartOfMulti && i+1 < len(transformed) {
+			nextChar := rune(transformed[i+1])
+
+			if replacement, ok := multiReplacement[nextChar]; ok {
+				builder.WriteRune(replacement)
+				i++ // Skip the next character since it's part of the multi-character replacement
+				continue
+			}
+		}
+
 		if replacement, ok := charactersToReplace[char]; ok {
 			builder.WriteRune(replacement)
 		} else if char >= 'A' && char <= 'Z' {
