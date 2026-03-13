@@ -14,7 +14,7 @@ import (
 type command struct {
 	Command
 
-	handler func(h *Handler, ctx context.Context, i *Interaction) (*InteractionResponse, error)
+	handler func(h *Handler, ctx context.Context, i *Interaction) (*Response, error)
 }
 
 type HandlerParams struct {
@@ -56,7 +56,23 @@ func NewHandler(p HandlerParams) (*Handler, error) {
 		}
 	}
 
-	ban := banCommand(ladderAliases)
+	cmds := []*command{
+		apiCommand,
+		linkCommand,
+		banCommand(ladderAliases),
+	}
+
+	pubCommands := make([]*Command, len(cmds))
+	intCommands := make(map[string]*command)
+	for i, cmd := range cmds {
+		if len(cmd.Arguments) == 0 {
+			// Always empty list, never nil
+			cmd.Arguments = []Argument{}
+		}
+
+		pubCommands[i] = &cmd.Command
+		intCommands[cmd.Name] = cmd
+	}
 
 	return &Handler{
 		log: p.Log,
@@ -64,17 +80,15 @@ func NewHandler(p HandlerParams) (*Handler, error) {
 		playerStore: p.PlayerStore,
 		jetStream:   p.JetStream,
 
-		Commands: []*Command{&ban.Command},
-		commands: map[string]*command{
-			ban.Name: &ban,
-		},
+		Commands:      pubCommands,
+		commands:      intCommands,
 		ladderAliases: ladderAliases,
 	}, nil
 }
 
-func (h *Handler) ExecuteInteraction(ctx context.Context, i Interaction) (*InteractionResponse, error) {
+func (h *Handler) ExecuteInteraction(ctx context.Context, i Interaction) (*Response, error) {
 	switch i.Type {
-	case InteractionCommand:
+	case TypeCommand:
 		cmd, ok := h.commands[i.ID]
 		if !ok {
 			panic("todo unknown command")

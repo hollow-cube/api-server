@@ -9,7 +9,7 @@ import (
 type (
 	Command             = interaction.Command
 	Interaction         = interaction.Interaction
-	InteractionResponse = interaction.InteractionResponse
+	InteractionResponse = interaction.Response
 )
 
 // GET /interactions/commands

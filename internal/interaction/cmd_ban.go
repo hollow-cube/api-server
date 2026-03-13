@@ -13,7 +13,7 @@ import (
 	"github.com/hollow-cube/api-server/pkg/player"
 )
 
-func banCommand(ladderAliases map[string]*model.PunishmentLadder) command {
+func banCommand(ladderAliases map[string]*model.PunishmentLadder) *command {
 	var ladderChoices []string
 	for alias, ladder := range ladderAliases {
 		if ladder.Type != model.PunishmentTypeBan {
@@ -23,7 +23,7 @@ func banCommand(ladderAliases map[string]*model.PunishmentLadder) command {
 		ladderChoices = append(ladderChoices, alias)
 	}
 
-	return command{
+	return &command{
 		Command: Command{
 			Name:        "ban",
 			Description: "Ban a player from the server",
@@ -40,7 +40,7 @@ func banCommand(ladderAliases map[string]*model.PunishmentLadder) command {
 	}
 }
 
-func (h *Handler) handleBan(ctx context.Context, i *Interaction) (*InteractionResponse, error) {
+func (h *Handler) handleBan(ctx context.Context, i *Interaction) (*Response, error) {
 	var target string
 	var ladder *model.PunishmentLadder
 	reason := "unspecified"
@@ -64,8 +64,8 @@ func (h *Handler) handleBan(ctx context.Context, i *Interaction) (*InteractionRe
 	if err != nil && !errors.Is(err, playerdb.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get active punishment: %w", err)
 	} else if err == nil {
-		return &InteractionResponse{
-			Type: InteractionResponseMessage,
+		return &Response{
+			Type: ResponseMessage,
 			// TODO: better message using translation key
 			StyledText: fmt.Sprintf("<red>Player %s is already banned", target),
 		}, nil
@@ -105,8 +105,8 @@ func (h *Handler) handleBan(ctx context.Context, i *Interaction) (*InteractionRe
 			Set("ladder_id", ladder.Id),
 	})
 
-	return &InteractionResponse{
-		Type: InteractionResponseMessage,
+	return &Response{
+		Type: ResponseMessage,
 		// TODO: better message using translation key
 		StyledText: fmt.Sprintf("<Green>Player %s banned", target),
 	}, nil

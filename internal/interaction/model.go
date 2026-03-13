@@ -25,15 +25,15 @@ type Argument struct {
 	Choices []string `json:"choices,omitempty"`
 }
 
-type InteractionType string
+type Type string
 
 const (
-	InteractionCommand InteractionType = "command"
+	TypeCommand Type = "command"
 )
 
 type Interaction struct {
-	ID   string          `json:"id"` // Identifier of target, eg command name for command
-	Type InteractionType `json:"type"`
+	ID   string `json:"id"` // Identifier of target, eg command name for command
+	Type Type   `json:"type"`
 
 	PlayerID string `json:"playerId"` // Sender
 
@@ -50,14 +50,24 @@ type CommandInteractionArgument struct {
 	Value any          `json:"value"` // Depends on Type
 }
 
-type InteractionResponseType string
+type ResponseType string
 
 const (
-	InteractionResponseMessage InteractionResponseType = "message"
+	ResponseMessage ResponseType = "message"
 )
 
-type InteractionResponse struct {
-	Type InteractionResponseType `json:"type"`
+type Response struct {
+	Type ResponseType `json:"type"`
 
 	StyledText string `json:"styledText,omitempty"` // Minimessage string
+
+	// Not totally sure on the format here, will need some work...
+	TranslationKey string `json:"translationKey,omitempty"`
+}
+
+func translate(key string) *Response {
+	return &Response{
+		Type:           ResponseMessage,
+		TranslationKey: key,
+	}
 }
