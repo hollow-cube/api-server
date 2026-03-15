@@ -16,14 +16,14 @@ const (
 
 type PlayerActivity struct {
 	Type PlayerActivityType `json:"type"`
-	Name *string            `json:"name,omitempty"`
-	Id   *string            `json:"id,omitempty"`
-	Code *string            `json:"code,omitempty"`
+	Name *string            `json:"name"`
+	Id   *string            `json:"id"`
+	Code *string            `json:"code"`
 }
 
 type PlayerStatus struct {
 	Online   bool            `json:"online"`
-	Activity *PlayerActivity `json:"activity,omitempty"`
+	Activity *PlayerActivity `json:"activity"`
 }
 
 func GetPlayerActivityTypeFromSession(session db.PlayerSession) PlayerActivityType {
