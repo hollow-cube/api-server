@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hollow-cube/api-server/api/v1Public"
 	"net"
 	"net/http"
 
@@ -152,6 +153,7 @@ func main() {
 		fx.Provide(newDynamicExporter),
 		tracefx.Module,
 		fx.Provide(
+			v1Public.NewServer,
 			v4Internal.NewServer,
 
 			v2Public.NewServer,
@@ -189,6 +191,7 @@ func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 }
 
 type routeHandlerImpl struct {
+	v1p *v1Public.Server
 	v4i *v4Internal.Server
 
 	public   v2Public.StrictServerInterface
@@ -213,6 +216,13 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 		BaseURL: "/v4/internal",
 	})
 	r.Handle("/v4/internal/*", v4mux)
+
+	v1Mux := http.NewServeMux()
+	v1Public.RegisterRoutes(v.v1p, v1Public.RegisterParams{
+		Mux:     v1Mux,
+		BaseURL: "/v1",
+	})
+	r.Handle("/v1/*", v1Mux)
 
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
@@ -241,6 +251,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 func makeV2RouteHandler(p struct {
 	fx.In
 
+	V1P          *v1Public.Server
 	V4I          *v4Internal.Server
 	Public       v2Public.StrictServerInterface
 	Internal     v2Internal.StrictServerInterface
@@ -253,6 +264,7 @@ func makeV2RouteHandler(p struct {
 	Discord      *discord.Handler
 }) httpTransport.RouteProvider {
 	return &routeHandlerImpl{
+		v1p:          p.V1P,
 		v4i:          p.V4I,
 		public:       p.Public,
 		internal:     p.Internal,

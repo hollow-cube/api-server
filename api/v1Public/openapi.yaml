@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: Server API
+  version: "1.0"
+paths:
+  /@me/status:
+    get:
+      operationId: getPlayerStatus
+      parameters:
+        - name: x-auth-user
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
