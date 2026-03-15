@@ -528,6 +528,12 @@ type UpdateSaveStateJSONBody struct {
 	Type            *SaveStateType          `json:"type,omitempty"`
 }
 
+// UpdateMapWorldParams defines parameters for UpdateMapWorld.
+type UpdateMapWorldParams struct {
+	// LoadTime Unix timestamp (millis) when the world was loaded
+	LoadTime *int `form:"loadTime,omitempty" json:"loadTime,omitempty"`
+}
+
 // CreateMapJSONRequestBody defines body for CreateMap for application/json ContentType.
 type CreateMapJSONRequestBody CreateMapJSONBody
 
@@ -637,7 +643,7 @@ type ServerInterface interface {
 	GetMapWorld(w http.ResponseWriter, r *http.Request, mapId string)
 	// Update map world data
 	// (PUT /maps/{mapId}/world)
-	UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string)
+	UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params UpdateMapWorldParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1577,8 +1583,19 @@ func (siw *ServerInterfaceWrapper) UpdateMapWorld(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateMapWorldParams
+
+	// ------------- Optional query parameter "loadTime" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "loadTime", r.URL.Query(), &params.LoadTime)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "loadTime", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateMapWorld(w, r, mapId)
+		siw.Handler.UpdateMapWorld(w, r, mapId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2565,8 +2582,9 @@ func (response GetMapWorld404Response) VisitGetMapWorldResponse(w http.ResponseW
 }
 
 type UpdateMapWorldRequestObject struct {
-	MapId string `json:"mapId"`
-	Body  io.Reader
+	MapId  string `json:"mapId"`
+	Params UpdateMapWorldParams
+	Body   io.Reader
 }
 
 type UpdateMapWorldResponseObject interface {
@@ -3481,10 +3499,11 @@ func (sh *strictHandler) GetMapWorld(w http.ResponseWriter, r *http.Request, map
 }
 
 // UpdateMapWorld operation middleware
-func (sh *strictHandler) UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string) {
+func (sh *strictHandler) UpdateMapWorld(w http.ResponseWriter, r *http.Request, mapId string, params UpdateMapWorldParams) {
 	var request UpdateMapWorldRequestObject
 
 	request.MapId = mapId
+	request.Params = params
 
 	request.Body = r.Body
 

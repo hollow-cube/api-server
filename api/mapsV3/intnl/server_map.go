@@ -503,7 +503,31 @@ func (s *server) GetMapWorld(ctx context.Context, request GetMapWorldRequestObje
 }
 
 func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldRequestObject) (UpdateMapWorldResponseObject, error) {
-	err := s.objectClient.UploadStream(ctx, request.MapId, request.Body)
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return MapNotFoundResponse{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	// Kind of a hacky solution we should probably have some fancier solution in the future.
+	// This is a last line of defense for not updating a map during or after verification if someone
+	// manages to stay in an edit world during that period.
+	// If the map is currently being verified, never allow it to be saved
+	if m.Verification != nil && *m.Verification == int64(model.VerificationPending) {
+		// Note: this exacerbates a race condition on exiting/saving a map -> starting to verify it.
+		// If another builder is in the map as you begin verification they will be kicked, but the kick-save
+		// may occur before the verification status is updated. In that case changes since the last autosave
+		// will be lost.
+		// For now we can accept this, and always save when the owner of the map leaves as a stop-gap.
+		return nil, fmt.Errorf("map is currently being verified, cannot save")
+	}
+	// If the map is now published and the world was loaded prior to the publish date, never allow it to be saved
+	if m.PublishedAt != nil && request.Params.LoadTime != nil && int64(*request.Params.LoadTime) < (*m.PublishedAt).UnixMilli() {
+		return nil, fmt.Errorf("map was published after world load, cannot save")
+	}
+
+	err = s.objectClient.UploadStream(ctx, request.MapId, request.Body)
 	return UpdateMapWorld200Response{}, err
 }
 

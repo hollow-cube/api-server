@@ -159,6 +159,11 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: loadTime
+          description: Unix timestamp (millis) when the world was loaded
+          in: query
+          required: false
+          schema: { type: integer }
       requestBody:
         $ref: '#/components/requestBodies/MapWorldDataRequest'
       responses:
