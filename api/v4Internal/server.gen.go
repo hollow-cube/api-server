@@ -22,6 +22,7 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/builders", h.getMapBuilders)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders", h.inviteMapBuilder)
 	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/builders/{playerId}", h.removeMapBuilder)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders/{playerId}/accept", h.acceptMapBuilderRequest)
@@ -106,6 +107,17 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.server.ExecuteInteraction(r.Context(), body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getMapBuilders(w http.ResponseWriter, r *http.Request) {
+	var req GetMapBuildersRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.GetMapBuilders(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return

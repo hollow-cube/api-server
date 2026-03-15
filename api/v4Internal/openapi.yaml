@@ -82,6 +82,26 @@ paths:
                             schema:
                                 type: object
     /maps/{mapId}/builders:
+        get:
+            operationId: getMapBuilders
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: onlyActive
+                  in: query
+                  required: true
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
         post:
             operationId: inviteMapBuilder
             parameters:

@@ -22,6 +22,38 @@ type (
 	}
 )
 
+type (
+	GetMapBuildersRequest struct {
+		MapID      string `path:"mapId"`
+		OnlyActive bool   `query:"onlyActive"`
+	}
+	GetMapBuildersResponse struct {
+		Results []MapBuilder `json:"results"`
+	}
+)
+
+// GET /maps/{mapId}/builders
+func (s *Server) GetMapBuilders(ctx context.Context, request GetMapBuildersRequest) (*GetMapBuildersResponse, error) {
+	builders, err := s.mapStore.MulitGetMapBuilders(ctx, []string{request.MapID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get map builders: %w", err)
+	}
+
+	results := make([]MapBuilder, 0, len(builders))
+	for _, b := range builders {
+		if b.IsPending && request.OnlyActive {
+			continue
+		}
+
+		results = append(results, MapBuilder{
+			ID:        b.PlayerID,
+			CreatedAt: b.CreatedAt,
+			Pending:   b.IsPending,
+		})
+	}
+	return &GetMapBuildersResponse{results}, nil
+}
+
 type InviteMapBuilderRequest struct {
 	PlayerID string `json:"playerId"` // Player being invited
 }
