@@ -407,3 +407,48 @@ func TestGenerateServer_BaseURLPlacement(t *testing.T) {
 	require.NotContains(t, src, `params.BaseURL+"GET `, "BaseURL should not come before HTTP method")
 	require.NotContains(t, src, `params.BaseURL+"POST `, "BaseURL should not come before HTTP method")
 }
+
+func TestGenerateServer_BooleanQueryParams(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "SearchItems",
+				Method:      "GET",
+				Path:        "/items",
+				RequestType: "SearchItemsRequest",
+				Params: []Param{
+					{Name: "active", GoName: "Active", GoType: "bool", Location: "query", Required: true},
+					{Name: "verified", GoName: "Verified", GoType: "bool", Location: "query", Required: false},
+				},
+				Response: Response{StatusCode: 200, GoType: "[]Item"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	// Verify it parses as valid Go
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	// Check required boolean parameter handling
+	require.Contains(t, src, `strconv.ParseBool(r.URL.Query().Get("active"))`)
+	require.Contains(t, src, `req.Active = v`)
+	require.Contains(t, src, `runtime.WriteBadRequest(w, "invalid query parameter: active")`)
+
+	// Check optional boolean parameter handling
+	require.Contains(t, src, `if qs := r.URL.Query().Get("verified"); qs != ""`)
+	require.Contains(t, src, `strconv.ParseBool(qs)`)
+	require.Contains(t, src, `req.Verified = v`)
+	require.Contains(t, src, `runtime.WriteBadRequest(w, "invalid query parameter: verified")`)
+
+	// strconv should be imported for bool params
+	require.Contains(t, src, `"strconv"`)
+}

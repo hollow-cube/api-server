@@ -190,6 +190,24 @@ func writeQueryParam(buf *bytes.Buffer, p *Param) {
 			fmt.Fprintf(buf, "\t\t}\n")
 			fmt.Fprintf(buf, "\t}\n")
 		}
+	case "bool":
+		if p.Required {
+			fmt.Fprintf(buf, "\tif v, err := strconv.ParseBool(r.URL.Query().Get(%q)); err != nil {\n", p.Name)
+			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
+			fmt.Fprintf(buf, "\t\treturn\n")
+			fmt.Fprintf(buf, "\t} else {\n")
+			fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
+			fmt.Fprintf(buf, "\t}\n")
+		} else {
+			fmt.Fprintf(buf, "\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
+			fmt.Fprintf(buf, "\t\tif v, err := strconv.ParseBool(qs); err != nil {\n")
+			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
+			fmt.Fprintf(buf, "\t\t\treturn\n")
+			fmt.Fprintf(buf, "\t\t} else {\n")
+			fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
+			fmt.Fprintf(buf, "\t\t}\n")
+			fmt.Fprintf(buf, "\t}\n")
+		}
 	}
 }
 

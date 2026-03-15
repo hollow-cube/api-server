@@ -117,6 +117,12 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) getMapBuilders(w http.ResponseWriter, r *http.Request) {
 	var req GetMapBuildersRequest
 	req.MapID = r.PathValue("mapId")
+	if v, err := strconv.ParseBool(r.URL.Query().Get("onlyActive")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: onlyActive")
+		return
+	} else {
+		req.OnlyActive = v
+	}
 	resp, err := h.server.GetMapBuilders(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -202,6 +208,12 @@ func (h *handlers) getNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		req.PageSize = v
+	}
+	if v, err := strconv.ParseBool(r.URL.Query().Get("unreadOnly")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: unreadOnly")
+		return
+	} else {
+		req.UnreadOnly = v
 	}
 	resp, err := h.server.GetNotifications(r.Context(), req)
 	if err != nil {
