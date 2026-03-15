@@ -63,7 +63,9 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 
 	var apiKey playerdb.ApiKey
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
-		apiKey, err = s.store.GetApiKeyByHash(ctx, apiKeyStr[len(ApiKeyPrefix):])
+		h := sha256.Sum256([]byte(apiKeyStr))
+		hash := hex.EncodeToString(h[:])
+		apiKey, err = s.store.GetApiKeyByHash(ctx, hash)
 		if errors.Is(err, playerdb.ErrNoRows) {
 			apiKey.ID = ""
 		} else if err != nil {
