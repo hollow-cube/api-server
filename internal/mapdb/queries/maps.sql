@@ -162,6 +162,15 @@ update map_slots
 set is_pending = false
 where map_id = $1
   and player_id = $2
+  and is_pending is true
+returning *;
+
+-- name: RejectMapBuilder :one
+delete
+from map_slots
+where map_id = $1
+  and player_id = $2
+  and is_pending is false
 returning *;
 
 -- name: DeleteMapBuildersForMap :exec

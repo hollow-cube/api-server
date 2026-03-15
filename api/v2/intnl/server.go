@@ -93,14 +93,14 @@ func NewServer(p ServerParams) (StrictServerInterface, error) {
 	}
 
 	return &Server{
-		log:                 p.Log.With("handler", "internal"),
-		metrics:             p.Metrics,
-		store:               p.Store,
-		jetStream:           p.JetStream,
-		tbHeadless:          p.TBHeadless,
-		notificationManager: p.NotificationManager,
-		punishmentLadders:   p.PunishmentLadders,
-		punishmentAliases:   punishmentAliases,
+		log:               p.Log.With("handler", "internal"),
+		metrics:           p.Metrics,
+		store:             p.Store,
+		jetStream:         p.JetStream,
+		tbHeadless:        p.TBHeadless,
+		notifications:     p.NotificationManager,
+		punishmentLadders: p.PunishmentLadders,
+		punishmentAliases: punishmentAliases,
 	}, nil
 }
 
@@ -108,10 +108,10 @@ type Server struct {
 	log     *zap.SugaredLogger
 	metrics metric.Writer
 
-	store               *playerdb.Store
-	jetStream           *natsutil.JetStreamWrapper
-	tbHeadless          *tebex.HeadlessClient
-	notificationManager notification.Manager
+	store         *playerdb.Store
+	jetStream     *natsutil.JetStreamWrapper
+	tbHeadless    *tebex.HeadlessClient
+	notifications notification.Manager
 
 	punishmentLadders map[string]*model.PunishmentLadder
 	punishmentAliases map[model.PunishmentType]map[string]*model.PunishmentLadder
@@ -300,6 +300,7 @@ func (s *Server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequest
 	return GetPlayerAlts200JSONResponse{Results: results}, nil
 }
 
+// v4
 func (s *Server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
 	res, err := playerdb.Tx(ctx, s.store, func(ctx context.Context, txStore *playerdb.Store) (*CyclePlayerApiKey200JSONResponse, error) {
 		_, err := txStore.GetPlayerData(ctx, request.PlayerId)
@@ -343,6 +344,7 @@ func (s *Server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObje
 	return GetPlayerId200TextResponse(pid), nil
 }
 
+// v4
 func (s *Server) PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error) {
 	if request.Body.Query == "" {
 		return PerformTabComplete200JSONResponse{Result: []TabCompleteEntry{}}, nil

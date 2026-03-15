@@ -150,6 +150,66 @@ paths:
             responses:
                 "200":
                     description: Successful response
+    /notifications:
+        get:
+            operationId: getNotifications
+            parameters:
+                - name: playerId
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: unreadOnly
+                  in: query
+                  required: true
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /notifications/{notificationId}:
+        delete:
+            operationId: deleteNotification
+            parameters:
+                - name: notificationId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: Successful response
+        patch:
+            operationId: updateNotification
+            parameters:
+                - name: notificationId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
     /players:
         post:
             operationId: createPlayerData

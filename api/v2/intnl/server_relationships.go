@@ -338,12 +338,12 @@ func (s *Server) SendFriendRequest(ctx context.Context, request SendFriendReques
 			ReplaceUnread: false,
 		}
 		// Send notification of friend request (to both players)
-		if err := s.notificationManager.Create(ctx, request.TargetId, notifInput); err != nil {
+		if err := s.notifications.Create(ctx, request.TargetId, notifInput); err != nil {
 			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
 		}
 
 		notifInput.Key = request.TargetId
-		if err := s.notificationManager.Create(ctx, request.PlayerId, notifInput); err != nil {
+		if err := s.notifications.Create(ctx, request.PlayerId, notifInput); err != nil {
 			s.log.Warnw("failed to send friendship notification - continuing", "playerId", request.PlayerId, "targetId", request.TargetId, "err", err)
 		}
 		return SendFriendRequest201JSONResponse{IsRequest: false}, nil
@@ -388,7 +388,7 @@ func (s *Server) SendFriendRequest(ctx context.Context, request SendFriendReques
 	}
 
 	// Send notification of friend request
-	if err := s.notificationManager.Create(ctx, request.TargetId, notification.CreateInput{
+	if err := s.notifications.Create(ctx, request.TargetId, notification.CreateInput{
 		Key:           request.PlayerId, // Use the player ID as the key for a friend_request type
 		Type:          "friend_request",
 		ReplaceUnread: true,

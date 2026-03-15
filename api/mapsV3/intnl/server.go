@@ -47,7 +47,7 @@ type server struct {
 
 	objectClient object.Client
 
-	notificationManager notification.Manager
+	notifications notification.Manager
 }
 
 func NewServer(params ServerParams) (StrictServerInterface, error) {
@@ -64,13 +64,13 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 	}
 
 	return &server{
-		log:                 params.Log,
-		store:               params.Store,
-		playerStore:         params.PlayerStore,
-		redis:               params.Redis,
-		jetStream:           params.JetStream,
-		metrics:             params.Metrics,
-		objectClient:        params.Object,
-		notificationManager: params.NotificationManager,
+		log:           params.Log,
+		store:         params.Store,
+		playerStore:   params.PlayerStore,
+		redis:         params.Redis,
+		jetStream:     params.JetStream,
+		metrics:       params.Metrics,
+		objectClient:  params.Object,
+		notifications: params.NotificationManager,
 	}, nil
 }

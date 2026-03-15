@@ -34,6 +34,9 @@ func (s *Server) InviteMapBuilder(ctx context.Context, request MapRequest, body 
 	} else if err != nil {
 		return fmt.Errorf("failed to get map: %w", err)
 	}
+	if m.PublishedAt != nil {
+		return ox.BadRequest{} // Sanity
+	}
 
 	_, err = s.mapStore.CreatePendingMapBuilder(ctx, request.MapID, body.PlayerID)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -48,10 +51,9 @@ func (s *Server) InviteMapBuilder(ctx context.Context, request MapRequest, body 
 		// TODO: we often have a key + subject, may be worth splitting those. For example, allows
 		//  deleting all notifs with subject {map_id} when the map is published.
 		//  OR: some subject idea like nats where you can filter with wildcards like map.builders.>
-		Key:       fmt.Sprintf("map_builder_invites_%v", m.ID),
-		Type:      "map_builder_invite",
-		ExpiresIn: nil,
-		Data: &map[string]interface{}{
+		Key:  fmt.Sprintf("map_builder_invites_%v", m.ID),
+		Type: "map_builder_invite",
+		Data: map[string]any{
 			"inviterId": m.Owner,
 			"mapId":     m.ID,
 		},
@@ -66,14 +68,32 @@ func (s *Server) InviteMapBuilder(ctx context.Context, request MapRequest, body 
 
 // DELETE /maps/{mapId}/builders/{playerId}
 func (s *Server) RemoveMapBuilder(ctx context.Context, request MapPlayerRequest) error {
-	_, err := s.mapStore.RemoveMapBuilder(ctx, request.MapID, request.PlayerID)
+	m, err := s.mapStore.GetMapById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to get map: %w", err)
+	}
+	if m.PublishedAt != nil {
+		return ox.BadRequest{} // Sanity
+	}
+
+	_, err = s.mapStore.RemoveMapBuilder(ctx, m.ID, request.PlayerID)
 	if errors.Is(err, mapdb.ErrNoRows) {
 		return ox.NotFound{}
 	} else if err != nil {
 		return fmt.Errorf("failed to remove pending map builder: %w", err)
 	}
 
-	// TODO: claw back any outgoing invite notification if it exists.
+	// If there are any still-pending invite notifications out we need to remove them
+	// Note: accepting will still not work if its still sent for whatever reason
+	err = s.notifications.DeleteMatching(ctx, notification.Matcher{
+		PlayerID: &request.PlayerID,
+		Key:      new(fmt.Sprintf("map_builder_invites_%v", m.ID)),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to claw back invite notifications: %w", err)
+	}
 
 	return nil
 }
@@ -93,6 +113,9 @@ func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerR
 	} else if err != nil {
 		return fmt.Errorf("failed to get map: %w", err)
 	}
+	if m.PublishedAt != nil {
+		return ox.BadRequest{} // Sanity
+	}
 
 	usedSlots, err := s.mapStore.GetMapBuilderPlayerSlotsCount(ctx, pd.ID)
 	if err != nil {
@@ -110,10 +133,11 @@ func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerR
 	}
 
 	// TODO: would be nice if notifications were strongly typed structs
+	// Tell the map author their invite was accepted
 	err = s.notifications.Create(ctx, m.Owner, notification.CreateInput{
 		Type:      "map_builder_accepted",
 		ExpiresIn: nil,
-		Data: &map[string]interface{}{
+		Data: map[string]interface{}{
 			"mapId":     m.ID,
 			"builderId": pd.ID,
 		},
@@ -124,24 +148,28 @@ func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerR
 
 // POST /maps/{mapId}/builders/{playerId}/reject
 func (s *Server) RejectMapBuilderRequest(ctx context.Context, request MapPlayerRequest) error {
-	_, err := s.mapStore.RemoveMapBuilder(ctx, request.MapID, request.PlayerID)
-	if errors.Is(err, mapdb.ErrNoRows) {
-		return ox.NotFound{}
-	} else if err != nil {
-		return fmt.Errorf("failed to remove pending map builder: %w", err)
-	}
-
 	m, err := s.mapStore.GetMapById(ctx, request.MapID)
 	if errors.Is(err, mapdb.ErrNoRows) {
 		return ox.NotFound{}
 	} else if err != nil {
 		return fmt.Errorf("failed to get map: %w", err)
 	}
+	if m.PublishedAt != nil {
+		return nil // Silently drop
+	}
 
+	_, err = s.mapStore.RejectMapBuilder(ctx, m.ID, request.PlayerID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return ox.NotFound{}
+	} else if err != nil {
+		return fmt.Errorf("failed to remove pending map builder: %w", err)
+	}
+
+	// Tell the map author their invite was denied
 	err = s.notifications.Create(ctx, m.Owner, notification.CreateInput{
 		Type:      "map_builder_rejected",
 		ExpiresIn: nil,
-		Data: &map[string]interface{}{
+		Data: map[string]interface{}{
 			"mapId":     m.ID,
 			"builderId": request.PlayerID,
 		},

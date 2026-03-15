@@ -14,6 +14,7 @@ update map_slots
 set is_pending = false
 where map_id = $1
   and player_id = $2
+  and is_pending is true
 returning player_id, map_id, index, created_at, is_pending
 `
 
@@ -798,6 +799,28 @@ where id = $1
 func (q *Queries) PublishMap(ctx context.Context, iD string, publishedID *int, contest *string) error {
 	_, err := q.db.Exec(ctx, publishMap, iD, publishedID, contest)
 	return err
+}
+
+const rejectMapBuilder = `-- name: RejectMapBuilder :one
+delete
+from map_slots
+where map_id = $1
+  and player_id = $2
+  and is_pending is false
+returning player_id, map_id, index, created_at, is_pending
+`
+
+func (q *Queries) RejectMapBuilder(ctx context.Context, mapID string, playerID string) (MapSlots, error) {
+	row := q.db.QueryRow(ctx, rejectMapBuilder, mapID, playerID)
+	var i MapSlots
+	err := row.Scan(
+		&i.PlayerID,
+		&i.MapID,
+		&i.Index,
+		&i.CreatedAt,
+		&i.IsPending,
+	)
+	return i, err
 }
 
 const removeMapBuilder = `-- name: RemoveMapBuilder :one

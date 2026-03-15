@@ -6,17 +6,24 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
 )
 
+type Matcher struct {
+	PlayerID *string
+	Key      *string
+}
+
 type Manager interface {
-	GetNotifications(ctx context.Context, playerId string, page int, unreadOnly bool) (*PaginatedNotifications, error)
+	List(ctx context.Context, playerId string, unreadOnly bool, offset, limit int32) ([]playerdb.PlayerNotification, int, error)
 	Create(ctx context.Context, targetId string, input CreateInput) error
-	UpdateNotification(ctx context.Context, id string, playerId string, read bool) error
-	DeleteNotification(ctx context.Context, id string, playerId string) error
+	SetReadState(ctx context.Context, id string, read bool) error
+	Delete(ctx context.Context, id string) error
+
+	// DeleteKeyed deletes (claws back) notifications by (optional) playerId and key
+	DeleteMatching(ctx context.Context, matcher Matcher) error
 }
 
 type ManagerParams struct {
@@ -42,47 +49,25 @@ type managerImpl struct {
 	jetStream *natsutil.JetStreamWrapper
 }
 
-const notificationsPerPage = 21
-
-func (m *managerImpl) GetNotifications(ctx context.Context, playerId string, page int, unreadOnly bool) (*PaginatedNotifications, error) {
-	var pageCount int32 = 0
-	if page == 0 {
-		count, err := m.store.GetNotificationCount(ctx, playerId, unreadOnly)
-		if err != nil {
-			return nil, err
-		}
-		pageCount = int32(count / notificationsPerPage)
-	}
-
-	params := playerdb.GetNotificationsParams{
+func (m *managerImpl) List(ctx context.Context, playerId string, unreadOnly bool, offset, limit int32) ([]playerdb.PlayerNotification, int, error) {
+	notifications, err := m.store.GetNotifications(ctx, playerdb.GetNotificationsParams{
 		PlayerID: playerId,
-		Limit:    notificationsPerPage,
-		Offset:   int32(page * notificationsPerPage),
-		Column4:  unreadOnly,
-	}
-	notifications, err := m.store.GetNotifications(ctx, params)
+		Column2:  unreadOnly, // ew, fix name
+		Offset:   int32(offset),
+		Limit:    int32(limit),
+	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	results := make([]Notification, len(notifications))
+	var totalCount int
+	results := make([]playerdb.PlayerNotification, len(notifications))
 	for i, n := range notifications {
-		results[i] = Notification{
-			Id:        n.ID,
-			Type:      n.Type,
-			Key:       n.Key,
-			Data:      n.Data,
-			CreatedAt: n.CreatedAt,
-			ReadAt:    n.ReadAt,
-			ExpiresAt: n.ExpiresAt,
-		}
+		results[i] = notifications[i].PlayerNotification
+		totalCount = int(n.TotalCount)
 	}
 
-	return &PaginatedNotifications{
-		Page:      int32(page),
-		PageCount: pageCount,
-		Results:   results,
-	}, nil
+	return results, totalCount, nil
 }
 
 func (m *managerImpl) Create(ctx context.Context, targetId string, input CreateInput) error {
@@ -92,7 +77,7 @@ func (m *managerImpl) Create(ctx context.Context, targetId string, input CreateI
 		expiresAt = new(time.Now().Add(time.Duration(*input.ExpiresIn) * time.Second))
 	}
 
-	if err := m.store.AddNotification(ctx, targetId, input.Type, input.Key, input.Data, expiresAt, replace); err != nil {
+	if err := m.store.AddNotification(ctx, targetId, input.Type, input.Key, &input.Data, expiresAt, replace); err != nil {
 		return err
 	}
 
@@ -103,39 +88,48 @@ func (m *managerImpl) Create(ctx context.Context, targetId string, input CreateI
 	return nil
 }
 
-func (m *managerImpl) UpdateNotification(ctx context.Context, id string, playerId string, read bool) error {
+func (m *managerImpl) SetReadState(ctx context.Context, id string, read bool) (err error) {
 	var rows int64
-	var err error
 	if read {
-		rows, err = m.store.MarkNotificationRead(ctx, playerId, id)
+		rows, err = m.store.MarkNotificationRead(ctx, id)
 	} else {
-		rows, err = m.store.MarkNotificationUnread(ctx, playerId, id)
+		rows, err = m.store.MarkNotificationUnread(ctx, id)
 	}
 	if err != nil {
 		return err
 	}
-
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return err
 }
 
-func (m *managerImpl) DeleteNotification(ctx context.Context, id string, playerId string) error {
-	rows, err := m.store.DeleteNotification(ctx, playerId, id)
+func (m *managerImpl) Delete(ctx context.Context, id string) error {
+	rows, err := m.store.DeleteNotification(ctx, id)
 	if err != nil {
 		return err
 	}
-
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+func (m *managerImpl) DeleteMatching(ctx context.Context, matcher Matcher) error {
+	deleted, err := m.store.DeleteMatching(ctx, matcher.PlayerID, matcher.Key)
+	if err != nil {
+		return fmt.Errorf("failed to delete matching notifications: %w", err)
+	}
+
+	_ = deleted
+	// TODO: send deleted updates
+
+	return nil
+}
+
 func (m *managerImpl) sendNotificationMessage(ctx context.Context, playerId string, input *CreateInput) error {
-	msg := model.NotificationUpdateMessage{
-		Action:   model.NotificationCreateAction,
+	msg := UpdateMessage{
+		Action:   CreateAction,
 		PlayerId: playerId,
 		Type:     input.Type,
 		Key:      input.Key,

@@ -48,6 +48,18 @@ type PlayerData struct {
 	MapBuilders    int16       `json:"mapBuilders"`
 }
 
+type PlayerNotification struct {
+	ID        string          `json:"id"`
+	PlayerID  string          `json:"playerId"`
+	Type      string          `json:"type"`
+	Key       string          `json:"key"`
+	Data      *map[string]any `json:"data"`
+	CreatedAt time.Time       `json:"createdAt"`
+	ReadAt    *time.Time      `json:"readAt"`
+	ExpiresAt *time.Time      `json:"expiresAt"`
+	DeletedAt *time.Time      `json:"deletedAt"`
+}
+
 type PlayerTotp struct {
 	PlayerID      string             `json:"playerId"`
 	CreatedAt     pgtype.Timestamptz `json:"createdAt"`

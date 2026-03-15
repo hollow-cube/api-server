@@ -456,6 +456,9 @@ paths:
         - name: playerId
           in: query
           schema: { type: string }
+        - name: notify
+          in: query
+          schema: { type: boolean }
       responses:
         '200':
           description: Leaderboard successfully deleted

@@ -1,39 +1,37 @@
 -- name: GetNotifications :many
-select id, type, key, data, created_at, read_at, expires_at
+select sqlc.embed(player_notifications),
+       count(*) over () as total_count
 from player_notifications
 where player_id = $1
   and deleted_at is null
   and (expires_at is null or expires_at > now())
-  and (not $4 or read_at is null)
+  and (not $2 or read_at is null)
 order by created_at desc
-limit $2 offset $3;
-
--- name: GetNotificationCount :one
-select count(*)
-from player_notifications
-where player_id = $1
-  and deleted_at is null
-  and (expires_at is null or expires_at > now())
-  and (not $2 or read_at is null);
+limit $3 offset $4;
 
 -- name: MarkNotificationRead :execrows
 update player_notifications
 set read_at = now()
-where player_id = $1
-  and id = $2;
+where id = $1;
 
 -- name: MarkNotificationUnread :execrows
 update player_notifications
 set read_at = null
-where player_id = $1
-  and id = $2;
+where id = $1;
 
 -- name: DeleteNotification :execrows
 update player_notifications
 set deleted_at = now()
-where player_id = $1
-  and id = $2
+where id = $1
   and deleted_at is null;
+
+-- name: DeleteMatching :many
+update player_notifications
+set deleted_at = now()
+where deleted_at is null
+  and (sqlc.narg('player_id')::uuid is null or player_id = sqlc.narg('player_id')::uuid)
+  and (sqlc.narg('key')::text is null or key = sqlc.narg('key')::text)
+returning *;
 
 -- name: Unsafe_DeleteNotification :exec
 delete

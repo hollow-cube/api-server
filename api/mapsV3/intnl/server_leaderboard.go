@@ -9,6 +9,7 @@ import (
 
 	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"github.com/hollow-cube/api-server/internal/pkg/model"
+	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/redis/rueidis"
 )
 
@@ -172,6 +173,17 @@ func (s *server) DeleteMapLeaderboard(ctx context.Context, request DeleteMapLead
 		err = s.redis.Do(ctx, s.redis.B().Zrem().Key(leaderboardKey).Member(string(common.UUIDToBin(*playerId))).Build()).Error()
 		if err != nil && !errors.Is(err, rueidis.Nil) {
 			return nil, fmt.Errorf("failed to delete player score: %w", err)
+		}
+
+		if request.Params.Notify != nil && *request.Params.Notify {
+			err = s.notifications.Create(ctx, *playerId, notification.CreateInput{
+				Key:           request.MapId,
+				Type:          "map_time_deleted",
+				ReplaceUnread: true,
+			})
+			if err != nil {
+				s.log.Warnw("failed to create notification", "playerId", *playerId, "error", err)
+			}
 		}
 	}
 

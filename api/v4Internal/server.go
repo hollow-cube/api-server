@@ -55,8 +55,7 @@ func defaultPageParams(page, pageSize int) (int32, int32) {
 	return pageParams(page, pageSize, defaultMaxPageSize)
 }
 
-func pageParams(page, pageSize, maxPageSize int) (int32, int32) {
-	var offset, limit int32
+func pageParams(page, pageSize, maxPageSize int) (offset int32, limit int32) {
 	if pageSize <= 0 || pageSize > maxPageSize {
 		limit = int32(defaultPageSize)
 	} else {

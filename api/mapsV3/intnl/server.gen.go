@@ -477,6 +477,7 @@ type UpdateMapJSONBody struct {
 // DeleteMapLeaderboardParams defines parameters for DeleteMapLeaderboard.
 type DeleteMapLeaderboardParams struct {
 	PlayerId *string `form:"playerId,omitempty" json:"playerId,omitempty"`
+	Notify   *bool   `form:"notify,omitempty" json:"notify,omitempty"`
 }
 
 // GetMapLeaderboardParams defines parameters for GetMapLeaderboard.
@@ -1058,6 +1059,14 @@ func (siw *ServerInterfaceWrapper) DeleteMapLeaderboard(w http.ResponseWriter, r
 	err = runtime.BindQueryParameter("form", true, false, "playerId", r.URL.Query(), &params.PlayerId)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "notify" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "notify", r.URL.Query(), &params.Notify)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notify", Err: err})
 		return
 	}
 

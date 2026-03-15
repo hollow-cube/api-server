@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
+	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
+// v4
 func (s *Server) DeletePlayerNotification(ctx context.Context, request DeletePlayerNotificationRequestObject) (DeletePlayerNotificationResponseObject, error) {
-	if err := s.notificationManager.DeleteNotification(ctx, request.NotificationId, request.PlayerId); err != nil {
+	if err := s.notifications.Delete(ctx, request.NotificationId); err != nil {
 		if errors.Is(err, notification.ErrNotFound) {
 			return DeletePlayerNotification404Response{}, nil
 		}
@@ -19,6 +20,7 @@ func (s *Server) DeletePlayerNotification(ctx context.Context, request DeletePla
 	return DeletePlayerNotification200Response{}, nil
 }
 
+// v4
 func (s *Server) GetPlayerNotifications(ctx context.Context, request GetPlayerNotificationsRequestObject) (GetPlayerNotificationsResponseObject, error) {
 	var unreadOnly = request.Params.Unread != nil && *request.Params.Unread
 
@@ -30,26 +32,29 @@ func (s *Server) GetPlayerNotifications(ctx context.Context, request GetPlayerNo
 		return GetPlayerNotifications400JSONResponse{Message: "page must be non-negative"}, nil
 	}
 
-	result, err := s.notificationManager.GetNotifications(ctx, request.PlayerId, page, unreadOnly)
+	offset := int32(page * 21)
+	limit := int32(21)
+
+	result, count, err := s.notifications.List(ctx, request.PlayerId, unreadOnly, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]PlayerNotification, len(result.Results))
-	for i, notif := range result.Results {
+	results := make([]PlayerNotification, len(result))
+	for i, notif := range result {
 		results[i] = notificationToApi(notif)
 	}
 
 	return GetPlayerNotifications200JSONResponse{
-		Page:      result.Page,
-		PageCount: result.PageCount,
+		Page:      int32(page),
+		PageCount: int32(count/21) + 1,
 		Results:   results,
 	}, nil
 }
 
-func notificationToApi(n notification.Notification) PlayerNotification {
+func notificationToApi(n playerdb.PlayerNotification) PlayerNotification {
 	return PlayerNotification{
-		Id:        n.Id,
+		Id:        n.ID,
 		Type:      n.Type,
 		Key:       n.Key,
 		Data:      n.Data,
@@ -59,8 +64,9 @@ func notificationToApi(n notification.Notification) PlayerNotification {
 	}
 }
 
+// v4
 func (s *Server) UpdatePlayerNotification(ctx context.Context, request UpdatePlayerNotificationRequestObject) (UpdatePlayerNotificationResponseObject, error) {
-	if err := s.notificationManager.UpdateNotification(ctx, request.NotificationId, request.PlayerId, request.Body.Read); err != nil {
+	if err := s.notifications.SetReadState(ctx, request.NotificationId, request.Body.Read); err != nil {
 		if errors.Is(err, notification.ErrNotFound) {
 			return UpdatePlayerNotification404Response{}, nil
 		}
@@ -69,6 +75,7 @@ func (s *Server) UpdatePlayerNotification(ctx context.Context, request UpdatePla
 	return UpdatePlayerNotification200Response{}, nil
 }
 
+// v4 removed
 func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePlayerNotificationRequestObject) (CreatePlayerNotificationResponseObject, error) {
 	replaceUnread := false
 	if request.Params.ReplaceUnread != nil {
@@ -79,10 +86,10 @@ func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePla
 		Key:           request.Body.Key,
 		Type:          request.Body.Type,
 		ExpiresIn:     request.Body.ExpiresIn,
-		Data:          request.Body.Data,
+		Data:          *request.Body.Data,
 		ReplaceUnread: replaceUnread,
 	}
-	if err := s.notificationManager.Create(ctx, request.PlayerId, input); err != nil {
+	if err := s.notifications.Create(ctx, request.PlayerId, input); err != nil {
 		return nil, err
 	}
 
@@ -90,12 +97,12 @@ func (s *Server) CreatePlayerNotification(ctx context.Context, request CreatePla
 }
 
 func (s *Server) sendNotificationMessage(ctx context.Context, request CreatePlayerNotificationRequestObject) error {
-	msg := model.NotificationUpdateMessage{
-		Action:   model.NotificationCreateAction,
+	msg := notification.UpdateMessage{
+		Action:   notification.CreateAction,
 		PlayerId: request.PlayerId,
 		Type:     request.Body.Type,
 		Key:      request.Body.Key,
-		Data:     request.Body.Data,
+		Data:     *request.Body.Data,
 	}
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish notification message: %w", err)
