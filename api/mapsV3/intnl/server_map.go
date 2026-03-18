@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"math"
 	"strconv"
 	"strings"
@@ -24,6 +25,13 @@ import (
 const mapContestSlot = 1_000_000
 
 var mapContestId = "c9354e33-96c2-414a-9f4a-8c2ff4669086"
+var mapUploadDuration = prometheus.NewHistogram(
+	prometheus.HistogramOpts{
+		Name:    "hc_map_upload_duration_seconds",
+		Help:    "Duration of map upload in seconds",
+		Buckets: []float64{0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 10},
+	},
+)
 
 func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error) {
 	if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
@@ -527,7 +535,11 @@ func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldReque
 		return nil, fmt.Errorf("map was published after world load, cannot save")
 	}
 
+	uploadStart := time.Now()
 	err = s.objectClient.UploadStream(ctx, request.MapId, request.Body)
+	if err == nil {
+		mapUploadDuration.Observe(time.Since(uploadStart).Seconds())
+	}
 	return UpdateMapWorld200Response{}, err
 }
 
@@ -1230,4 +1242,8 @@ func createMapSearchCacheKey(params *mapdb.SearchMapsParams) (string, bool) {
 		panic(err)
 	}
 	return fmt.Sprintf("maps:search:%d", hash), true
+}
+
+func init() {
+	prometheus.MustRegister(mapUploadDuration)
 }
