@@ -3,13 +3,17 @@ package object
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -87,13 +91,31 @@ func (c *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 
 		return nil, err
 	}
+
+	data := b.Bytes()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.String("r2.key", key),
+		attribute.String("r2.local_md5", fmt.Sprintf(`"%x"`, md5.Sum(data))),
+	)
+
 	return b.Bytes(), nil
 }
 
 func (c *S3Client) UploadStream(ctx context.Context, key string, data io.Reader) error {
 	req := &s3.PutObjectInput{Bucket: &c.bucket, Key: &key, Body: data}
-	_, err := c.uploader.Upload(ctx, req)
-	return err
+	res, err := c.uploader.Upload(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.String("r2.etag", aws.ToString(res.ETag)),
+		attribute.String("r2.versionId", aws.ToString(res.VersionID)),
+		attribute.String("r2.key", key),
+	)
+	return nil
 }
 
 // DownloadStream downloads a map and returns an io.ReadCloser that the caller is responsible for closing.
@@ -107,6 +129,7 @@ func (c *S3Client) DownloadStream(ctx context.Context, key string) (io.ReadClose
 		}
 		return nil, err
 	}
+
 	// Return the Body directly - it's an io.ReadCloser
 	// Caller is responsible for closing it
 	return res.Body, nil // Body is an io.ReadCloser. The caller is responsible for closing it
