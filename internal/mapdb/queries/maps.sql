@@ -37,9 +37,10 @@ from maps_published
 where published_id = $1;
 
 -- name: MultiGetPublishedMapsById :many
-select *
+select maps_published.*
 from maps_published
-where id = any ($1::uuid[]);
+join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
+order by map_ids.ord;
 
 -- name: CreateMap :one
 insert into maps (id, owner, m_type, created_at, updated_at, authz_key, file_id, legacy_map_id, published_id,
