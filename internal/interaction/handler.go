@@ -59,6 +59,7 @@ func NewHandler(p HandlerParams) (*Handler, error) {
 	cmds := []*command{
 		apiCommand,
 		linkCommand,
+		//recapCommand, // Disabled until command gone from mapmaker
 		banCommand(ladderAliases),
 	}
 

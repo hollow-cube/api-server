@@ -62,12 +62,14 @@ type Response struct {
 	StyledText string `json:"styledText,omitempty"` // Minimessage string
 
 	// Not totally sure on the format here, will need some work...
-	TranslationKey string `json:"translationKey,omitempty"`
+	TranslationKey  string   `json:"translationKey,omitempty"`
+	TranslationArgs []string `json:"translationArgs,omitempty"`
 }
 
-func translate(key string) *Response {
+func translate(key string, args ...string) *Response {
 	return &Response{
-		Type:           ResponseMessage,
-		TranslationKey: key,
+		Type:            ResponseMessage,
+		TranslationKey:  key,
+		TranslationArgs: args,
 	}
 }
