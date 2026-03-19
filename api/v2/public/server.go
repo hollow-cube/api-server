@@ -1,5 +1,3 @@
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -o server.gen.go -package public -generate types,strict-server,std-http-server openapi.yaml
-
 package public
 
 import (
@@ -7,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
@@ -34,33 +31,6 @@ type server struct {
 	log *zap.SugaredLogger
 
 	store *playerdb.Store
-
-	cachedTotalPlayers, cachedTotalPlaytime int
-	cachedTotalsLastUpdated                 *time.Time
-}
-
-func (s *server) GetPublicStats(ctx context.Context, _ GetPublicStatsRequestObject) (GetPublicStatsResponseObject, error) {
-	if s.cachedTotalsLastUpdated == nil || time.Since(*s.cachedTotalsLastUpdated) > 5*time.Minute {
-		result, err := s.store.GetPlayerStats(ctx)
-		if err != nil {
-			s.log.Errorw("failed to get player stats", "error", err)
-			return nil, err
-		}
-
-		s.cachedTotalPlayers = int(result.Count)
-		// int64 is probably fine here:
-		// 2.56204778e12 hours total possible (divided since we store in ms)
-		// An average of 500 hours of playtime would accommodate 5,124,095,560 unique players
-		s.cachedTotalPlaytime = int(result.Sum)
-
-		now := time.Now()
-		s.cachedTotalsLastUpdated = &now
-	}
-
-	return &GetPublicStats200JSONResponse{
-		TotalPlayers:  int64(s.cachedTotalPlayers),
-		TotalPlaytime: int64(s.cachedTotalPlaytime / 1000),
-	}, nil
 }
 
 type GetPlayerRecapCorsResponse struct {

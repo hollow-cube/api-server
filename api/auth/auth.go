@@ -23,11 +23,9 @@ const ApiKeyPrefix = "sk-hc-"
 
 var publicEndpoints = []string{
 	"/_external/*",
-	"/v2/players/stats",
 	"/v2/players/recap/*",
 	"/v2/payments/tebex/webhook",
 	"/v2/payments/tebex/basket",
-	"/v3/maps/stats",
 }
 
 type ServerParams struct {
