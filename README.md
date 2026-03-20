@@ -21,7 +21,7 @@ some legacy separation.*
 
 ## Getting Started
 
-See [Development Setup](https://github.com/hollow-cube/map-maker/blob/main/.github/DEVELOPMENT_SETUP.md) for
+See [Development Setup](https://github.com/hollow-cube/mapmaker/blob/main/.github/DEVELOPMENT_SETUP.md) for
 instructions on running the project locally.
 
 ## Contributing
