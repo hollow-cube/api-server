@@ -37,7 +37,6 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/display-name", h.getPlayerDisplayName)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/recap/{playerId}/{year}", h.getPlayerRecap)
 }
 
 // handlers wraps the server and provides HTTP handler methods.
@@ -324,21 +323,4 @@ func (h *handlers) searchPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getPlayerRecap(w http.ResponseWriter, r *http.Request) {
-	var req GetPlayerRecapRequest
-	req.PlayerID = r.PathValue("playerId")
-	if v, err := strconv.Atoi(r.PathValue("year")); err != nil {
-		runtime.WriteBadRequest(w, "invalid path parameter: year")
-		return
-	} else {
-		req.Year = v
-	}
-	resp, err := h.server.GetPlayerRecap(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteText(w, 200, resp)
 }

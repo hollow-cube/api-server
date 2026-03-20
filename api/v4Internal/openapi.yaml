@@ -343,24 +343,3 @@ paths:
                         application/json:
                             schema:
                                 type: object
-    /recap/{playerId}/{year}:
-        get:
-            operationId: getPlayerRecap
-            parameters:
-                - name: playerId
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: year
-                  in: path
-                  required: true
-                  schema:
-                    type: integer
-            responses:
-                "200":
-                    description: Successful response
-                    content:
-                        text/plain:
-                            schema:
-                                type: string
