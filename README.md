@@ -1,58 +1,41 @@
-# Session Service
+# API Server
 
-The session service is responsible for keeping track of all players currently online (network wide in the future, but
-for now just mapmaker).
+The backend service for [Hollow Cube](https://hollowcube.net) — a Minecraft server for creative map building.
+This accompanies the [mapmaker](https://github.com/hollow-cube/mapmaker) game server repo.
 
-## Session Tracking
-The session service needs to keep a record (in redis for now) of every online player, and remove them when they
-disconnect.
+## Project Structure
 
-The Java server (proxy in the future) handles this by sending requests to the create and delete session endpoints:
-- `POST /session/{playerId}` (on join)
-- `DELETE /session/{playerId}` (on leave)
+- `api/`
+    - `v1Public/` - Current-version public API for game data
+    - `v4Internal/` - Current-version API for the game servers
+    - `external/` - Incoming webhook endpoints for external services (eg Discord, Tebex)
+    - `posthog/` - Caching PostHog feature flag proxy
+    - `mapsV3/` - (deprecated) `map-service` api, in-progress migration to `v4Internal`
+    - `v2/` - (deprecated) `player-service` api, in-progress migration to `v4Internal`
+    - `v3/` - (deprecated) `session-service` api, in-progress migration to `v4Internal`
+    - `auth/` - (deprecated) Envoy auth middleware
 
-This works fine in the happy case, but we need to handle a case where the Minecraft server crashes unexpectedly,
-it would be problematic if the session service still thought the player was online. This is handled by the session
-service server tracking, see below.
+*Note: Historically this project was made up of 3 distinct services (`map-service`, `player-service`,
+`session-service`) so you may see references to those. They have since been merged but there remains
+some legacy separation.*
 
-## Server Tracking
-The session service needs to keep a record (in redis for now) of every running backend server to be able to route
-players to the correct server, as well as know when a server goes down (incl. unexpected crashes). To accomplish this,
-the session service uses the Kubernetes client API to watch for changes to the server state. There is a single instance
-of the session service selected at any given moment to track the server state. This is done using the Kubernetes client
-leadership election API.
+## Getting Started
 
-The leader instance of the session service will watch for changes and update the server state in redis. Any service
-instance (including the leader) may query the server state when assigning players.
+See [Development Setup](https://github.com/hollow-cube/map-maker/blob/main/.github/DEVELOPMENT_SETUP.md) for
+instructions on running the project locally.
 
-## Chat
-Chat is handled by the session service also. Chat is done over Kafka. TODO write more
+## Contributing
 
-## Local Development
-You must have the following installed:
-- goimports: `go install golang.org/x/tools/cmd/goimports@latest`
-- [openapi-go](https://github.com/mworzala/openapi-go): `go install github.com/mworzala/openapi-go@latest`
+Please read [CONTRIBUTING.md](.github/CONTRIBUTING.md) before opening a pull request.
 
-You should use our Tilt setup to run the service locally, see [here](https://github.com/hollow-cube/development).
+All contributors must sign our
+[Contributor License Agreement](https://hollowcube.net/legal/individual-contributor-license-agreement).
+You'll be prompted automatically on your first PR.
 
-## DB Schema Evolution
-We use [golang-migrate/migrate](https://github.com/golang-migrate/migrate) to handle postgres schema upgrades.
+## Community
 
-To create a new migration, run the following command (**make sure to replace <migration_name> with a reasonable name**):
+We have a dedicated `#general-dev` channel in our [Discord](https://discord.hollowcube.net) for related questions.
 
-```shell
-go tool migrate create -ext sql -dir internal/pkg/storage/migrate -seq <migration_name>
-```
+## License
 
-Before writing any migrations, make sure to read through the best practices in the
-[migrate documentation](https://github.com/golang-migrate/migrate/blob/master/MIGRATIONS.md). In
-particular, migrations should always be idempotent, transactional and reversible. It is almost never
-valid to edit an existing migration after it has been deployed.
-
-DB changes must always be (at least) single version backwards compatible to allow for rolling updates.
-
-> **Note on using Tilt:**
->
-> If you are using Tilt then the service will autorestart when you run `migrate` commands, which will
-> result in the migration being automatically applied. You should disable the tilt resource while editing
-> then reenable it after the migration is written.
+The code in this repository is licensed under the [MIT License](LICENSE).
