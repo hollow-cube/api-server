@@ -4,6 +4,7 @@ import (
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"go.uber.org/fx"
@@ -17,6 +18,7 @@ type ServerParams struct {
 	PlayerStore  *playerdb.Store
 	MapStore     *mapdb.Store
 	SessionStore *sessiondb.Queries
+	JetStream    *natsutil.JetStreamWrapper
 
 	Notifications notification.Manager
 	Interactions  *interaction.Handler
@@ -28,6 +30,7 @@ type Server struct {
 	playerStore  *playerdb.Store
 	mapStore     *mapdb.Store
 	sessionStore *sessiondb.Queries
+	jetStream    *natsutil.JetStreamWrapper
 
 	notifications notification.Manager
 	interactions  *interaction.Handler
@@ -39,6 +42,7 @@ func NewServer(p ServerParams) (*Server, error) {
 		playerStore:   p.PlayerStore,
 		mapStore:      p.MapStore,
 		sessionStore:  p.SessionStore,
+		jetStream:     p.JetStream,
 		notifications: p.Notifications,
 		interactions:  p.Interactions,
 	}

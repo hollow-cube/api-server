@@ -66,6 +66,19 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		return nil, err
 	}
 
+	err = p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+		Name:       "PLAYER_MANAGEMENT",
+		Subjects:   []string{"player.>"},
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		MaxAge:     10 * time.Minute,
+		Duplicates: 60 * time.Second,
+	})
+	if err != nil {
+		reportCancel()
+		return nil, err
+	}
+
 	return &Tracker{
 		queries:           p.Queries,
 		jetStream:         p.JetStream,

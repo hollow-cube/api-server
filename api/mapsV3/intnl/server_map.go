@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/gohugoio/hashstructure"
 	"github.com/hollow-cube/api-server/internal/mapdb"
@@ -572,6 +573,18 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update map: %w", err)
+	}
+
+	// If we are starting to verify, send out a drain to destory any possible editing worlds.
+	// TODO: This doesnt really work. If there are people in the world it wont have time to save
+	//  and the verifying world will be out of date which would allow publishing impossible maps
+	err = s.jetStream.PublishJSONAsync(ctx, model.MapUpdateMessage{
+		Action:      model.MapUpdate_Drain,
+		ID:          request.MapId,
+		DrainReason: new("verification"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to publish map update: %w", err)
 	}
 
 	return BeginMapVerification200Response{}, nil

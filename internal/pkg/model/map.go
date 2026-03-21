@@ -149,6 +149,8 @@ func (a MapUpdateAction) String() string {
 type MapUpdateMessage struct {
 	Action MapUpdateAction `json:"action"`
 	ID     string          `json:"id"`
+
+	DrainReason *string `json:"drainReason"`
 }
 
 func (m MapUpdateMessage) Subject() string {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
+	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/api-server/pkg/ox"
 )
@@ -126,6 +127,15 @@ func (s *Server) RemoveMapBuilder(ctx context.Context, request MapPlayerRequest)
 	if err != nil {
 		return fmt.Errorf("failed to claw back invite notifications: %w", err)
 	}
+
+	// Transfer the player back to the hub in case they are currently in the map.
+	// TODO: we should include a message here with the same message logic extracted from interactions
+	err = s.jetStream.PublishJSONAsync(ctx, player.TransferMessage{
+		PlayerId: request.PlayerID,
+		From:     &m.ID,
+		To:       "hub",
+		State:    "playing",
+	})
 
 	return nil
 }
