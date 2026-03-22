@@ -158,7 +158,7 @@ type Map struct {
 	Size            int64        `json:"size"`
 	OptVariant      string       `json:"optVariant"`
 	OptSubvariant   *string      `json:"optSubvariant"`
-	OptSpawnPoint   Pos          `json:"optSpawnPoint"`
+	OptSpawnPoint   *Pos         `json:"optSpawnPoint"`
 	OptOnlySprint   *bool        `json:"optOnlySprint"`
 	OptNoSprint     *bool        `json:"optNoSprint"`
 	OptNoJump       *bool        `json:"optNoJump"`

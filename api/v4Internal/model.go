@@ -21,3 +21,13 @@ func hydratePos(pos mapdb.Pos) Pos {
 		Pitch: pos.Pitch,
 	}
 }
+
+func dbPos(pos Pos) mapdb.Pos {
+	return mapdb.Pos{
+		X:     pos.X,
+		Y:     pos.Y,
+		Z:     pos.Z,
+		Yaw:   pos.Yaw,
+		Pitch: pos.Pitch,
+	}
+}

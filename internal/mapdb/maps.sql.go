@@ -63,7 +63,7 @@ type CreateMapParams struct {
 	Column5       interface{} `json:"column5"`
 	OptVariant    string      `json:"optVariant"`
 	OptSubvariant *string     `json:"optSubvariant"`
-	OptSpawnPoint Pos         `json:"optSpawnPoint"`
+	OptSpawnPoint *Pos        `json:"optSpawnPoint"`
 	Contest       *string     `json:"contest"`
 	Size          int64       `json:"size"`
 }
@@ -153,7 +153,9 @@ func (q *Queries) DeleteMapBuildersForMap(ctx context.Context, mapID string) err
 }
 
 const deleteMapTags = `-- name: DeleteMapTags :exec
-delete from map_tags where map_id = $1
+delete
+from map_tags
+where map_id = $1
 `
 
 func (q *Queries) DeleteMapTags(ctx context.Context, mapID string) error {
@@ -731,7 +733,7 @@ func (q *Queries) MultiGetMapWithTagsById(ctx context.Context, dollar_1 []string
 const multiGetPublishedMapsById = `-- name: MultiGetPublishedMapsById :many
 select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.verification, maps_published.authz_key, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.ext, maps_published.deleted_at, maps_published.deleted_by, maps_published.deleted_reason, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.total_likes, maps_published.tags, maps_published.play_count, maps_published.win_count, maps_published.clear_rate, maps_published.difficulty
 from maps_published
-join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
+  join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
 order by map_ids.ord
 `
 
@@ -1003,7 +1005,7 @@ type UpdateMapParams struct {
 	Size            int64   `json:"size"`
 	Variant         string  `json:"variant"`
 	Subvariant      *string `json:"subvariant"`
-	SpawnPoint      Pos     `json:"spawnPoint"`
+	SpawnPoint      *Pos    `json:"spawnPoint"`
 	Ext             MapExt  `json:"ext"`
 	Quality         *int64  `json:"quality"`
 	Listed          bool    `json:"listed"`
@@ -1035,6 +1037,78 @@ func (q *Queries) UpdateMap(ctx context.Context, arg UpdateMapParams) error {
 		arg.NoSneak,
 		arg.Boat,
 		arg.Extra,
+	)
+	return err
+}
+
+const updateMap2 = `-- name: UpdateMap2 :exec
+update maps
+set opt_name         = coalesce($2, opt_name),
+    opt_icon         = coalesce($3, opt_icon),
+    size             = coalesce($4, size),
+    opt_variant      = coalesce($5, opt_variant),
+    opt_subvariant   = case
+                         when $6::bool then null
+                         else coalesce($7, opt_subvariant) end,
+    opt_spawn_point  = coalesce($8, opt_spawn_point),
+    quality_override = coalesce($9, quality_override),
+    listed           = coalesce($10, listed),
+    protocol_version = coalesce($11, protocol_version),
+    opt_only_sprint  = coalesce($12, opt_only_sprint),
+    opt_no_sprint    = coalesce($13, opt_no_sprint),
+    opt_no_jump      = coalesce($14, opt_no_jump),
+    opt_no_sneak     = coalesce($15, opt_no_sneak),
+    opt_boat         = coalesce($16, opt_boat),
+    opt_extra        = coalesce($17, opt_extra),
+    leaderboard      = case
+                         when $18::bool then null
+                         else coalesce($19, leaderboard) end
+where id = $1
+`
+
+type UpdateMap2Params struct {
+	ID               string       `json:"id"`
+	Name             *string      `json:"name"`
+	Icon             *string      `json:"icon"`
+	Size             *int64       `json:"size"`
+	Variant          *string      `json:"variant"`
+	ClearSubvariant  bool         `json:"clearSubvariant"`
+	Subvariant       *string      `json:"subvariant"`
+	SpawnPoint       *Pos         `json:"spawnPoint"`
+	Quality          *int64       `json:"quality"`
+	Listed           *bool        `json:"listed"`
+	ProtocolVersion  *int         `json:"protocolVersion"`
+	OnlySprint       *bool        `json:"onlySprint"`
+	NoSprint         *bool        `json:"noSprint"`
+	NoJump           *bool        `json:"noJump"`
+	NoSneak          *bool        `json:"noSneak"`
+	Boat             *bool        `json:"boat"`
+	Extra            []byte       `json:"extra"`
+	ClearLeaderboard bool         `json:"clearLeaderboard"`
+	Leaderboard      *Leaderboard `json:"leaderboard"`
+}
+
+func (q *Queries) UpdateMap2(ctx context.Context, arg UpdateMap2Params) error {
+	_, err := q.db.Exec(ctx, updateMap2,
+		arg.ID,
+		arg.Name,
+		arg.Icon,
+		arg.Size,
+		arg.Variant,
+		arg.ClearSubvariant,
+		arg.Subvariant,
+		arg.SpawnPoint,
+		arg.Quality,
+		arg.Listed,
+		arg.ProtocolVersion,
+		arg.OnlySprint,
+		arg.NoSprint,
+		arg.NoJump,
+		arg.NoSneak,
+		arg.Boat,
+		arg.Extra,
+		arg.ClearLeaderboard,
+		arg.Leaderboard,
 	)
 	return err
 }

@@ -39,7 +39,7 @@ where published_id = $1;
 -- name: MultiGetPublishedMapsById :many
 select maps_published.*
 from maps_published
-join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
+  join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
 order by map_ids.ord;
 
 -- name: CreateMap :one
@@ -71,6 +71,30 @@ set opt_name         = @name,
     opt_extra        = @extra
 where id = $1;
 
+-- name: UpdateMap2 :exec
+update maps
+set opt_name         = coalesce(sqlc.narg('name'), opt_name),
+    opt_icon         = coalesce(sqlc.narg('icon'), opt_icon),
+    size             = coalesce(sqlc.narg('size'), size),
+    opt_variant      = coalesce(sqlc.narg('variant'), opt_variant),
+    opt_subvariant   = case
+                         when @clear_subvariant::bool then null
+                         else coalesce(sqlc.narg('subvariant'), opt_subvariant) end,
+    opt_spawn_point  = coalesce(sqlc.narg('spawn_point'), opt_spawn_point),
+    quality_override = coalesce(sqlc.narg('quality'), quality_override),
+    listed           = coalesce(sqlc.narg('listed'), listed),
+    protocol_version = coalesce(sqlc.narg('protocol_version'), protocol_version),
+    opt_only_sprint  = coalesce(sqlc.narg('only_sprint'), opt_only_sprint),
+    opt_no_sprint    = coalesce(sqlc.narg('no_sprint'), opt_no_sprint),
+    opt_no_jump      = coalesce(sqlc.narg('no_jump'), opt_no_jump),
+    opt_no_sneak     = coalesce(sqlc.narg('no_sneak'), opt_no_sneak),
+    opt_boat         = coalesce(sqlc.narg('boat'), opt_boat),
+    opt_extra        = coalesce(sqlc.narg('extra'), opt_extra),
+    leaderboard      = case
+                         when @clear_leaderboard::bool then null
+                         else coalesce(sqlc.narg('leaderboard'), leaderboard) end
+where id = $1;
+
 -- name: DeleteMapTagsNotIn :exec
 delete
 from map_tags
@@ -83,7 +107,9 @@ select @map_id, unnest(@tags::map_tag[])
 on conflict (map_id, tag) do nothing;
 
 -- name: DeleteMapTags :exec
-delete from map_tags where map_id = @map_id;
+delete
+from map_tags
+where map_id = @map_id;
 
 -- name: InsertMapTags :exec
 insert into map_tags (map_id, tag, index)

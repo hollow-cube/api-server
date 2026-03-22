@@ -39,7 +39,7 @@ where deleted is null
   and player_id = $2
   and type = 'playing'
   and completed = true
-order by coalesce(score, max(playtime, ticks*20))
+order by coalesce(score, greatest(playtime, ticks*20))
 limit 1;
 
 -- name: GetBestSaveStateSinceBeta :one
@@ -51,7 +51,7 @@ where deleted is null
   and type = 'playing'
   and completed = true
   and created > '2024-04-05T09:00:00-04:00'::timestamptz
-order by coalesce(score, max(playtime, ticks*20))
+order by coalesce(score, greatest(playtime, ticks*20))
 limit 1;
 
 -- name: CreateSaveState :one

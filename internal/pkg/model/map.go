@@ -218,7 +218,7 @@ func CreateDefaultMap(owner string, size int) (mapdb2.CreateMapParams, error) {
 	}
 	m.Size = int64(size)
 	m.OptVariant = string(Parkour)
-	m.OptSpawnPoint = mapdb2.Pos{0, 40, 0, 90, 0}
+	m.OptSpawnPoint = &mapdb2.Pos{0, 40, 0, 90, 0}
 
 	return m, nil
 }

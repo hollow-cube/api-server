@@ -23,6 +23,7 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}", h.getMap)
+	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/maps/{mapId}", h.updateMap)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/builders", h.getMapBuilders)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders", h.inviteMapBuilder)
 	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/builders/{playerId}", h.removeMapBuilder)
@@ -123,6 +124,22 @@ func (h *handlers) getMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) updateMap(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	var body UpdateMapRequest
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	err := h.server.UpdateMap(r.Context(), req, body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
 }
 
 func (h *handlers) getMapBuilders(w http.ResponseWriter, r *http.Request) {

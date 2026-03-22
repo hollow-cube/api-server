@@ -97,6 +97,23 @@ paths:
                         application/json:
                             schema:
                                 type: object
+        patch:
+            operationId: updateMap
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
     /maps/{mapId}/builders:
         get:
             operationId: getMapBuilders

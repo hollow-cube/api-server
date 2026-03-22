@@ -311,7 +311,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		changed = true
 	}
 	if request.Body.SpawnPoint != nil {
-		update.SpawnPoint = posFromAPI(*request.Body.SpawnPoint)
+		update.SpawnPoint = new(posFromAPI(*request.Body.SpawnPoint))
 		changed = true
 	}
 
@@ -956,7 +956,7 @@ func (s *server) hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapDataJSONRespons
 			Variant:    mapVariantToAPI(m.OptVariant),
 			Subvariant: m.OptSubvariant,
 			Tags:       apiTags,
-			SpawnPoint: posToAPI(m.OptSpawnPoint),
+			SpawnPoint: posToAPI(*m.OptSpawnPoint),
 			Extra:      extra,
 		},
 

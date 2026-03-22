@@ -2,11 +2,14 @@ package v4Internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/hollow-cube/api-server/internal/playerdb"
@@ -33,6 +36,165 @@ func (s *Server) GetMap(ctx context.Context, request MapRequest) (*MapData, erro
 	}
 
 	return new(hydrateMap(mt.Map, mt.Tags)), nil
+}
+
+type UpdateMapRequest struct {
+	Name        *string      `json:"name"`
+	Icon        *string      `json:"icon"`
+	Variant     *MapVariant  `json:"variant"`
+	Subvariant  *string      `json:"subvariant"`
+	Tags        *[]string    `json:"tags"` // If set replaces all currently set tags
+	Leaderboard *Leaderboard `json:"leaderboard"`
+
+	NoJump     *bool           `json:"noJump"`
+	NoSneak    *bool           `json:"noSneak"`
+	NoSprint   *bool           `json:"noSprint"`
+	OnlySprint *bool           `json:"onlySprint"`
+	Extra      *map[string]any `json:"extra"`
+
+	SpawnPoint *Pos `json:"spawnPoint"`
+
+	Listed          *bool       `json:"listed"`
+	Size            *MapSize    `json:"size"`
+	QualityOverride *MapQuality `json:"qualityOverride"`
+	ProtocolVersion *int        `json:"protocolVersion"`
+}
+
+// PATCH /maps/{mapId}
+func (s *Server) UpdateMap(ctx context.Context, request MapRequest, body UpdateMapRequest) error {
+	m, err := s.mapStore.GetMapById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to fetch map: %w", err)
+	}
+
+	var changed bool
+	update := mapdb.UpdateMap2Params{ID: request.MapID}
+	var newTags []mapdb.MapTag
+
+	// TODO: map table deslopify changes
+	//  - remove opt prefixes
+	//  - use empty strings not null for name + icon + maybe more
+	//  - convert variant + subvariant to new tags on old maps + remove those columns
+	//  - remove ext
+	//  - extra to jsonb
+
+	if body.Name != nil && *body.Name != "" && (m.OptName == nil || *body.Name != *m.OptName) {
+		update.Name = body.Name
+		changed = true
+	}
+	if body.Icon != nil && *body.Icon != "" && (m.OptIcon == nil || *body.Icon != *m.OptIcon) {
+		update.Icon = body.Icon
+		changed = true
+	}
+	if body.Variant != nil && m.OptVariant != string(*body.Variant) {
+		update.Variant = new(string(*body.Variant))
+		changed = true
+	}
+	if body.Subvariant != nil {
+		sv := *body.Subvariant
+		if sv == string(model.SubVariantNone) {
+			update.ClearSubvariant = true
+		} else {
+			update.Subvariant = &sv
+		}
+		changed = true
+	}
+	if body.Tags != nil {
+		newTags = make([]mapdb.MapTag, len(*body.Tags))
+		for i, tag := range *body.Tags {
+			newTags[i] = mapdb.MapTag(tag)
+		}
+		changed = true
+	}
+	if body.Leaderboard != nil {
+		isDefault := body.Leaderboard.Asc == defaultPlaytimeLeaderboard.Asc &&
+			body.Leaderboard.Format == defaultPlaytimeLeaderboard.Format &&
+			strings.EqualFold(strings.TrimSpace(body.Leaderboard.Score), strings.TrimSpace(defaultPlaytimeLeaderboard.Score))
+		update.ClearLeaderboard = isDefault
+		update.Leaderboard = &mapdb.Leaderboard{
+			Asc:    body.Leaderboard.Asc,
+			Format: string(body.Leaderboard.Format),
+			Score:  body.Leaderboard.Score,
+		}
+		changed = true
+	}
+	if body.Extra != nil && len(*body.Extra) > 0 {
+		var extra = make(map[string]any)
+		_ = json.Unmarshal(m.OptExtra, &extra)
+		for k, v := range *body.Extra {
+			switch k {
+			case "only_sprint":
+				update.OnlySprint = new(v.(bool))
+			case "no_sprint":
+				update.NoSprint = new(v.(bool))
+			case "no_jump":
+				update.NoJump = new(v.(bool))
+			case "no_sneak":
+				update.NoSneak = new(v.(bool))
+			case "boat":
+				update.Boat = new(v.(bool))
+			default:
+				extra[k] = v
+			}
+		}
+		update.Extra, _ = json.Marshal(extra)
+		changed = true
+	}
+	if body.SpawnPoint != nil {
+		update.SpawnPoint = new(dbPos(*body.SpawnPoint))
+		changed = true
+	}
+	if body.Listed != nil && *body.Listed != m.Listed {
+		update.Listed = body.Listed
+		changed = true
+	}
+	if body.Size != nil && sizeIndex[*body.Size] != m.Size {
+		update.Size = new(sizeIndex[*body.Size])
+		changed = true
+	}
+	if body.QualityOverride != nil && (m.QualityOverride == nil || qualityIndex[*body.QualityOverride] != *m.QualityOverride) {
+		update.Quality = new(qualityIndex[*body.QualityOverride])
+		changed = true
+	}
+	if body.ProtocolVersion != nil && *body.ProtocolVersion != 0 && *body.ProtocolVersion != *m.ProtocolVersion {
+		update.ProtocolVersion = body.ProtocolVersion
+		changed = true
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return mapdb.TxNoReturn(ctx, s.mapStore, func(ctx context.Context, tx *mapdb.Store) error {
+		if err = tx.UpdateMap2(ctx, update); err != nil {
+			return fmt.Errorf("failed to update map: %w", err)
+		}
+
+		if newTags != nil {
+			if err = tx.DeleteMapTags(ctx, update.ID); err != nil {
+				return fmt.Errorf("failed to remove old tags: %w", err)
+			}
+
+			if len(newTags) > 0 {
+				if err = tx.InsertMapTags(ctx, update.ID, newTags); err != nil {
+					return fmt.Errorf("failed to upsert new tags: %w", err)
+				}
+			}
+		}
+
+		// If we changed the variant to parkour after publishing, delete any in-progress save states for the map
+		if m.PublishedAt != nil && body.Variant != nil && *body.Variant == VariantParkour {
+			err = s.mapStore.Unsafe_DeleteMapSaveStates(ctx, m.ID)
+			if err != nil {
+				// Not fatal, just error log
+				s.log.Errorw("failed to delete save states when map became parkour", "mapId", m.ID, "error", err)
+			}
+		}
+
+		return nil
+	})
 }
 
 type (

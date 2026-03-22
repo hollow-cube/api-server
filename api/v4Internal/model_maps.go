@@ -52,6 +52,15 @@ const (
 	QualityMasterpiece MapQuality = "masterpiece"
 )
 
+var qualityIndex = map[MapQuality]int64{
+	QualityUnrated:     0,
+	QualityGood:        1,
+	QualityGreat:       2,
+	QualityExcellent:   3,
+	QualityOutstanding: 4,
+	QualityMasterpiece: 5,
+}
+
 type MapVerification string
 
 const (
@@ -84,6 +93,14 @@ const (
 	SizeColossal  MapSize = "colossal"
 	SizeUnlimited MapSize = "unlimited"
 )
+
+var sizeIndex = map[MapSize]int64{
+	SizeUnlimited: -1,
+	SizeNormal:    0,
+	SizeLarge:     1,
+	SizeMassive:   2,
+	SizeColossal:  3,
+}
 
 type MapVariant string
 
@@ -182,7 +199,7 @@ func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
 			Variant:     hydrateMapVariant(m.OptVariant),
 			Subvariant:  m.OptSubvariant,
 			Tags:        apiTags,
-			SpawnPoint:  hydratePos(m.OptSpawnPoint),
+			SpawnPoint:  hydratePos(*m.OptSpawnPoint),
 			Leaderboard: &leaderboard,
 			Extra:       extra,
 		},

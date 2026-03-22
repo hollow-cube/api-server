@@ -160,7 +160,7 @@ where deleted is null
   and player_id = $2
   and type = 'playing'
   and completed = true
-order by playtime
+order by coalesce(score, greatest(playtime, ticks*20))
 limit 1
 `
 
@@ -195,7 +195,7 @@ where deleted is null
   and type = 'playing'
   and completed = true
   and created > '2024-04-05T09:00:00-04:00'::timestamptz
-order by playtime
+order by coalesce(score, greatest(playtime, ticks*20))
 limit 1
 `
 
