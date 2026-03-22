@@ -160,7 +160,8 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	}
 	s.updatePlayerDataFromJoin(pd, request.Body.Username, request.Body.Ip, request.Body.Skin)
 
-	if posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id) && !pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+	isMaintenance := s.config.Env != "tilt" && posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id)
+	if isMaintenance && !pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
 		return &CreateSession403JSONResponse{SessionDeniedResponseJSONResponse{
 			Type:    "maintenance",
 			Message: maintenanceMessage,
