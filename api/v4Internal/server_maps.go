@@ -79,6 +79,7 @@ func (s *Server) UpdateMap(ctx context.Context, request MapRequest, body UpdateM
 	//  - convert variant + subvariant to new tags on old maps + remove those columns
 	//  - remove ext
 	//  - extra to jsonb
+	//  - remove authz key
 
 	if body.Name != nil && *body.Name != "" && (m.OptName == nil || *body.Name != *m.OptName) {
 		update.Name = body.Name

@@ -128,6 +128,7 @@ from (select map_id, (round(min(playtime) / 50.0) * 50)::bigint as min_playtime
         and (type = 'playing' or type = 'verifying')
         and maps.published_at is not null
         and maps.deleted_at is null
+        and coalesce(maps.leaderboard->>'format', 'time') = 'time'
       group by map_id) as shortest_playtimes
          join save_states as s1
               on s1.map_id = shortest_playtimes.map_id
