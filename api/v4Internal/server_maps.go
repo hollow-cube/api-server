@@ -23,6 +23,18 @@ type (
 	}
 )
 
+// GET /maps/{mapId}
+func (s *Server) GetMap(ctx context.Context, request MapRequest) (*MapData, error) {
+	mt, err := s.mapStore.GetMapWithTagsById(ctx, request.MapID)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return nil, ox.NotFound{}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to get map: %w", err)
+	}
+
+	return new(hydrateMap(mt.Map, mt.Tags)), nil
+}
+
 type (
 	GetMapBuildersRequest struct {
 		MapID      string `path:"mapId"`

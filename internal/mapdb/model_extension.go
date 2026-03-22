@@ -25,3 +25,9 @@ type ObjectData struct {
 	Pos  Point                  `json:"pos"`
 	Data map[string]interface{} `json:"data"`
 }
+
+type Leaderboard struct {
+	Asc    bool   `json:"asc"`
+	Format string `json:"format"` // 'number', 'percent', 'time' (default)
+	Score  string `json:"score"`  // molang expression, default 'q.playtime'
+}
