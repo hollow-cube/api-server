@@ -68,12 +68,13 @@ type MapImportedEvent struct {
 }
 
 type MapCompletedEvent struct {
-	PlayerId   string `mapstructure:"player_id"`
-	MapId      string `mapstructure:"map_id"`
-	Variant    string `mapstructure:"variant"`
-	SubVariant string `mapstructure:"subvariant"`
-	Playtime   int    `mapstructure:"playtime"`
-	Difficulty string `mapstructure:"difficulty"`
+	PlayerId   string   `mapstructure:"player_id"`
+	MapId      string   `mapstructure:"map_id"`
+	Variant    string   `mapstructure:"variant"`
+	SubVariant string   `mapstructure:"subvariant"`
+	Playtime   int      `mapstructure:"playtime"`
+	Score      *float64 `mapstructure:"score"`
+	Difficulty string   `mapstructure:"difficulty"`
 }
 
 type MapReportedEvent struct {

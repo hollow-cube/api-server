@@ -52,6 +52,15 @@ const (
 	QualityMasterpiece MapQuality = "masterpiece"
 )
 
+var qualityIndex = map[MapQuality]int64{
+	QualityUnrated:     0,
+	QualityGood:        1,
+	QualityGreat:       2,
+	QualityExcellent:   3,
+	QualityOutstanding: 4,
+	QualityMasterpiece: 5,
+}
+
 type MapVerification string
 
 const (
@@ -70,6 +79,8 @@ type MapSettings struct {
 	Subvariant *string    `json:"subvariant"`
 	Tags       []string   `json:"tags"`
 
+	Leaderboard *Leaderboard `json:"leaderboard,omitempty"` // Only returned for unpublished maps right now
+
 	Extra map[string]interface{} `json:"extra"`
 }
 
@@ -83,12 +94,34 @@ const (
 	SizeUnlimited MapSize = "unlimited"
 )
 
+var sizeIndex = map[MapSize]int64{
+	SizeUnlimited: -1,
+	SizeNormal:    0,
+	SizeLarge:     1,
+	SizeMassive:   2,
+	SizeColossal:  3,
+}
+
 type MapVariant string
 
 const (
 	VariantParkour  MapVariant = "parkour"
 	VariantBuilding MapVariant = "building"
 )
+
+type LeaderboardFormat string
+
+const (
+	LeaderboardFormatTime    LeaderboardFormat = "time"
+	LeaderboardFormatPercent LeaderboardFormat = "percent"
+	LeaderboardFormatNumber  LeaderboardFormat = "number"
+)
+
+type Leaderboard struct {
+	Asc    bool              `json:"asc"`
+	Format LeaderboardFormat `json:"format"`
+	Score  string            `json:"score"`
+}
 
 type MapRole string
 
@@ -108,6 +141,12 @@ type MapBuilder struct {
 	ID        string    `json:"id"` // The player id
 	CreatedAt time.Time `json:"createdAt"`
 	Pending   bool      `json:"pending"`
+}
+
+var defaultPlaytimeLeaderboard = Leaderboard{
+	Asc:    true,
+	Format: LeaderboardFormatTime,
+	Score:  "q.playtime",
 }
 
 func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
@@ -136,6 +175,15 @@ func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
 		apiTags[i] = string(tag)
 	}
 
+	leaderboard := defaultPlaytimeLeaderboard
+	if m.Leaderboard != nil {
+		leaderboard = Leaderboard{
+			Asc:    m.Leaderboard.Asc,
+			Format: LeaderboardFormat(m.Leaderboard.Format),
+			Score:  m.Leaderboard.Score,
+		}
+	}
+
 	return MapData{
 		ID:              m.ID,
 		Owner:           m.Owner,
@@ -145,14 +193,15 @@ func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
 
 		Verification: hydrateMapVerification(m.Verification),
 		Settings: MapSettings{
-			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
-			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
-			Size:       hydrateMapSize(m.Size),
-			Variant:    hydrateMapVariant(m.OptVariant),
-			Subvariant: m.OptSubvariant,
-			Tags:       apiTags,
-			SpawnPoint: hydratePos(m.OptSpawnPoint),
-			Extra:      extra,
+			Name:        util.NilToEmpty(m.OptName), // todo should not be optional in db
+			Icon:        util.NilToEmpty(m.OptIcon), // todo should not be optional in db
+			Size:        hydrateMapSize(m.Size),
+			Variant:     hydrateMapVariant(m.OptVariant),
+			Subvariant:  m.OptSubvariant,
+			Tags:        apiTags,
+			SpawnPoint:  hydratePos(*m.OptSpawnPoint),
+			Leaderboard: &leaderboard,
+			Extra:       extra,
 		},
 
 		PublishedId: m.PublishedID,

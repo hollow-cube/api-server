@@ -760,6 +760,7 @@ components:
         completed: { type: boolean }
         playtime: { type: integer }
         ticks: { type: integer }
+        score: { type: number, format: double }
 
         dataVersion: { type: integer }
         editState: { type: object, additionalProperties: true }
@@ -917,6 +918,7 @@ components:
               completed: { type: boolean }
               playtime: { type: integer }
               ticks: { type: integer }
+              score: { type: number, format: double }
 
               dataVersion: { type: integer }
               editState: { type: object, additionalProperties: true }

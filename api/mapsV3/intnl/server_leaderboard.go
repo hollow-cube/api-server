@@ -215,8 +215,16 @@ func (s *server) RestoreMapLeaderboard(ctx context.Context, request RestoreMapLe
 	cmds := make(rueidis.Commands, len(saveStates)+1)
 	cmds[0] = s.redis.B().Del().Key(leaderboardKey).Build()
 	for i, saveState := range saveStates {
+		var score float64
+		if saveState.Score != nil {
+			score = *saveState.Score
+		} else {
+			// Legacy behavior prior to custom leaderboards
+			score = float64(max(saveState.Playtime, saveState.Ticks*50))
+		}
+
 		cmds[i+1] = s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-			ScoreMember(float64(saveState.Playtime), string(common.UUIDToBin(saveState.PlayerID))).Build()
+			ScoreMember(score, string(common.UUIDToBin(saveState.PlayerID))).Build()
 	}
 	for _, resp := range s.redis.DoMulti(ctx, cmds...) {
 		if err = resp.Error(); err != nil {

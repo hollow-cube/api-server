@@ -50,11 +50,16 @@ sql:
             go_type: "int"
 
           - column: "maps.opt_spawn_point"
+            nullable: true
+            go_type: { type: "Pos", pointer: true }
+          - column: "maps.opt_spawn_point"
             go_type: { type: "Pos" }
           - column: "maps_published.opt_spawn_point"
             go_type: { type: "Pos" }
           - column: "maps.ext"
             go_type: { type: "MapExt" }
+          - column: "maps.leaderboard"
+            go_type: { type: "Leaderboard", pointer: true }
           - column: "maps_published.ext"
             go_type: { type: "MapExt" }
 

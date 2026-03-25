@@ -128,6 +128,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		Completed:       ss.Completed,
 		Playtime:        ss.Playtime,
 		Ticks:           ss.Ticks,
+		Score:           ss.Score,
 		StateV2:         ss.StateV2,
 		DataVersion:     ss.DataVersion,
 		ProtocolVersion: ss.ProtocolVersion,
@@ -144,6 +145,9 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	if request.Body.Ticks != nil {
 		update.Ticks = *request.Body.Ticks
 		changed = true
+	}
+	if request.Body.Score != nil && update.Completed {
+		update.Score = request.Body.Score
 	}
 	if ss.Type == mapdb.SaveStateTypeEditing {
 		if request.Body.EditState != nil {
@@ -196,8 +200,9 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		return nil, fmt.Errorf("failed to fetch best save state: %w", err)
 	}
 
-	if update.Completed && (update.Type == mapdb.SaveStateTypePlaying || update.Type == mapdb.SaveStateTypeVerifying) {
-		update.Playtime = max(update.Playtime, update.Ticks*50)
+	// If completed without a score set the playtime for backwards compatibility for now.
+	if update.Score == nil && update.Completed && (update.Type == mapdb.SaveStateTypePlaying || update.Type == mapdb.SaveStateTypeVerifying) {
+		update.Score = new(float64(max(update.Playtime, update.Ticks*50)))
 	}
 
 	if err = s.store.UpsertSaveState(ctx, update); err != nil {
@@ -212,7 +217,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	go s.store.UpdateMapStats(context.TODO(), ss.MapID) // todo figure out this context since it's done in the background, the parent context will be cancelled.
 
 	s.log.Infow("updated save state", "mapId", request.MapId, "playerId", request.PlayerId,
-		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type, "playtime", update.Playtime)
+		"saveStateId", request.SaveStateId, "completed", update.Completed, "type", update.Type, "playtime", update.Playtime, "score", update.Score)
 
 	// If this is a verification and was just completed, we need to also update the map to verified.
 	// todo we need to do this update as a transaction
@@ -252,11 +257,11 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			}
 
 			err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-				ScoreMember(float64(update.Playtime), string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+				ScoreMember(*update.Score, string(common.UUIDToBin(request.PlayerId))).Build()).Error()
 			if err != nil {
 				//todo i guess this should go to DLQ or something, but we do not stop the request from succeeding in this case.
 				zap.S().Errorw("failed to update leaderboard", "mapId", request.MapId,
-					"playerId", request.PlayerId, "playTime", update.Playtime, "err", err)
+					"playerId", request.PlayerId, "score", update.Score, "err", err)
 			}
 
 			// Fetch their placement after update
@@ -326,6 +331,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 				Variant:    m.OptVariant,
 				SubVariant: svtString,
 				Playtime:   update.Playtime,
+				Score:      update.Score,
 				Difficulty: model.MapDifficulty(m.Difficulty).String(),
 			})
 		}()
@@ -364,6 +370,14 @@ func hydrateSaveState(ss mapdb.SaveState) SaveStateDataJSONResponse {
 		editingState = &state
 	}
 
+	// As a slightly weird compatibility behavior we set the score to the legacy behavior ONLY if
+	// the save state is completed without a score. This is so the server doesnt need to worry about
+	// the old behavior. Eventually we can fill in all the scores and remove this special case.
+	score := ss.Score
+	if ss.Completed && ss.Score == nil {
+		score = new(float64(max(ss.Playtime, ss.Ticks*50)))
+	}
+
 	return SaveStateDataJSONResponse{
 		Id:           ss.ID,
 		PlayerId:     ss.PlayerID,
@@ -374,6 +388,7 @@ func hydrateSaveState(ss mapdb.SaveState) SaveStateDataJSONResponse {
 		Completed:    ss.Completed,
 		Playtime:     ss.Playtime,
 		Ticks:        &ss.Ticks,
+		Score:        score,
 
 		DataVersion: ss.DataVersion,
 		PlayState:   playingState,

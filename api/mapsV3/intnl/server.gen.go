@@ -288,6 +288,7 @@ type SaveState struct {
 	PlayerId        string                  `json:"playerId"`
 	Playtime        int                     `json:"playtime"`
 	ProtocolVersion int                     `json:"protocolVersion"`
+	Score           *float64                `json:"score,omitempty"`
 	Ticks           *int                    `json:"ticks,omitempty"`
 	Type            SaveStateType           `json:"type"`
 }
@@ -401,6 +402,7 @@ type SaveStateUpdateRequest struct {
 	PlayState       *map[string]interface{} `json:"playState,omitempty"`
 	Playtime        *int                    `json:"playtime,omitempty"`
 	ProtocolVersion *int                    `json:"protocolVersion,omitempty"`
+	Score           *float64                `json:"score,omitempty"`
 	Ticks           *int                    `json:"ticks,omitempty"`
 	Type            *SaveStateType          `json:"type,omitempty"`
 }
@@ -524,6 +526,7 @@ type UpdateSaveStateJSONBody struct {
 	PlayState       *map[string]interface{} `json:"playState,omitempty"`
 	Playtime        *int                    `json:"playtime,omitempty"`
 	ProtocolVersion *int                    `json:"protocolVersion,omitempty"`
+	Score           *float64                `json:"score,omitempty"`
 	Ticks           *int                    `json:"ticks,omitempty"`
 	Type            *SaveStateType          `json:"type,omitempty"`
 }
