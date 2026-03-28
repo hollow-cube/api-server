@@ -236,6 +236,15 @@ func hydratePublishedMap(m mapdb.PublishedMap) MapData {
 		extra["boat"] = true
 	}
 
+	leaderboard := defaultPlaytimeLeaderboard
+	if m.Leaderboard != nil {
+		leaderboard = Leaderboard{
+			Asc:    m.Leaderboard.Asc,
+			Format: LeaderboardFormat(m.Leaderboard.Format),
+			Score:  m.Leaderboard.Score,
+		}
+	}
+
 	return MapData{
 		ID:              m.ID,
 		Owner:           m.Owner,
@@ -245,14 +254,15 @@ func hydratePublishedMap(m mapdb.PublishedMap) MapData {
 
 		Verification: hydrateMapVerification(m.Verification),
 		Settings: MapSettings{
-			Name:       util.NilToEmpty(m.OptName), // todo should not be optional in db
-			Icon:       util.NilToEmpty(m.OptIcon), // todo should not be optional in db
-			Size:       hydrateMapSize(m.Size),
-			Variant:    hydrateMapVariant(m.OptVariant),
-			Subvariant: m.OptSubvariant,
-			Tags:       m.OptTags,
-			SpawnPoint: hydratePos(m.OptSpawnPoint),
-			Extra:      extra,
+			Name:        util.NilToEmpty(m.OptName), // todo should not be optional in db
+			Icon:        util.NilToEmpty(m.OptIcon), // todo should not be optional in db
+			Size:        hydrateMapSize(m.Size),
+			Variant:     hydrateMapVariant(m.OptVariant),
+			Subvariant:  m.OptSubvariant,
+			Tags:        m.OptTags,
+			SpawnPoint:  hydratePos(m.OptSpawnPoint),
+			Leaderboard: &leaderboard,
+			Extra:       extra,
 		},
 
 		PublishedId: m.PublishedID,

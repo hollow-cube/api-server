@@ -485,7 +485,7 @@ func (q *Queries) GetMultiMapProgress(ctx context.Context, playerID string, colu
 }
 
 const getPublishedMapById = `-- name: GetPublishedMapById :one
-select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes, tags, play_count, win_count, clear_rate, difficulty
+select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes, leaderboard, tags, play_count, win_count, clear_rate, difficulty
 from maps_published
 where id = $1
 `
@@ -527,6 +527,7 @@ func (q *Queries) GetPublishedMapById(ctx context.Context, id string) (Published
 		&i.Contest,
 		&i.Listed,
 		&i.TotalLikes,
+		&i.Leaderboard,
 		&i.Tags,
 		&i.PlayCount,
 		&i.WinCount,
@@ -537,7 +538,7 @@ func (q *Queries) GetPublishedMapById(ctx context.Context, id string) (Published
 }
 
 const getPublishedMapByPublishedId = `-- name: GetPublishedMapByPublishedId :one
-select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes, tags, play_count, win_count, clear_rate, difficulty
+select id, owner, m_type, created_at, updated_at, verification, authz_key, file_id, legacy_map_id, published_id, published_at, quality_override, opt_name, opt_icon, size, opt_variant, opt_subvariant, opt_spawn_point, opt_only_sprint, opt_no_sprint, opt_no_jump, opt_no_sneak, opt_boat, opt_extra, opt_tags, ext, deleted_at, deleted_by, deleted_reason, protocol_version, contest, listed, total_likes, leaderboard, tags, play_count, win_count, clear_rate, difficulty
 from maps_published
 where published_id = $1
 `
@@ -579,6 +580,7 @@ func (q *Queries) GetPublishedMapByPublishedId(ctx context.Context, publishedID 
 		&i.Contest,
 		&i.Listed,
 		&i.TotalLikes,
+		&i.Leaderboard,
 		&i.Tags,
 		&i.PlayCount,
 		&i.WinCount,
@@ -731,7 +733,7 @@ func (q *Queries) MultiGetMapWithTagsById(ctx context.Context, dollar_1 []string
 }
 
 const multiGetPublishedMapsById = `-- name: MultiGetPublishedMapsById :many
-select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.verification, maps_published.authz_key, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.ext, maps_published.deleted_at, maps_published.deleted_by, maps_published.deleted_reason, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.total_likes, maps_published.tags, maps_published.play_count, maps_published.win_count, maps_published.clear_rate, maps_published.difficulty
+select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.verification, maps_published.authz_key, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.ext, maps_published.deleted_at, maps_published.deleted_by, maps_published.deleted_reason, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.total_likes, maps_published.leaderboard, maps_published.tags, maps_published.play_count, maps_published.win_count, maps_published.clear_rate, maps_published.difficulty
 from maps_published
   join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
 order by map_ids.ord
@@ -780,6 +782,7 @@ func (q *Queries) MultiGetPublishedMapsById(ctx context.Context, dollar_1 []stri
 			&i.Contest,
 			&i.Listed,
 			&i.TotalLikes,
+			&i.Leaderboard,
 			&i.Tags,
 			&i.PlayCount,
 			&i.WinCount,
@@ -854,7 +857,7 @@ func (q *Queries) RemoveMapBuilder(ctx context.Context, mapID string, playerID s
 }
 
 const searchMaps = `-- name: SearchMaps :many
-select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.verification, maps_published.authz_key, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.ext, maps_published.deleted_at, maps_published.deleted_by, maps_published.deleted_reason, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.total_likes, maps_published.tags, maps_published.play_count, maps_published.win_count, maps_published.clear_rate, maps_published.difficulty,
+select maps_published.id, maps_published.owner, maps_published.m_type, maps_published.created_at, maps_published.updated_at, maps_published.verification, maps_published.authz_key, maps_published.file_id, maps_published.legacy_map_id, maps_published.published_id, maps_published.published_at, maps_published.quality_override, maps_published.opt_name, maps_published.opt_icon, maps_published.size, maps_published.opt_variant, maps_published.opt_subvariant, maps_published.opt_spawn_point, maps_published.opt_only_sprint, maps_published.opt_no_sprint, maps_published.opt_no_jump, maps_published.opt_no_sneak, maps_published.opt_boat, maps_published.opt_extra, maps_published.opt_tags, maps_published.ext, maps_published.deleted_at, maps_published.deleted_by, maps_published.deleted_reason, maps_published.protocol_version, maps_published.contest, maps_published.listed, maps_published.total_likes, maps_published.leaderboard, maps_published.tags, maps_published.play_count, maps_published.win_count, maps_published.clear_rate, maps_published.difficulty,
        count(*) over () as total_count
 from maps_published
 where listed = true
@@ -947,6 +950,7 @@ func (q *Queries) SearchMaps(ctx context.Context, arg SearchMapsParams) ([]Searc
 			&i.PublishedMap.Contest,
 			&i.PublishedMap.Listed,
 			&i.PublishedMap.TotalLikes,
+			&i.PublishedMap.Leaderboard,
 			&i.PublishedMap.Tags,
 			&i.PublishedMap.PlayCount,
 			&i.PublishedMap.WinCount,

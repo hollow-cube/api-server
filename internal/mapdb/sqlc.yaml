@@ -60,6 +60,8 @@ sql:
             go_type: { type: "MapExt" }
           - column: "maps.leaderboard"
             go_type: { type: "Leaderboard", pointer: true }
+          - column: "maps_published.leaderboard"
+            go_type: { type: "Leaderboard", pointer: true }
           - column: "maps_published.ext"
             go_type: { type: "MapExt" }
 
