@@ -34,6 +34,7 @@ var mapUploadDuration = prometheus.NewHistogram(
 	},
 )
 
+// v4
 func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error) {
 	if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
 		// TODO: re-implement

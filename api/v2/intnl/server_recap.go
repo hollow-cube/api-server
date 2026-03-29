@@ -8,6 +8,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/playerdb"
 )
 
+// v4 interaction
 func (s *Server) GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error) {
 	recap, err := s.store.GetRecapByPlayerId(ctx, request.PlayerId, request.Year)
 	if errors.Is(err, playerdb.ErrNoRows) {

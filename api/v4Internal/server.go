@@ -1,12 +1,17 @@
 package v4Internal
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/ox"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -48,6 +53,17 @@ func NewServer(p ServerParams) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// player fetches the given player's data, mapping db errors to the correct api error.
+func (s *Server) player(ctx context.Context, id string) (pd playerdb.PlayerData, err error) {
+	pd, err = s.playerStore.GetPlayerData(ctx, id)
+	if errors.Is(err, playerdb.ErrNoRows) {
+		return pd, ox.NotFound{}
+	} else if err != nil {
+		return pd, fmt.Errorf("failed to get player data: %w", err)
+	}
+	return
 }
 
 const (

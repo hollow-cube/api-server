@@ -14,7 +14,7 @@ base:
     SESSION_HTTP_ADDRESS: "0.0.0.0"
     SESSION_HTTP_PORT: "9124"
 
-    SESSION_POSTHOG_ENDPOINT: "http://api-server.mapmaker.svc.cluster.local:9124/posthog"
+    SESSION_POSTHOG_ENDPOINT: "http://api-server.mapmaker:9124/posthog"
 
     SESSION_REDIS_ADDRESS: "redis-valkey.mapmaker:6379"
     SESSION_NATS_SERVERS: "nats://nats:4222"

@@ -81,6 +81,22 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /maps:
+        post:
+            operationId: createMap
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "201":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /maps/{mapId}:
         get:
             operationId: getMap

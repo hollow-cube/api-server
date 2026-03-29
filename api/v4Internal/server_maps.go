@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
 	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/hog"
 	"github.com/hollow-cube/api-server/pkg/ox"
 )
 
@@ -25,6 +27,70 @@ type (
 		PlayerID string `path:"playerId"`
 	}
 )
+
+type CreateMapRequest struct {
+	Owner string  `json:"owner"`
+	Size  MapSize `json:"size"`
+}
+
+// POST /maps
+func (s *Server) CreateMap(ctx context.Context, body CreateMapRequest) (*MapData, error) {
+	size, ok := sizeIndex[body.Size]
+	if !ok {
+		return nil, ox.BadRequest{}
+	}
+
+	// Ensure they have an available slot
+	pd, err := s.player(ctx, body.Owner)
+	if err != nil {
+		return nil, err
+	}
+	slots, err := s.mapStore.GetMapSlots(ctx, pd.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get map slots: %w", err)
+	}
+	if len(slots) >= pd.TotalMapSlots() {
+		return nil, fmt.Errorf("player has no available map slots")
+	}
+
+	// Ensure they have permission for the size map they are creating
+	// TODO: should check here, but for now we assume the server doesnt make a mistake.
+
+	mapParams, err := model.CreateDefaultMap(body.Owner, int(size))
+	if err != nil {
+		return nil, err
+	}
+	m, err := mapdb.Tx(ctx, s.mapStore, func(ctx context.Context, tx *mapdb.Store) (m mapdb.Map, err error) {
+		m, err = tx.CreateMap(ctx, mapParams)
+		if err != nil {
+			return m, fmt.Errorf("db write failed: %w", err)
+		}
+
+		err = tx.InsertMapSlot(ctx, mapdb.InsertMapSlotParams{
+			PlayerID:  pd.ID,
+			MapID:     m.ID,
+			CreatedAt: time.Now(),
+			Index:     -1, // Always -1 for v2 slots
+		})
+		if err != nil {
+			return m, fmt.Errorf("insert slot failed: %w", err)
+		}
+
+		return
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	hog.Enqueue(hog.Capture{
+		DistinctId: body.Owner,
+		Event:      "map_created",
+		Properties: hog.NewProperties().
+			Set("size", body.Size),
+	})
+
+	return new(hydrateMap(m, []mapdb.MapTag{})), nil
+}
 
 // GET /maps/{mapId}
 func (s *Server) GetMap(ctx context.Context, request MapRequest) (*MapData, error) {
