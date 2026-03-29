@@ -415,17 +415,6 @@ func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerR
 		return fmt.Errorf("failed to approve pending map builder: %w", err)
 	}
 
-	// TODO: would be nice if notifications were strongly typed structs
-	// Tell the map author their invite was accepted
-	err = s.notifications.Create(ctx, m.Owner, notification.CreateInput{
-		Type:      "map_builder_accepted",
-		ExpiresIn: nil,
-		Data: map[string]interface{}{
-			"mapId":     m.ID,
-			"builderId": pd.ID,
-		},
-	})
-
 	return nil
 }
 

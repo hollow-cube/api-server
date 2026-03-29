@@ -70,6 +70,7 @@ func (m *managerImpl) List(ctx context.Context, playerId string, unreadOnly bool
 	return results, totalCount, nil
 }
 
+// TODO: would be nice if notifications were strongly typed structs
 func (m *managerImpl) Create(ctx context.Context, targetId string, input CreateInput) error {
 	var replace = input.ReplaceUnread
 	var expiresAt *time.Time = nil
