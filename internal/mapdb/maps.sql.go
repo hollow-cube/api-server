@@ -429,29 +429,31 @@ func (q *Queries) GetMapsPlayerIsBuilderOn(ctx context.Context, playerID string)
 }
 
 const getMultiMapProgress = `-- name: GetMultiMapProgress :many
-with ranked_save_states as (select m.id::text as map_id,
-                                   (case when ss.completed then 1 else 0 end)::int8 as completed,
-                                   ss.playtime::int8 as playtime,
-                                   ss.updated
-                            from (select unnest($2::uuid[]) as id) m
-                              left join
-                            save_states ss
-                            on
-                              ss.map_id = m.id and ss.player_id = $1
-                            where ss.deleted is null
-                              and (ss.type = 'playing' or ss.type = 'verifying')),
-     progress_and_playtime as (select map_id,
-                                      coalesce(max(completed), 0) as progress,
-                                      case
-                                        when max(completed) = 1 then min(playtime) filter (where completed = 1)
-                                        else (select playtime
-                                              from ranked_save_states rss
-                                              where rss.map_id = rs.map_id
-                                              order by updated desc
-                                              limit 1)
-                                        end as playtime
-                               from ranked_save_states rs
-                               group by map_id)
+with ranked_save_states as
+       (select m.id::text as map_id,
+               (case when ss.completed then 1 else 0 end)::int8 as completed,
+               (round(greatest(ss.playtime, ss.ticks * 20) / 50.0) * 50)::int8 as playtime,
+               ss.updated
+        from (select unnest($2::uuid[]) as id) m
+          left join
+        save_states ss
+        on
+          ss.map_id = m.id and ss.player_id = $1
+        where ss.deleted is null
+          and (ss.type = 'playing' or ss.type = 'verifying')),
+     progress_and_playtime as
+       (select map_id,
+               coalesce(max(completed), 0) as progress,
+               case
+                 when max(completed) = 1 then min(playtime) filter (where completed = 1)
+                 else (select playtime
+                       from ranked_save_states rss
+                       where rss.map_id = rs.map_id
+                       order by updated desc
+                       limit 1)
+                 end as playtime
+        from ranked_save_states rs
+        group by map_id)
 select map_id::text as map_id,
        progress::int8 + 1 as progress,
        playtime::int8 as playtime
