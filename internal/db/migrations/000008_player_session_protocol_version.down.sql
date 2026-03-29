@@ -1,1 +1,0 @@
-alter table player_sessions drop column protocol_version;

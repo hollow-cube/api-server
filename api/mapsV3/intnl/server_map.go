@@ -570,20 +570,20 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 		}}, nil
 	}
 
-	newVerification := int64(model.VerificationPending)
-	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update map: %w", err)
-	}
-
 	// If we are starting to verify, destory any possible editing worlds.
 	if err = s.worlds.DestroyAndWait(ctx, m.ID); err != nil {
 		// We tried our best, continue anyway. The edit worlds will fail to save from now on.
 		zap.S().Errorw("failed to destroy worlds", "mapId", m.ID, "error", err)
 	}
 
-	// TODO: this still isnt quite there yet. We set verification pending prior to destorying worlds meaning
-	//  they will always fail to save. We need to allow saving for these worlds only (ie created prior to now)
+	// TODO: there is kind of a race here for new build worlds to be created in this gap before setting the verification.
+	// However it kinda also doesnt matter for safety because that world will fail to save.
+
+	newVerification := int64(model.VerificationPending)
+	err = s.store.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update map: %w", err)
+	}
 
 	return BeginMapVerification200Response{}, nil
 }

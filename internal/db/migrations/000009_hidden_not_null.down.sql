@@ -1,1 +1,0 @@
-alter table player_sessions alter column hidden drop not null;

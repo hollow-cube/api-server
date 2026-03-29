@@ -99,6 +99,24 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		}
 	}
 
+	// In dev we always add the devserver instance (technically when running with multi-map
+	// server in tilt this shouldnt be here but in practice it doesnt matter that much)
+	if p.Config.Env == "tilt" {
+		_, err = p.Queries.GetServerState(ctx, "devserver")
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = p.Queries.InsertServerState(ctx, db.InsertServerStateParams{
+				ID:        "devserver",
+				Role:      "map",
+				Status:    1,
+				ClusterIp: "127.0.0.1",
+			})
+			if err != nil {
+				zap.S().Errorw("failed to insert devserver", "error", err)
+			}
+		}
+
+	}
+
 	return &Tracker{
 		log:     zap.S(),
 		queries: p.Queries,

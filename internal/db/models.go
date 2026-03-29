@@ -17,6 +17,13 @@ type MapState struct {
 	State  string
 }
 
+type MapWorld struct {
+	ID        string
+	MapID     string
+	ServerID  string
+	CreatedAt time.Time
+}
+
 type PlayerSession struct {
 	PlayerID        string
 	CreatedAt       time.Time
