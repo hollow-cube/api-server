@@ -576,17 +576,14 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 		return nil, fmt.Errorf("failed to update map: %w", err)
 	}
 
-	// If we are starting to verify, send out a drain to destory any possible editing worlds.
-	// TODO: This doesnt really work. If there are people in the world it wont have time to save
-	//  and the verifying world will be out of date which would allow publishing impossible maps
-	err = s.jetStream.PublishJSONAsync(ctx, model.MapUpdateMessage{
-		Action:      model.MapUpdate_Drain,
-		ID:          request.MapId,
-		DrainReason: new("verification"),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to publish map update: %w", err)
+	// If we are starting to verify, destory any possible editing worlds.
+	if err = s.worlds.DestroyAndWait(ctx, m.ID); err != nil {
+		// We tried our best, continue anyway. The edit worlds will fail to save from now on.
+		zap.S().Errorw("failed to destroy worlds", "mapId", m.ID, "error", err)
 	}
+
+	// TODO: this still isnt quite there yet. We set verification pending prior to destorying worlds meaning
+	//  they will always fail to save. We need to allow saving for these worlds only (ie created prior to now)
 
 	return BeginMapVerification200Response{}, nil
 }

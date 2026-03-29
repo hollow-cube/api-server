@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-github/v56/github"
 	"github.com/google/uuid"
-	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
+	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -84,7 +84,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 
 	instanceName := t.isolateConfig.DefaultSize
 	instanceSize := t.isolateConfig.Instances[t.isolateConfig.DefaultSize]
-	if rawWorldSize, ok := t.isolateConfig.WorldSizeMapping[string(mapIntnlV3.MapSizeToAPI(m.Size))]; ok && rawWorldSize != "" {
+	if rawWorldSize, ok := t.isolateConfig.WorldSizeMapping[mapSizeName(m.Size)]; ok && rawWorldSize != "" {
 		if worldSize, ok := t.isolateConfig.Instances[rawWorldSize]; ok {
 			instanceName = rawWorldSize
 			instanceSize = worldSize
@@ -220,4 +220,21 @@ func findImageTag() (string, map[string]string, error) {
 		return "", nil, fmt.Errorf("failed to read %s: %w", tiltFileName, err)
 	}
 	return string(data), nil, nil
+}
+
+func mapSizeName(size int64) string {
+	switch size {
+	case model.MapSizeNormal:
+		return "normal"
+	case model.MapSizeLarge:
+		return "large"
+	case model.MapSizeMassive:
+		return "massive"
+	case model.MapSizeColossal:
+		return "colossal"
+	case model.MapSizeUnlimited:
+		return "unlimited"
+	default:
+		return "normal"
+	}
 }

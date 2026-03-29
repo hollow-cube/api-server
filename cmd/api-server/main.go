@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/hollow-cube/api-server/api/v1Public"
+	"github.com/hollow-cube/api-server/internal/world"
 
 	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	mapTerraformV3 "github.com/hollow-cube/api-server/api/mapsV3/terraform"
@@ -43,7 +44,6 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/player"
 	"github.com/hollow-cube/api-server/internal/pkg/server"
 	"github.com/hollow-cube/api-server/internal/pkg/tracefx"
-	"github.com/hollow-cube/api-server/internal/pkg/world"
 	"github.com/hollow-cube/tebex-go"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"

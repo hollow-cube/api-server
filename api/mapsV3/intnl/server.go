@@ -12,6 +12,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/world"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -30,6 +31,7 @@ type ServerParams struct {
 	Redis       rueidis.Client
 	JetStream   *natsutil.JetStreamWrapper
 	Metrics     metric.Writer
+	Worlds      *world.Tracker
 
 	Object object.Client `name:"object-mapmaker"`
 
@@ -44,6 +46,7 @@ type server struct {
 	redis       rueidis.Client
 	jetStream   *natsutil.JetStreamWrapper
 	metrics     metric.Writer
+	worlds      *world.Tracker
 
 	objectClient object.Client
 
@@ -70,6 +73,7 @@ func NewServer(params ServerParams) (StrictServerInterface, error) {
 		redis:         params.Redis,
 		jetStream:     params.JetStream,
 		metrics:       params.Metrics,
+		worlds:        params.Worlds,
 		objectClient:  params.Object,
 		notifications: params.NotificationManager,
 	}, nil
