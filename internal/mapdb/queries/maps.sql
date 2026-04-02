@@ -209,7 +209,7 @@ where map_id = $1;
 with ranked_save_states as
        (select m.id::text as map_id,
                (case when ss.completed then 1 else 0 end)::int8 as completed,
-               (round(greatest(ss.playtime, ss.ticks * 20) / 50.0) * 50)::int8 as playtime,
+               (greatest(round(ss.playtime / 50.0), ss.ticks) * 50)::int8 as playtime,
                ss.updated
         from (select unnest($2::uuid[]) as id) m
           left join

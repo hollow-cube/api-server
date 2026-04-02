@@ -43,8 +43,8 @@ where ss.deleted is null
 order by case
            when m.leaderboard is not null
              and (m.leaderboard ->> 'asc')::boolean = false
-             then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
-           else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
+             then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
+           else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
            end
 limit 1;
 
@@ -57,7 +57,7 @@ where deleted is null
   and type = 'playing'
   and completed = true
   and created > '2024-04-05T09:00:00-04:00'::timestamptz
-order by coalesce(score, greatest(playtime, ticks * 20))
+order by coalesce(score, greatest(playtime, ticks * 50))
 limit 1;
 
 -- name: CreateSaveState :one
