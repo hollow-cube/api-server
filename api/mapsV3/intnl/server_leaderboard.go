@@ -81,6 +81,12 @@ func (s *server) GetGlobalLeaderboard(ctx context.Context, request GetGlobalLead
 }
 
 func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboardRequestObject) (GetMapLeaderboardResponseObject, error) {
+	m, err := s.store.GetMapById(ctx, request.MapId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch map: %w", err)
+	}
+	isAsc := m.Leaderboard == nil || m.Leaderboard.Asc
+
 	playerId := request.Params.PlayerId
 	if request.LeaderboardName != "playtime" {
 		return GetMapLeaderboard404Response{}, nil
@@ -88,8 +94,14 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 	leaderboardKey := mapLeaderboardKey(request.MapId, request.LeaderboardName)
 
 	// Fetch top 10
-	entries, err := s.redis.Do(ctx, s.redis.B().Zrange().Key(leaderboardKey).
-		Min("0").Max("9").Withscores().Build()).AsZScores()
+	var entries []rueidis.ZScore
+	if isAsc {
+		entries, err = s.redis.Do(ctx, s.redis.B().Zrange().Key(leaderboardKey).
+			Min("0").Max("9").Withscores().Build()).AsZScores()
+	} else {
+		entries, err = s.redis.Do(ctx, s.redis.B().Zrevrange().Key(leaderboardKey).
+			Start(0).Stop(9).Withscores().Build()).AsZScores()
+	}
 	if err != nil {
 		if errors.Is(err, rueidis.Nil) {
 			// Always return an empty leaderboard if it does not exist (yet)
@@ -103,8 +115,14 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 	// Fetch the player score (if present)
 	var playerScore []int64
 	if playerId != nil && *playerId != "" {
-		rankScore, err := s.redis.Do(ctx, s.redis.B().Zrank().Key(leaderboardKey).
-			Member(string(common.UUIDToBin(*playerId))).Withscore().Build()).AsIntSlice()
+		var rankScore []int64
+		if isAsc {
+			rankScore, err = s.redis.Do(ctx, s.redis.B().Zrank().Key(leaderboardKey).
+				Member(string(common.UUIDToBin(*playerId))).Withscore().Build()).AsIntSlice()
+		} else {
+			rankScore, err = s.redis.Do(ctx, s.redis.B().Zrevrank().Key(leaderboardKey).
+				Member(string(common.UUIDToBin(*playerId))).Withscore().Build()).AsIntSlice()
+		}
 		if errors.Is(err, rueidis.Nil) {
 			// Player does not have a score on this map yet, ignore.
 		} else if err != nil {
@@ -116,10 +134,12 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 
 	lb := cachedLBToAPI(entries, playerId, playerScore)
 
-	// Normalize the tied times
 	lastScore, lastRank := -1, 0
 	for i, entry := range lb.Top {
-		score := int(math.Round(float64(entry.Score)/50.0)) * 50 // round to 50ms
+		score := entry.Score
+		if m.Leaderboard == nil || m.Leaderboard.Format == "time" {
+			score = int(math.Round(float64(score)/50.0)) * 50 // round to 50ms
+		}
 		if lastScore != score {
 			lastRank = i + 1 // rank starts at 1
 			lastScore = score
@@ -131,7 +151,10 @@ func (s *server) GetMapLeaderboard(ctx context.Context, request GetMapLeaderboar
 		}
 	}
 	if lb.Player != nil {
-		score := int(math.Round(float64(lb.Player.Score)/50.0)) * 50
+		score := lb.Player.Score
+		if m.Leaderboard == nil || m.Leaderboard.Format == "time" {
+			score = int(math.Round(float64(score)/50.0)) * 50 // round to 50ms
+		}
 		for _, entry := range lb.Top {
 			if score == entry.Score {
 				lb.Player = &LeaderboardEntry{

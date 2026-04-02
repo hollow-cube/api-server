@@ -231,8 +231,8 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		}
 	}
 
-	var currentPlacement = -1
-	var newPlacement = -1
+	currentPlacement := int64(-1)
+	newPlacement := int64(-1)
 
 	// If the map was just completed, we should add this playtime to the leaderboard.
 	if update.Completed && (update.Type == mapdb.SaveStateTypePlaying || update.Type == mapdb.SaveStateTypeVerifying) {
@@ -243,21 +243,23 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 		// This is only relevant for parkour maps
 		if m.OptVariant == string(model.Parkour) {
+			isAsc := m.Leaderboard == nil || m.Leaderboard.Asc
 			leaderboardKey := mapLeaderboardKey(request.MapId, "playtime")
 
 			// Fetch their placement before update
-			var placement int64
-			placement, err = s.redis.Do(ctx, s.redis.B().Zrank().Key(leaderboardKey).Member(string(common.UUIDToBin(request.PlayerId))).Build()).AsInt64()
+			currentPlacement, err = s.getLeaderboardPos(ctx, request.MapId, request.PlayerId, isAsc)
 			if err != nil {
-				if !errors.Is(err, rueidis.Nil) {
-					return nil, fmt.Errorf("failed to fetch leaderboard placement: %w", err)
-				}
-			} else {
-				currentPlacement = int(placement)
+				return nil, fmt.Errorf("failed to fetch leaderboard placement: %w", err)
 			}
 
-			err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
-				ScoreMember(*update.Score, string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+			// the types on redis commands are kinda weird so we just duplicate the whole thing here.
+			if isAsc {
+				err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Lt().ScoreMember().
+					ScoreMember(*update.Score, string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+			} else {
+				err = s.redis.Do(ctx, s.redis.B().Zadd().Key(leaderboardKey).Gt().ScoreMember().
+					ScoreMember(*update.Score, string(common.UUIDToBin(request.PlayerId))).Build()).Error()
+			}
 			if err != nil {
 				//todo i guess this should go to DLQ or something, but we do not stop the request from succeeding in this case.
 				zap.S().Errorw("failed to update leaderboard", "mapId", request.MapId,
@@ -265,13 +267,9 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 			}
 
 			// Fetch their placement after update
-			placement, err = s.redis.Do(ctx, s.redis.B().Zrank().Key(leaderboardKey).Member(string(common.UUIDToBin(request.PlayerId))).Build()).AsInt64()
+			newPlacement, err = s.getLeaderboardPos(ctx, request.MapId, request.PlayerId, isAsc)
 			if err != nil {
-				if !errors.Is(err, rueidis.Nil) {
-					return nil, fmt.Errorf("failed to fetch leaderboard placement: %w", err)
-				}
-			} else {
-				newPlacement = int(placement)
+				return nil, fmt.Errorf("failed to fetch leaderboard placement: %w", err)
 			}
 		}
 	}
@@ -299,7 +297,7 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		//resp.Rewards = &rmPsRes
 
 		if newPlacement > currentPlacement {
-			resp.NewPlacement = &newPlacement
+			resp.NewPlacement = new(int(newPlacement))
 
 			// Broadcast a message about the higher placement position
 			// IF map quality >= outstanding && placement is 1st/2nd/3rd
@@ -394,4 +392,21 @@ func hydrateSaveState(ss mapdb.SaveState) SaveStateDataJSONResponse {
 		PlayState:   playingState,
 		EditState:   editingState,
 	}
+}
+
+func (s *server) getLeaderboardPos(ctx context.Context, mapId, playerId string, isAsc bool) (placement int64, err error) {
+	leaderboardKey := mapLeaderboardKey(mapId, "playtime")
+	if isAsc {
+		placement, err = s.redis.Do(ctx, s.redis.B().Zrank().Key(leaderboardKey).
+			Member(string(common.UUIDToBin(playerId))).Build()).AsInt64()
+	} else {
+		placement, err = s.redis.Do(ctx, s.redis.B().Zrevrank().Key(leaderboardKey).
+			Member(string(common.UUIDToBin(playerId))).Build()).AsInt64()
+	}
+	if errors.Is(err, rueidis.Nil) {
+		return -1, nil
+	} else if err != nil {
+		return -1, err
+	}
+	return placement, nil
 }

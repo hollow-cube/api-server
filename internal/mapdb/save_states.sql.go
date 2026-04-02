@@ -153,14 +153,20 @@ func (q *Queries) GetAllBestCompletedSaveStatesForMap(ctx context.Context, mapID
 }
 
 const getBestSaveState = `-- name: GetBestSaveState :one
-select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
-from save_states
-where deleted is null
-  and map_id = $1
-  and player_id = $2
-  and type = 'playing'
-  and completed = true
-order by coalesce(score, greatest(playtime, ticks*20))
+select ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score
+from save_states ss
+  join maps m on m.id = ss.map_id
+where ss.deleted is null
+  and ss.map_id = $1
+  and ss.player_id = $2
+  and ss.type = 'playing'
+  and ss.completed = true
+order by case
+           when m.leaderboard is not null
+             and (m.leaderboard ->> 'asc')::boolean = false
+             then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
+           else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
+           end
 limit 1
 `
 
@@ -195,7 +201,7 @@ where deleted is null
   and type = 'playing'
   and completed = true
   and created > '2024-04-05T09:00:00-04:00'::timestamptz
-order by coalesce(score, greatest(playtime, ticks*20))
+order by coalesce(score, greatest(playtime, ticks * 20))
 limit 1
 `
 
@@ -370,7 +376,8 @@ func (q *Queries) Unsafe_DeleteMapSaveStates(ctx context.Context, mapID string) 
 
 const upsertSaveState = `-- name: UpsertSaveState :exec
 insert into public.save_states
-(id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version, protocol_version)
+(id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version,
+ protocol_version)
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 on conflict (id, map_id, player_id) do update
   set updated          = excluded.updated,

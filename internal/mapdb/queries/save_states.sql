@@ -32,14 +32,20 @@ order by updated desc
 limit 1;
 
 -- name: GetBestSaveState :one
-select *
-from save_states
-where deleted is null
-  and map_id = $1
-  and player_id = $2
-  and type = 'playing'
-  and completed = true
-order by coalesce(score, greatest(playtime, ticks*20))
+select ss.*
+from save_states ss
+  join maps m on m.id = ss.map_id
+where ss.deleted is null
+  and ss.map_id = $1
+  and ss.player_id = $2
+  and ss.type = 'playing'
+  and ss.completed = true
+order by case
+           when m.leaderboard is not null
+             and (m.leaderboard ->> 'asc')::boolean = false
+             then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
+           else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 20))
+           end
 limit 1;
 
 -- name: GetBestSaveStateSinceBeta :one
@@ -51,7 +57,7 @@ where deleted is null
   and type = 'playing'
   and completed = true
   and created > '2024-04-05T09:00:00-04:00'::timestamptz
-order by coalesce(score, greatest(playtime, ticks*20))
+order by coalesce(score, greatest(playtime, ticks * 20))
 limit 1;
 
 -- name: CreateSaveState :one
@@ -62,7 +68,8 @@ returning *;
 
 -- name: UpsertSaveState :exec
 insert into public.save_states
-(id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version, protocol_version)
+(id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version,
+ protocol_version)
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 on conflict (id, map_id, player_id) do update
   set updated          = excluded.updated,
