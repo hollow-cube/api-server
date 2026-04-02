@@ -49,21 +49,26 @@ order by top_times desc
 limit 10;
 
 -- name: GetTopTimesLeaderboardForPlayer :one
+with
+    shortest_playtimes as (
+        select map_id, min((greatest(round(playtime / 50.0), ticks) * 50)::bigint) as min_playtime
+        from save_states
+                 join maps on save_states.map_id = maps.id
+        where deleted is null
+          and completed = true
+          and playtime != 0
+          and (type = 'playing' or type = 'verifying')
+          and maps.published_at is not null
+          and maps.deleted_at is null
+          and coalesce(maps.leaderboard ->> 'format', 'time') = 'time'
+          and coalesce(maps.leaderboard ->> 'asc', 'true') = 'true'
+        group by map_id
+    )
 select count(distinct s1.map_id) as top_times
-from (select map_id, min((round(greatest(playtime, ticks * 20) / 50.0) * 50)::bigint) as min_playtime
-      from save_states
-        join maps on save_states.map_id = maps.id
-      where deleted is null
-        and completed = true
-        and playtime != 0
-        and (type = 'playing' or type = 'verifying')
-        and maps.published_at is not null
-        and maps.deleted_at is null
-        and coalesce(maps.leaderboard ->> 'format', 'time') = 'time'
-      group by map_id) as shortest_playtimes
+from shortest_playtimes
   join save_states as s1
        on s1.map_id = shortest_playtimes.map_id
-         and (round(greatest(s1.playtime, s1.ticks * 20) / 50.0) * 50)::bigint = shortest_playtimes.min_playtime
+         and (greatest(round(s1.playtime / 50.0), s1.ticks) * 50)::bigint = shortest_playtimes.min_playtime
          and s1.player_id = $1
 where s1.deleted is null
   and s1.completed = true;
