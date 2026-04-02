@@ -14,9 +14,9 @@ base:
     SESSION_HTTP_PORT: "9124"
     SESSION_REDIS_ADDRESS: "redis-master:6379"
 
-    SESSION_POSTGRES_PLAYERS_URI: "postgres://postgres:postgres@postgres-postgresql:5432/player-service?sslmode=disable"
-    SESSION_POSTGRES_MAPS_URI: "postgres://postgres:postgres@postgres-postgresql:5432/map-service?sslmode=disable"
-    SESSION_POSTGRES_URI: "postgres://postgres:postgres@postgres-postgresql:5432/session-service?sslmode=disable"
+    SESSION_POSTGRES_PLAYERS_URI: "postgres://postgres:postgres@postgres-postgresql:5432/api-server?sslmode=disable"
+    SESSION_POSTGRES_MAPS_URI: "postgres://postgres:postgres@postgres-postgresql:5432/api-server?sslmode=disable"
+    SESSION_POSTGRES_URI: "postgres://postgres:postgres@postgres-postgresql:5432/api-server?sslmode=disable"
 
     SESSION_NATS_SERVERS: "nats://nats:4222"
 
