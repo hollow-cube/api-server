@@ -38,6 +38,7 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/display-name", h.getPlayerDisplayName)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/hypercube", h.getPlayerHypercube)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
 }
@@ -337,6 +338,17 @@ func (h *handlers) getPlayerDisplayName(w http.ResponseWriter, r *http.Request) 
 	var req PlayerRequest
 	req.PlayerId = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerDisplayName(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getPlayerHypercube(w http.ResponseWriter, r *http.Request) {
+	var req PlayerRequest
+	req.PlayerId = r.PathValue("playerId")
+	resp, err := h.server.GetPlayerHypercube(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return

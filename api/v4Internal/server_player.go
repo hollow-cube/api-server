@@ -175,6 +175,32 @@ func (s *Server) GetPlayerDisplayName(ctx context.Context, request PlayerRequest
 	return s.computeDisplayName(pd), nil
 }
 
+type GetPlayerHypercubeResponse struct {
+	Exp   int       `json:"exp"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+}
+
+// GET /players/{playerId}/hypercube
+func (s *Server) GetPlayerHypercube(ctx context.Context, request PlayerRequest) (*GetPlayerHypercubeResponse, error) {
+	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
+	if errors.Is(err, playerdb.ErrNoRows) {
+		return nil, ox.NotFound{}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to get hypercube stats: %w", err)
+	}
+
+	if pd.HypercubeStart == nil || pd.HypercubeEnd == nil || (*pd.HypercubeEnd).Before(time.Now()) {
+		return nil, ox.NotFound{}
+	}
+
+	return &GetPlayerHypercubeResponse{
+		Exp:   0,
+		Start: *pd.HypercubeStart,
+		End:   *pd.HypercubeEnd,
+	}, nil
+}
+
 type (
 	GetPlayerAltsResponse struct {
 		Results []PlayerAltAccount `json:"results"`
