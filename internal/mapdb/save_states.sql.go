@@ -108,13 +108,18 @@ func (q *Queries) DeleteVerifyingStates(ctx context.Context, mapID string) error
 }
 
 const getAllBestCompletedSaveStatesForMap = `-- name: GetAllBestCompletedSaveStatesForMap :many
-select distinct on (player_id) id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
-from save_states
-where deleted is null
-  and completed = true
-  and map_id = $1
-  and (type = 'playing' or type = 'verifying')
-order by player_id, playtime asc
+select distinct on (player_id) ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score
+from save_states ss
+         join maps m on m.id = ss.map_id
+where ss.deleted is null
+  and ss.map_id = $1
+  and (ss.type = 'playing' or ss.type = 'verifying')
+  and ss.completed = true
+order by player_id, case
+    when m.leaderboard is not null and (m.leaderboard ->> 'asc')::boolean = false
+        then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
+    else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
+end
 `
 
 func (q *Queries) GetAllBestCompletedSaveStatesForMap(ctx context.Context, mapID string) ([]SaveState, error) {
@@ -159,7 +164,7 @@ from save_states ss
 where ss.deleted is null
   and ss.map_id = $1
   and ss.player_id = $2
-  and ss.type = 'playing'
+  and (ss.type = 'playing' or ss.type = 'verifying')
   and ss.completed = true
 order by case
            when m.leaderboard is not null

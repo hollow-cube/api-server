@@ -13,13 +13,18 @@ where deleted is null
   and player_id = $3;
 
 -- name: GetAllBestCompletedSaveStatesForMap :many
-select distinct on (player_id) *
-from save_states
-where deleted is null
-  and completed = true
-  and map_id = $1
-  and (type = 'playing' or type = 'verifying')
-order by player_id, playtime asc;
+select distinct on (player_id) ss.*
+from save_states ss
+         join maps m on m.id = ss.map_id
+where ss.deleted is null
+  and ss.map_id = $1
+  and (ss.type = 'playing' or ss.type = 'verifying')
+  and ss.completed = true
+order by player_id, case
+    when m.leaderboard is not null and (m.leaderboard ->> 'asc')::boolean = false
+        then -coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
+    else coalesce(ss.score, greatest(ss.playtime, ss.ticks * 50))
+end;
 
 -- name: GetLatestSaveState :one
 select *
@@ -38,7 +43,7 @@ from save_states ss
 where ss.deleted is null
   and ss.map_id = $1
   and ss.player_id = $2
-  and ss.type = 'playing'
+  and (ss.type = 'playing' or ss.type = 'verifying')
   and ss.completed = true
 order by case
            when m.leaderboard is not null
