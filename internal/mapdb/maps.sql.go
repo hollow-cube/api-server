@@ -840,7 +840,7 @@ delete
 from map_slots
 where map_id = $1
   and player_id = $2
-  and is_pending is false
+  and is_pending is true
 returning player_id, map_id, index, created_at, is_pending
 `
 

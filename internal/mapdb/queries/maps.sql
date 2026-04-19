@@ -199,7 +199,7 @@ delete
 from map_slots
 where map_id = $1
   and player_id = $2
-  and is_pending is false
+  and is_pending is true
 returning *;
 
 -- name: DeleteMapBuildersForMap :exec
