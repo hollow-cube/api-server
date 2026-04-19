@@ -415,7 +415,7 @@ func (s *Server) AcceptMapBuilderRequest(ctx context.Context, request MapPlayerR
 	if err != nil {
 		return fmt.Errorf("failed to get used map builder slots: %w", err)
 	}
-	if int(usedSlots) >= pd.TotalBuilderSlots() {
+	if int(usedSlots) >= pd.TotalMapSlots() {
 		return ox.BadRequest{} // No slots available!!
 	}
 

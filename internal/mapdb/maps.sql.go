@@ -241,7 +241,6 @@ select count(ms.*)
 from map_slots ms
   inner join maps m on m.id = ms.map_id
 where ms.player_id = $1
-  and m.owner != ms.player_id
   and ms.is_pending = false
   and m.deleted_at is null
 `
