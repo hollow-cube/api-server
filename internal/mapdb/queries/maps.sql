@@ -27,17 +27,20 @@ from maps
 where id = any ($1::uuid[]);
 
 -- name: GetPublishedMapById :one
-select *
+select sqlc.embed(maps_published),
+       array(select tag from map_tags where map_id = maps_published.id order by index)::map_tag[] as tags
 from maps_published
 where id = $1;
 
 -- name: GetPublishedMapByPublishedId :one
-select *
+select sqlc.embed(maps_published),
+       array(select tag from map_tags where map_id = maps_published.id order by index)::map_tag[] as tags
 from maps_published
 where published_id = $1;
 
 -- name: MultiGetPublishedMapsById :many
-select maps_published.*
+select sqlc.embed(maps_published),
+       array(select tag from map_tags where map_id = maps_published.id order by index)::map_tag[] as tags
 from maps_published
   join unnest($1::uuid[]) with ordinality as map_ids(id, ord) on maps_published.id = map_ids.id
 order by map_ids.ord;
@@ -243,6 +246,7 @@ returning *;
 
 -- name: SearchMaps :many
 select sqlc.embed(maps_published),
+       array(select tag from map_tags where map_id = maps_published.id order by index)::map_tag[] as tags,
        count(*) over () as total_count
 from maps_published
 where listed = true

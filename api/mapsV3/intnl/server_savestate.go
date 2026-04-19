@@ -301,36 +301,36 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 
 			// Broadcast a message about the higher placement position
 			// IF map quality >= outstanding && placement is 1st/2nd/3rd
-			if newPlacement < 3 && m.QualityOverride != nil && *m.QualityOverride >= 4 {
-				//raw, err := json.Marshal(map[string]interface{}{
-				//	"type":      "map_top_placement",
-				//	"mapId":     request.MapId,
-				//	"playerId":  request.PlayerId,
-				//	"placement": newPlacement,
-				//})
-				//if err != nil {
-				//	zap.S().Errorw("failed to marshal message", "err", err)
-				//}
-				//go s.producer.WriteMessages(context.Background(), kafka.Message{
-				//	Topic: kafkafx.TopicChatAnnouncements,
-				//	Value: raw,
-				//})
-			}
+			//if newPlacement < 3 && m.QualityOverride != nil && *m.QualityOverride >= 4 {
+			//raw, err := json.Marshal(map[string]interface{}{
+			//	"type":      "map_top_placement",
+			//	"mapId":     request.MapId,
+			//	"playerId":  request.PlayerId,
+			//	"placement": newPlacement,
+			//})
+			//if err != nil {
+			//	zap.S().Errorw("failed to marshal message", "err", err)
+			//}
+			//go s.producer.WriteMessages(context.Background(), kafka.Message{
+			//	Topic: kafkafx.TopicChatAnnouncements,
+			//	Value: raw,
+			//})
+			//}
 		}
 
 		go func() {
 			svtString := ""
-			if m.OptSubvariant != nil {
-				svtString = *m.OptSubvariant
+			if m.PublishedMap.OptSubvariant != nil {
+				svtString = *m.PublishedMap.OptSubvariant
 			}
 			go s.metrics.Write(&model.MapCompletedEvent{
 				PlayerId:   request.PlayerId,
-				MapId:      m.ID,
-				Variant:    m.OptVariant,
+				MapId:      m.PublishedMap.ID,
+				Variant:    m.PublishedMap.OptVariant,
 				SubVariant: svtString,
 				Playtime:   update.Playtime,
 				Score:      update.Score,
-				Difficulty: model.MapDifficulty(m.Difficulty).String(),
+				Difficulty: model.MapDifficulty(m.PublishedMap.Difficulty).String(),
 			})
 		}()
 	}

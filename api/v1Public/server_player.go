@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	"github.com/hollow-cube/api-server/internal/mapdb"
 )
 
@@ -27,11 +28,12 @@ func (s *Server) GetPlayerStatus(ctx context.Context, request AuthenticatedReque
 			mapData, err := s.mapStore.GetPublishedMapById(ctx, *session.PMapID)
 			if err != nil && !errors.Is(err, mapdb.ErrNoRows) {
 				return nil, err
-			} else if err == nil && mapData.OptName != nil && mapData.PublishedID != nil {
-				var code = fmt.Sprintf("%03d-%03d-%03d", *mapData.PublishedID/1000000, (*mapData.PublishedID/1000)%1000, *mapData.PublishedID%1000)
+			} else if err == nil && mapData.PublishedMap.OptName != nil && mapData.PublishedMap.PublishedID != nil {
+				pid := *mapData.PublishedMap.PublishedID
+				code := fmt.Sprintf("%03d-%03d-%03d", pid/1000000, (pid/1000)%1000, pid%1000)
 
-				sessionName = mapData.OptName
-				sessionId = &mapData.ID
+				sessionName = mapData.PublishedMap.OptName
+				sessionId = &mapData.PublishedMap.ID
 				sessionCode = &code
 			}
 		}

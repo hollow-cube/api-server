@@ -249,8 +249,9 @@ type (
 		Results []PlayerDataStub `json:"results"`
 	}
 	PlayerDataStub struct {
-		ID          string      `json:"id"`
-		DisplayName DisplayName `json:"displayName"`
+		ID          string         `json:"id"`
+		DisplayName DisplayName    `json:"displayName"`
+		Settings    PlayerSettings `json:"settings"`
 	}
 )
 
@@ -273,9 +274,19 @@ func (s *Server) SearchPlayers(ctx context.Context, body SearchPlayersRequest) (
 
 	results := make([]PlayerDataStub, len(pds))
 	for i, entry := range pds {
+		// always return empty map not null if no settings have been changed
+		// TODO: should just make the column notnull and then this isnt necessary
+		var settings map[string]any
+		if entry.Settings != nil {
+			settings = entry.Settings
+		} else {
+			settings = make(map[string]any)
+		}
+
 		results[i] = PlayerDataStub{
 			ID:          entry.ID,
 			DisplayName: s.computeDisplayName(entry),
+			Settings:    settings,
 		}
 	}
 	return &SearchPlayersResponse{Results: results}, nil

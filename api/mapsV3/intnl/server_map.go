@@ -111,7 +111,7 @@ func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (Get
 
 	res := make([]MapData, len(raw))
 	for i, m := range raw {
-		res[i] = MapData(s.hydratePublishedMap(m))
+		res[i] = MapData(s.hydratePublishedMap(m.PublishedMap, m.Tags))
 	}
 	return GetMaps200JSONResponse{res}, nil
 }
@@ -149,7 +149,7 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 		Results: make([]MapData, len(entries)),
 	}
 	for i, entry := range entries {
-		result.Results[i] = MapData(s.hydratePublishedMap(entry.PublishedMap))
+		result.Results[i] = MapData(s.hydratePublishedMap(entry.PublishedMap, entry.Tags))
 		if i == 0 {
 			result.PageCount = int(math.Ceil(float64(entry.TotalCount) / float64(params.PageSize)))
 		}
@@ -214,7 +214,7 @@ func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMa
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch published map: %w", err)
 			}
-			return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
+			return GetMap200JSONResponse{s.hydratePublishedMap(pm.PublishedMap, pm.Tags)}, nil
 		}
 
 		return GetMap200JSONResponse{s.hydrateMap(m, res.Tags)}, nil
@@ -231,7 +231,7 @@ func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMa
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch map: %w", err)
 	}
-	return GetMap200JSONResponse{s.hydratePublishedMap(pm)}, nil
+	return GetMap200JSONResponse{s.hydratePublishedMap(pm.PublishedMap, pm.Tags)}, nil
 }
 
 func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error) {
@@ -720,7 +720,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch published map: %w", err)
 	}
-	return PublishMap200JSONResponse{s.hydratePublishedMap(publishedMap)}, nil
+	return PublishMap200JSONResponse{s.hydratePublishedMap(publishedMap.PublishedMap, publishedMap.Tags)}, nil
 }
 
 func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) (ReportMapResponseObject, error) {
@@ -971,7 +971,7 @@ func (s *server) hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapDataJSONRespons
 	}
 }
 
-func (s *server) hydratePublishedMap(m mapdb.PublishedMap) MapDataJSONResponse {
+func (s *server) hydratePublishedMap(m mapdb.PublishedMap, tags []mapdb.MapTag) MapDataJSONResponse {
 	extra := make(map[string]interface{})
 	if m.OptExtra != nil {
 		_ = json.Unmarshal(m.OptExtra, &extra)
@@ -992,6 +992,11 @@ func (s *server) hydratePublishedMap(m mapdb.PublishedMap) MapDataJSONResponse {
 		extra["boat"] = true
 	}
 
+	apiTags := make([]string, len(tags))
+	for i, tag := range tags {
+		apiTags[i] = string(tag)
+	}
+
 	return MapDataJSONResponse{
 		Id:              m.ID,
 		Owner:           m.Owner,
@@ -1006,7 +1011,7 @@ func (s *server) hydratePublishedMap(m mapdb.PublishedMap) MapDataJSONResponse {
 			Size:       MapSizeToAPI(m.Size),
 			Variant:    mapVariantToAPI(m.OptVariant),
 			Subvariant: m.OptSubvariant,
-			Tags:       m.OptTags,
+			Tags:       apiTags,
 			SpawnPoint: posToAPI(m.OptSpawnPoint),
 			Extra:      extra,
 		},

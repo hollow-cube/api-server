@@ -101,6 +101,17 @@ func (s *Server) GetMap(ctx context.Context, request MapRequest) (*MapData, erro
 		return nil, fmt.Errorf("failed to get map: %w", err)
 	}
 
+	// If its published go read as published.
+	// TODO: materialize all the fields from published and do this in a single query.
+	if mt.Map.PublishedAt != nil {
+		pm, err := s.mapStore.GetPublishedMapById(ctx, request.MapID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get published map: %w", err)
+		}
+
+		return new(hydratePublishedMap(pm.PublishedMap, pm.Tags)), nil
+	}
+
 	return new(hydrateMap(mt.Map, mt.Tags)), nil
 }
 
@@ -536,7 +547,7 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 	publishedResults := make([]MapSlot, len(published))
 	for i, m := range published {
 		publishedResults[i] = MapSlot{
-			Map:       hydratePublishedMap(m.PublishedMap),
+			Map:       hydratePublishedMap(m.PublishedMap, m.Tags),
 			CreatedAt: *m.PublishedMap.PublishedAt,
 			Role:      RoleOwner,
 		}

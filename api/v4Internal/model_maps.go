@@ -215,7 +215,7 @@ func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
 	}
 }
 
-func hydratePublishedMap(m mapdb.PublishedMap) MapData {
+func hydratePublishedMap(m mapdb.PublishedMap, tags []mapdb.MapTag) MapData {
 	extra := make(map[string]interface{})
 	if m.OptExtra != nil {
 		_ = json.Unmarshal(m.OptExtra, &extra)
@@ -234,6 +234,11 @@ func hydratePublishedMap(m mapdb.PublishedMap) MapData {
 	}
 	if m.OptBoat != nil && *m.OptBoat {
 		extra["boat"] = true
+	}
+
+	apiTags := make([]string, len(tags))
+	for i, tag := range tags {
+		apiTags[i] = string(tag)
 	}
 
 	leaderboard := defaultPlaytimeLeaderboard
@@ -259,7 +264,7 @@ func hydratePublishedMap(m mapdb.PublishedMap) MapData {
 			Size:        hydrateMapSize(m.Size),
 			Variant:     hydrateMapVariant(m.OptVariant),
 			Subvariant:  m.OptSubvariant,
-			Tags:        m.OptTags,
+			Tags:        apiTags,
 			SpawnPoint:  hydratePos(m.OptSpawnPoint),
 			Leaderboard: &leaderboard,
 			Extra:       extra,
