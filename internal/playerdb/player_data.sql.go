@@ -327,13 +327,28 @@ func (q *Queries) SearchPlayersFuzzy(ctx context.Context, excludeIds []string, s
 
 const setPlayerUnlocks = `-- name: SetPlayerUnlocks :exec
 update player_data
-set extra_map_slots = greatest(extra_map_slots, $2),
-    max_map_size    = greatest(max_map_size, $3)
+set extra_map_slots = greatest(extra_map_slots + $2, $3),
+    max_map_size    = greatest(max_map_size, $4),
+    map_builders    = greatest(map_builders, $5)
 where id = $1
 `
 
-func (q *Queries) SetPlayerUnlocks(ctx context.Context, iD string, extraMapSlots int16, maxMapSize int16) error {
-	_, err := q.db.Exec(ctx, setPlayerUnlocks, iD, extraMapSlots, maxMapSize)
+type SetPlayerUnlocksParams struct {
+	ID          string `json:"id"`
+	AddSlots    int16  `json:"addSlots"`
+	SetSlots    int16  `json:"setSlots"`
+	SetSize     int16  `json:"setSize"`
+	SetBuilders int16  `json:"setBuilders"`
+}
+
+func (q *Queries) SetPlayerUnlocks(ctx context.Context, arg SetPlayerUnlocksParams) error {
+	_, err := q.db.Exec(ctx, setPlayerUnlocks,
+		arg.ID,
+		arg.AddSlots,
+		arg.SetSlots,
+		arg.SetSize,
+		arg.SetBuilders,
+	)
 	return err
 }
 

@@ -94,8 +94,9 @@ func (pd PlayerData) TotalMapSlots() int {
 
 func (pd PlayerData) TotalBuilderSlots() int {
 	const maxBuilderSlots = 4
+	const freeBuilderSlots = 1
 
-	builderSlots := 2 + int(pd.MapBuilders)
+	builderSlots := freeBuilderSlots + int(pd.MapBuilders)
 	if pd.Has(player.FlagExtendedLimits) {
 		builderSlots = maxBuilderSlots
 	}

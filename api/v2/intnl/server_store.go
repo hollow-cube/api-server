@@ -216,13 +216,17 @@ func (s *Server) GetPlayerHypercube(ctx context.Context, request GetPlayerHyperc
 	}, nil
 }
 
-var upgradeMap = map[string]struct{ slots, size int }{
-	"map_slot_3": {slots: 1},
-	"map_slot_4": {slots: 2},
-	"map_slot_5": {slots: 3},
-	"map_size_2": {size: 1},
-	"map_size_3": {size: 2},
-	"map_size_4": {size: 3},
+var upgradeMap = map[string]struct{ addSlots, maxSlots, maxSize, maxBuilders int }{
+	"map_slot":      {addSlots: 1},
+	"map_size_2":    {maxSize: 1},
+	"map_size_3":    {maxSize: 2},
+	"map_size_4":    {maxSize: 3},
+	"map_builder_2": {maxBuilders: 1},
+	"map_builder_3": {maxBuilders: 2},
+	"map_builder_4": {maxBuilders: 3},
+	"map_slot_3":    {maxSlots: 1}, // legacy
+	"map_slot_4":    {maxSlots: 2}, // legacy
+	"map_slot_5":    {maxSlots: 3}, // legacy
 }
 
 func (s *Server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeRequestObject) (BuyNamedUpgradeResponseObject, error) {
@@ -247,7 +251,6 @@ func (s *Server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 	}
 
 	err := playerdb.TxNoReturn(ctx, s.store, func(ctx context.Context, tx *playerdb.Store) error {
-
 		if request.Body.Cubits != nil && *request.Body.Cubits > 0 {
 			newCubits, err := tx.AddCurrency(ctx, request.PlayerId, playerdb.Cubits, -*request.Body.Cubits,
 				playerdb.BalanceChangeReasonBuyCosmetic, meta)
@@ -257,8 +260,14 @@ func (s *Server) BuyNamedUpgrade(ctx context.Context, request BuyNamedUpgradeReq
 			update.Cubits = &newCubits
 		}
 
-		// will set to max(current, given) so safe to set the 0s
-		if err := tx.SetPlayerUnlocks(ctx, request.PlayerId, int16(upgrade.slots), int16(upgrade.size)); err != nil {
+		unlocks := playerdb.SetPlayerUnlocksParams{
+			ID:          request.PlayerId,
+			AddSlots:    int16(upgrade.addSlots),
+			SetSlots:    int16(upgrade.maxSlots),
+			SetSize:     int16(upgrade.maxSize),
+			SetBuilders: int16(upgrade.maxBuilders),
+		}
+		if err := tx.SetPlayerUnlocks(ctx, unlocks); err != nil {
 			return fmt.Errorf("failed to set player unlocks: %w", err)
 		}
 

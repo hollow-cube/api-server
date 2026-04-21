@@ -56,7 +56,7 @@ func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) 
 
 		Permissions:    strconv.FormatUint(uint64(pd.Flags()), 10),
 		MapSlots:       pd.TotalMapSlots(),
-		MapBuilders:    int(pd.MapBuilders),
+		MapBuilders:    pd.TotalBuilderSlots(),
 		TempMaxMapSize: int(pd.MaxMapSize),
 	}, nil
 }

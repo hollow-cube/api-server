@@ -104,6 +104,7 @@ where id = $1;
 
 -- name: SetPlayerUnlocks :exec
 update player_data
-set extra_map_slots = greatest(extra_map_slots, $2),
-    max_map_size    = greatest(max_map_size, $3)
+set extra_map_slots = greatest(extra_map_slots + @add_slots, @set_slots),
+    max_map_size    = greatest(max_map_size, @set_size),
+    map_builders    = greatest(map_builders, @set_builders)
 where id = $1;
