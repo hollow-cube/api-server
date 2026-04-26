@@ -60,6 +60,8 @@ const wrongVersionMessage = `
 <gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
 `
 
+const vanishHost = "vanish.hollowcube.net"
+
 var allowedProtocolVersions = [...]int{
 	772, // 1.21.7, 1.21.8
 	773, // 1.21.9, 1.21.10
@@ -156,7 +158,7 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 	if err != nil {
 		return nil, err
 	}
-	s.updatePlayerDataFromJoin(pd, request.Body.Username, request.Body.Ip, request.Body.Skin)
+	s.updatePlayerDataFromJoin(pd, request.Body.Username, request.Body.Ip, request.Body.Skin, request.Body.ConnectedHost)
 
 	isMaintenance := s.config.Env != "tilt" && posthog.IsFeatureEnabledRemote(ctx, "maintenance", pd.Id)
 	if isMaintenance && !pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
@@ -493,7 +495,7 @@ func (s *serverImpl) getOrCreatePlayerData(ctx context.Context, playerId, userna
 	}
 }
 
-func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUsername, newIp string, newSkin *PlayerSkin) {
+func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUsername, newIp string, newSkin *PlayerSkin, connectedHost *string) {
 	syncUpdate := false
 	now := time.Now()
 	pd.LastOnline = now
@@ -513,6 +515,12 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUser
 			Signature: newSkin.Signature,
 		}
 		pdUpdate.Skin = pd.Skin
+	}
+	if connectedHost != nil && *connectedHost == vanishHost && pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+		pdUpdate.SettingsUpdates = new(v2Internal.PlayerSettings{
+			kafkaModel.SettingKey_Hidden: true,
+		})
+		pd.Settings[kafkaModel.SettingKey_Hidden] = true
 	}
 
 	// If the username changed we need to block here while updating it, otherwise no need
