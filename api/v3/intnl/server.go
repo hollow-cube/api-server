@@ -60,7 +60,7 @@ const wrongVersionMessage = `
 <gray>ᴡᴇʙꜱɪᴛᴇ: <click:open_url:'https://hollowcube.net'><underlined><blue>hollowcube.net</blue></underlined></click></gray>
 `
 
-const vanishHost = "vanish.hollowcube.dev"
+const vanishHost = "vanish.hollowcube.dev."
 
 var allowedProtocolVersions = [...]int{
 	772, // 1.21.7, 1.21.8
