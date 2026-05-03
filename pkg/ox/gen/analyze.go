@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/types"
@@ -10,6 +11,20 @@ import (
 
 	"golang.org/x/tools/go/packages"
 )
+
+// errNoRouteComment indicates a method does not declare a route. Methods that
+// return this from analyzeMethod are silently skipped; any other error is
+// surfaced to the caller.
+var errNoRouteComment = errors.New("no route comment")
+
+// directives is the parsed contents of a method's doc comment.
+type directives struct {
+	Method      string
+	Path        string
+	Description string
+	Produces    []string
+	Consumes    []string
+}
 
 // Analyze loads the Go package at pkgPattern, finds the struct named structName,
 // and extracts API endpoint information from its methods.
@@ -76,15 +91,20 @@ func Analyze(pkgPattern, structName string) (*API, error) {
 		api.OutputDir = filepath.Dir(pkg.GoFiles[0])
 	}
 
+	oxPkgPath := api.ModulePath + "/pkg/ox"
+
 	for i := 0; i < named.NumMethods(); i++ {
 		method := named.Method(i)
 		if !method.Exported() {
 			continue
 		}
 		doc := findMethodDoc(pkg, method.Name())
-		ep, err := analyzeMethod(method, doc)
+		ep, err := analyzeMethod(method, doc, oxPkgPath)
 		if err != nil {
-			continue // not an endpoint (no route comment)
+			if errors.Is(err, errNoRouteComment) {
+				continue
+			}
+			return nil, fmt.Errorf("method %s: %w", method.Name(), err)
 		}
 		api.Endpoints = append(api.Endpoints, *ep)
 	}
@@ -111,20 +131,27 @@ func findMethodDoc(pkg *packages.Package, methodName string) string {
 	return ""
 }
 
-func analyzeMethod(method *types.Func, doc string) (*Endpoint, error) {
+func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint, error) {
 	sig := method.Type().(*types.Signature)
 
-	httpMethod, path, desc, err := parseRouteComment(doc)
+	d, err := parseDirectives(doc)
 	if err != nil {
+		return nil, err
+	}
+
+	resp := extractResponse(sig, method.Name(), oxPkgPath)
+	resp.Produces = d.Produces
+
+	if err := validateResponse(resp); err != nil {
 		return nil, err
 	}
 
 	ep := &Endpoint{
 		Name:        method.Name(),
-		Method:      httpMethod,
-		Path:        path,
-		Description: desc,
-		Response:    extractResponse(sig, method.Name()),
+		Method:      d.Method,
+		Path:        d.Path,
+		Description: d.Description,
+		Response:    resp,
 	}
 
 	// Extract request params and body from method parameters (after context.Context)
@@ -141,6 +168,7 @@ func analyzeMethod(method *types.Func, doc string) (*Endpoint, error) {
 				GoName:   paramName,
 				GoType:   typeName,
 				Required: true,
+				IsStream: isOxStream(paramType, oxPkgPath),
 			}
 			continue
 		}
@@ -149,66 +177,126 @@ func analyzeMethod(method *types.Func, doc string) (*Endpoint, error) {
 		if named, ok := paramType.(*types.Named); ok {
 			ep.RequestType = named.Obj().Name()
 			if st, ok := named.Underlying().(*types.Struct); ok {
-				ep.Params, ep.RequestBody = extractParamsAndBody(st)
+				ep.Params, ep.RequestBody = extractParamsAndBody(st, oxPkgPath)
 			}
 		}
+	}
+
+	if ep.RequestBody != nil {
+		ep.RequestBody.Consumes = d.Consumes
+	}
+
+	if err := validateRequestBody(ep.RequestBody, d.Consumes); err != nil {
+		return nil, err
 	}
 
 	return ep, nil
 }
 
-func parseRouteComment(doc string) (method, path, description string, err error) {
+// parseDirectives walks the doc comment once and extracts the route directive,
+// any //ox: directives, and the remaining description prose. Returns
+// errNoRouteComment if the doc does not declare a route.
+func parseDirectives(doc string) (directives, error) {
 	if doc == "" {
-		return "", "", "", fmt.Errorf("no doc comment")
+		return directives{}, errNoRouteComment
 	}
 
 	lines := strings.Split(strings.TrimSpace(doc), "\n")
 
-	// Check for //ox:route directive in any line
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "ox:route ") {
-			rest := strings.TrimPrefix(line, "ox:route ")
-			parts := strings.SplitN(rest, " ", 2)
-			if len(parts) == 2 && isHTTPMethod(parts[0]) {
-				method = parts[0]
-				path = strings.TrimSpace(parts[1])
-				var descLines []string
-				for j, l := range lines {
-					if j == i {
-						continue
-					}
-					l = strings.TrimSpace(l)
-					if !strings.HasPrefix(l, "ox:") {
-						descLines = append(descLines, l)
-					}
-				}
-				description = strings.TrimSpace(strings.Join(descLines, "\n"))
-				return
+	var d directives
+	var descLines []string
+	hasRoute := false
+
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		switch {
+		case strings.HasPrefix(line, "ox:produces "):
+			mts, err := parseMIMEList(line, "ox:produces ")
+			if err != nil {
+				return directives{}, err
 			}
+			d.Produces = append(d.Produces, mts...)
+
+		case strings.HasPrefix(line, "ox:consumes "):
+			mts, err := parseMIMEList(line, "ox:consumes ")
+			if err != nil {
+				return directives{}, err
+			}
+			d.Consumes = append(d.Consumes, mts...)
+
+		case strings.HasPrefix(line, "ox:"):
+			// Unknown ox: directives are silently dropped from the description
+			// for forward compatibility.
+
+		default:
+			// The first line declares the route as "METHOD /path".
+			if i == 0 && !hasRoute {
+				parts := strings.SplitN(line, " ", 2)
+				if len(parts) == 2 && isHTTPMethod(parts[0]) {
+					d.Method = parts[0]
+					d.Path = strings.TrimSpace(parts[1])
+					hasRoute = true
+					continue
+				}
+			}
+			descLines = append(descLines, line)
 		}
 	}
 
-	// Check for "METHOD /path" as the first line
-	firstLine := strings.TrimSpace(lines[0])
-	parts := strings.SplitN(firstLine, " ", 2)
-	if len(parts) == 2 && isHTTPMethod(parts[0]) {
-		method = parts[0]
-		path = strings.TrimSpace(parts[1])
-		if len(lines) > 1 {
-			var descLines []string
-			for _, l := range lines[1:] {
-				l = strings.TrimSpace(l)
-				if !strings.HasPrefix(l, "ox:") {
-					descLines = append(descLines, l)
-				}
-			}
-			description = strings.TrimSpace(strings.Join(descLines, "\n"))
-		}
-		return
+	if !hasRoute {
+		return directives{}, errNoRouteComment
 	}
 
-	return "", "", "", fmt.Errorf("no route declaration found")
+	d.Description = strings.TrimSpace(strings.Join(descLines, "\n"))
+	return d, nil
+}
+
+// parseMIMEList parses a comma-separated MIME type list off the end of a
+// directive line, stripped of the given prefix. Each entry must contain a
+// "/" and no whitespace.
+func parseMIMEList(line, prefix string) ([]string, error) {
+	rest := strings.TrimPrefix(line, prefix)
+	var out []string
+	for _, mt := range strings.Split(rest, ",") {
+		mt = strings.TrimSpace(mt)
+		if mt == "" {
+			continue
+		}
+		if !strings.Contains(mt, "/") || strings.ContainsAny(mt, " \t") {
+			return nil, fmt.Errorf("invalid MIME type in %s: %q", strings.TrimSpace(prefix), mt)
+		}
+		out = append(out, mt)
+	}
+	return out, nil
+}
+
+func validateResponse(r Response) error {
+	if r.IsStream && len(r.Produces) == 0 {
+		return fmt.Errorf("stream response requires //ox:produces directive")
+	}
+	if !r.IsStream && len(r.Produces) > 0 {
+		return fmt.Errorf("//ox:produces is only valid with *ox.Stream return type")
+	}
+	if r.IsStream && r.StatusCode == 204 {
+		return fmt.Errorf("stream response with 204 No Content is incoherent")
+	}
+	return nil
+}
+
+func validateRequestBody(b *RequestBody, consumes []string) error {
+	if b == nil {
+		if len(consumes) > 0 {
+			return fmt.Errorf("//ox:consumes requires a request body")
+		}
+		return nil
+	}
+	if b.IsStream && len(consumes) == 0 {
+		return fmt.Errorf("stream request body requires //ox:consumes directive")
+	}
+	if !b.IsStream && len(consumes) > 0 {
+		return fmt.Errorf("//ox:consumes is only valid with *ox.Stream request body")
+	}
+	return nil
 }
 
 func isHTTPMethod(s string) bool {
@@ -219,13 +307,25 @@ func isHTTPMethod(s string) bool {
 	return false
 }
 
-func extractParamsAndBody(st *types.Struct) ([]Param, *RequestBody) {
+func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *RequestBody) {
 	var params []Param
 	var body *RequestBody
 
 	for i := 0; i < st.NumFields(); i++ {
 		field := st.Field(i)
 		tag := reflect.StructTag(st.Tag(i))
+
+		// Check if this field is a stream body (*ox.Stream, no param tag).
+		// Type-based detection takes priority over name-based.
+		if !hasParamTag(tag) && isOxStream(field.Type(), oxPkgPath) {
+			body = &RequestBody{
+				GoName:   field.Name(),
+				GoType:   getTypeName(field.Type()),
+				Required: true,
+				IsStream: true,
+			}
+			continue
+		}
 
 		// Check if this is a Body field (no tags, named "Body")
 		if field.Name() == "Body" && tag == "" {
@@ -328,7 +428,25 @@ func goTypeToOpenAPI(t types.Type) (typ, format string) {
 	return "object", ""
 }
 
-func extractResponse(sig *types.Signature, methodName string) Response {
+// isOxStream reports whether t is *ox.Stream from the package at oxPkgPath.
+// Only the pointer form is accepted to keep one canonical handler signature.
+func isOxStream(t types.Type, oxPkgPath string) bool {
+	ptr, ok := t.(*types.Pointer)
+	if !ok {
+		return false
+	}
+	named, ok := ptr.Elem().(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	if obj == nil || obj.Name() != "Stream" {
+		return false
+	}
+	return obj.Pkg() != nil && obj.Pkg().Path() == oxPkgPath
+}
+
+func extractResponse(sig *types.Signature, methodName string, oxPkgPath string) Response {
 	resp := Response{
 		StatusCode: inferStatusCode(methodName),
 	}
@@ -340,6 +458,12 @@ func extractResponse(sig *types.Signature, methodName string) Response {
 
 	// First result is the response type, second is error
 	t := results.At(0).Type()
+
+	if isOxStream(t, oxPkgPath) {
+		resp.IsStream = true
+		return resp
+	}
+
 	if ptr, ok := t.(*types.Pointer); ok {
 		resp.IsPtr = true
 		t = ptr.Elem()

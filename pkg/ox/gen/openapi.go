@@ -89,23 +89,37 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 
 		// Add request body if present
 		if ep.RequestBody != nil {
-			op.RequestBody = &oaRequestBody{
-				Required: ep.RequestBody.Required,
-				Content: map[string]*oaMediaType{
+			rb := &oaRequestBody{Required: ep.RequestBody.Required}
+			if ep.RequestBody.IsStream {
+				rb.Content = make(map[string]*oaMediaType, len(ep.RequestBody.Consumes))
+				for _, mt := range ep.RequestBody.Consumes {
+					rb.Content[mt] = &oaMediaType{
+						Schema: &oaSchema{Type: "string", Format: "binary"},
+					}
+				}
+			} else {
+				rb.Content = map[string]*oaMediaType{
 					"application/json": {
-						Schema: &oaSchema{
-							Type: "object",
-						},
+						Schema: &oaSchema{Type: "object"},
 					},
-				},
+				}
 			}
+			op.RequestBody = rb
 		}
 
 		statusStr := fmt.Sprintf("%d", ep.Response.StatusCode)
 		resp := &oaResponse{
 			Description: "Successful response",
 		}
-		if ep.Response.OAPIType != "" && ep.Response.StatusCode != 204 {
+		switch {
+		case ep.Response.IsStream:
+			resp.Content = make(map[string]*oaMediaType, len(ep.Response.Produces))
+			for _, mt := range ep.Response.Produces {
+				resp.Content[mt] = &oaMediaType{
+					Schema: &oaSchema{Type: "string", Format: "binary"},
+				}
+			}
+		case ep.Response.OAPIType != "" && ep.Response.StatusCode != 204:
 			resp.Content = map[string]*oaMediaType{
 				ep.Response.ContentType: {
 					Schema: &oaSchema{

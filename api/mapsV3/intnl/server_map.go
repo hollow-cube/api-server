@@ -26,7 +26,7 @@ import (
 const mapContestSlot = 1_000_000
 
 var mapContestId = "c9354e33-96c2-414a-9f4a-8c2ff4669086"
-var mapUploadDuration = prometheus.NewHistogram(
+var MapUploadDuration = prometheus.NewHistogram(
 	prometheus.HistogramOpts{
 		Name:    "hc_map_upload_duration_seconds",
 		Help:    "Duration of map upload in seconds",
@@ -476,7 +476,7 @@ func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldReque
 	uploadStart := time.Now()
 	err = s.objectClient.UploadStream(ctx, request.MapId, request.Body)
 	if err == nil {
-		mapUploadDuration.Observe(time.Since(uploadStart).Seconds())
+		MapUploadDuration.Observe(time.Since(uploadStart).Seconds())
 	}
 	return UpdateMapWorld200Response{}, err
 }
@@ -1190,5 +1190,5 @@ func createMapSearchCacheKey(params *mapdb.SearchMapsParams) (string, bool) {
 }
 
 func init() {
-	prometheus.MustRegister(mapUploadDuration)
+	prometheus.MustRegister(MapUploadDuration)
 }

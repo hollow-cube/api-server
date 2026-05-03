@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/hollow-cube/api-server/pkg/ox"
 	"github.com/hollow-cube/api-server/pkg/ox/runtime"
 )
 
@@ -22,15 +23,32 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/top-times", h.getPlayerTopTimes)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/hub/leaderboard/{leaderboardId}", h.getGlobalLeaderboard)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/leaderboard", h.getMapLeaderboard)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/leaderboard", h.deleteMapLeaderboard)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/leaderboard", h.restoreMapLeaderboard)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/search", h.searchMaps)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/search/progress", h.searchMapProgress)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps", h.createMap)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}", h.getMap)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/maps/{mapId}", h.updateMap)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}", h.deleteMap)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/world", h.getMapWorld)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/world", h.updateMapWorld)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/publish", h.publishMap)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/verify", h.beginMapVerification)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/verify", h.deleteMapVerification)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/builders", h.getMapBuilders)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders", h.inviteMapBuilder)
 	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/builders/{playerId}", h.removeMapBuilder)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders/{playerId}/accept", h.acceptMapBuilderRequest)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/builders/{playerId}/reject", h.rejectMapBuilderRequest)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/{mapId}/report", h.reportMap)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/ratings/{playerId}", h.getMapPlayerRating)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/ratings/{playerId}", h.setMapPlayerRating)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-slots", h.getMapPlayerSlots)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-history", h.getPlayerMapHistory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/notifications", h.getNotifications)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/notifications/{notificationId}", h.updateNotification)
 	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/notifications/{notificationId}", h.deleteNotification)
@@ -41,6 +59,9 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/hypercube", h.getPlayerHypercube)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/latest", h.getLatestSaveState)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/best", h.getBestSaveState)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/states/{playerId}/{stateId}", h.upsertSaveState)
 }
 
 // handlers wraps the server and provides HTTP handler methods.
@@ -117,6 +138,106 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteJSON(w, 200, resp)
 }
 
+func (h *handlers) getPlayerTopTimes(w http.ResponseWriter, r *http.Request) {
+	var req PlayerPaginatedRequest
+	req.PlayerID = r.PathValue("playerId")
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: page")
+		return
+	} else {
+		req.Page = v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
+		return
+	} else {
+		req.PageSize = v
+	}
+	resp, err := h.server.GetPlayerTopTimes(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getGlobalLeaderboard(w http.ResponseWriter, r *http.Request) {
+	var req GetGlobalLeaderboardRequest
+	req.LeaderboardID = r.PathValue("leaderboardId")
+	req.PlayerID = r.URL.Query().Get("playerId")
+	resp, err := h.server.GetGlobalLeaderboard(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getMapLeaderboard(w http.ResponseWriter, r *http.Request) {
+	var req GetMapLeaderboardRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.URL.Query().Get("playerId")
+	resp, err := h.server.GetMapLeaderboard(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) deleteMapLeaderboard(w http.ResponseWriter, r *http.Request) {
+	var req DeleteMapLeaderboardRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.URL.Query().Get("playerId")
+	if v, err := strconv.ParseBool(r.URL.Query().Get("notify")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: notify")
+		return
+	} else {
+		req.Notify = v
+	}
+	err := h.server.DeleteMapLeaderboard(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (h *handlers) restoreMapLeaderboard(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	err := h.server.RestoreMapLeaderboard(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) searchMaps(w http.ResponseWriter, r *http.Request) {
+	var req SearchMapsRequest
+	resp, err := h.server.SearchMaps(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) searchMapProgress(w http.ResponseWriter, r *http.Request) {
+	var body SearchMapProgressRequestBody
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.SearchMapProgress(r.Context(), body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
 func (h *handlers) createMap(w http.ResponseWriter, r *http.Request) {
 	var body CreateMapRequest
 	if err := runtime.DecodeJSON(r, &body); err != nil {
@@ -156,6 +277,83 @@ func (h *handlers) updateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(200)
+}
+
+func (h *handlers) deleteMap(w http.ResponseWriter, r *http.Request) {
+	var req DeleteMapRequest
+	req.ActorID = r.URL.Query().Get("actorId")
+	err := h.server.DeleteMap(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (h *handlers) getMapWorld(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.GetMapWorld(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) updateMapWorld(w http.ResponseWriter, r *http.Request) {
+	var req UpdateMapWorldRequest
+	req.MapID = r.PathValue("mapId")
+	if v, err := strconv.ParseInt(r.URL.Query().Get("loadTime"), 10, 64); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: loadTime")
+		return
+	} else {
+		req.LoadTime = v
+	}
+	req.Body = &ox.Stream{
+		ContentType:   r.Header.Get("Content-Type"),
+		Body:          r.Body,
+		ContentLength: r.ContentLength,
+	}
+	err := h.server.UpdateMapWorld(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) publishMap(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.PublishMap(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) beginMapVerification(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	err := h.server.BeginMapVerification(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) deleteMapVerification(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	err := h.server.DeleteMapVerification(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func (h *handlers) getMapBuilders(w http.ResponseWriter, r *http.Request) {
@@ -227,10 +425,78 @@ func (h *handlers) rejectMapBuilderRequest(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(200)
 }
 
+func (h *handlers) reportMap(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	var body ReportMapRequestBody
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	err := h.server.ReportMap(r.Context(), req, body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+func (h *handlers) getMapPlayerRating(w http.ResponseWriter, r *http.Request) {
+	var req MapPlayerRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	resp, err := h.server.GetMapPlayerRating(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) setMapPlayerRating(w http.ResponseWriter, r *http.Request) {
+	var req MapPlayerRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	var body RateMapRequestBody
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	err := h.server.SetMapPlayerRating(r.Context(), req, body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
 func (h *handlers) getMapPlayerSlots(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
+	req.PlayerID = r.PathValue("playerId")
 	resp, err := h.server.GetMapPlayerSlots(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getPlayerMapHistory(w http.ResponseWriter, r *http.Request) {
+	var req PlayerPaginatedRequest
+	req.PlayerID = r.PathValue("playerId")
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: page")
+		return
+	} else {
+		req.Page = v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
+		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
+		return
+	} else {
+		req.PageSize = v
+	}
+	resp, err := h.server.GetPlayerMapHistory(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
 		return
@@ -310,7 +576,7 @@ func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) getPlayerData(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
+	req.PlayerID = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerData(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -336,7 +602,7 @@ func (h *handlers) updatePlayerData(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) getPlayerDisplayName(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
+	req.PlayerID = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerDisplayName(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -347,7 +613,7 @@ func (h *handlers) getPlayerDisplayName(w http.ResponseWriter, r *http.Request) 
 
 func (h *handlers) getPlayerHypercube(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
+	req.PlayerID = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerHypercube(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -358,7 +624,7 @@ func (h *handlers) getPlayerHypercube(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) getPlayerAlts(w http.ResponseWriter, r *http.Request) {
 	var req PlayerRequest
-	req.PlayerId = r.PathValue("playerId")
+	req.PlayerID = r.PathValue("playerId")
 	resp, err := h.server.GetPlayerAlts(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -379,4 +645,46 @@ func (h *handlers) searchPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getLatestSaveState(w http.ResponseWriter, r *http.Request) {
+	var req GetLatestSaveStateRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	resp, err := h.server.GetLatestSaveState(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getBestSaveState(w http.ResponseWriter, r *http.Request) {
+	var req GetBestSaveStateRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	resp, err := h.server.GetBestSaveState(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) upsertSaveState(w http.ResponseWriter, r *http.Request) {
+	var req SaveStateRequest
+	req.MapID = r.PathValue("mapId")
+	req.PlayerID = r.PathValue("playerId")
+	req.StateID = r.PathValue("stateId")
+	var body UpsertSaveStateRequestBody
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	err := h.server.UpsertSaveState(r.Context(), req, body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(200)
 }

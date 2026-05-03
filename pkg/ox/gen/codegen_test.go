@@ -408,6 +408,206 @@ func TestGenerateServer_BaseURLPlacement(t *testing.T) {
 	require.NotContains(t, src, `params.BaseURL+"POST `, "BaseURL should not come before HTTP method")
 }
 
+func TestGenerateServer_StreamResponse(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "GetMapWorld",
+				Method:      "GET",
+				Path:        "/maps/{mapId}/world",
+				RequestType: "MapRequest",
+				Params: []Param{
+					{Name: "mapId", GoName: "MapID", GoType: "string", Location: "path", Required: true},
+					{Name: "Accept", GoName: "Accept", GoType: "string", Location: "header", Required: true},
+				},
+				Response: Response{
+					StatusCode: 200,
+					IsStream:   true,
+					Produces: []string{
+						"application/vnd.hollowcube.polar",
+						"application/vnd.hollowcube.anvil",
+					},
+				},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	require.Contains(t, src, "resp, err := h.server.GetMapWorld(r.Context(), req)")
+	require.Contains(t, src, "runtime.WriteStream(w, 200, resp)")
+	require.NotContains(t, src, "runtime.WriteJSON")
+
+	// Generated code must NOT import pkg/ox directly — resp's type is inferred
+	// and only flows into runtime.WriteStream which already imports ox.
+	require.NotContains(t, src, `"github.com/example/app/pkg/ox"`+"\n")
+}
+
+func TestGenerateServer_StreamRequestBodyField(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "UpdateMapWorld",
+				Method:      "PUT",
+				Path:        "/maps/{mapId}/world",
+				RequestType: "UpdateMapWorldRequest",
+				Params: []Param{
+					{Name: "mapId", GoName: "MapID", GoType: "string", Location: "path", Required: true},
+				},
+				RequestBody: &RequestBody{
+					GoName:   "Body",
+					GoType:   "*ox.Stream",
+					Required: true,
+					IsStream: true,
+					Consumes: []string{"application/vnd.hollowcube.polar"},
+				},
+				Response: Response{StatusCode: 200},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	// Generated file imports pkg/ox to construct &ox.Stream
+	require.Contains(t, src, `"github.com/example/app/pkg/ox"`)
+
+	// Generated handler binds path then constructs the stream body
+	require.Contains(t, src, `req.MapID = r.PathValue("mapId")`)
+	require.Contains(t, src, "req.Body = &ox.Stream{")
+	require.Contains(t, src, `ContentType:   r.Header.Get("Content-Type")`)
+	require.Contains(t, src, "Body:          r.Body")
+	require.Contains(t, src, "ContentLength: r.ContentLength")
+	require.NotContains(t, src, "runtime.DecodeJSON")
+	require.Contains(t, src, "h.server.UpdateMapWorld(r.Context(), req)")
+}
+
+func TestGenerateServer_StreamRequestBodySeparateParam(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:   "Upload",
+				Method: "POST",
+				Path:   "/upload",
+				RequestBody: &RequestBody{
+					GoName:   "body",
+					GoType:   "*ox.Stream",
+					Required: true,
+					IsStream: true,
+					Consumes: []string{"application/octet-stream"},
+				},
+				Response: Response{StatusCode: 200},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err)
+
+	require.Contains(t, src, `"github.com/example/app/pkg/ox"`)
+	require.Contains(t, src, "body := &ox.Stream{")
+	require.Contains(t, src, "h.server.Upload(r.Context(), body)")
+	require.NotContains(t, src, "runtime.DecodeJSON")
+}
+
+func TestGenerateServer_NoOxImportForJSONOnly(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "GetUser",
+				Method:      "GET",
+				Path:        "/users/{id}",
+				RequestType: "GetUserRequest",
+				Params: []Param{
+					{Name: "id", GoName: "ID", GoType: "string", Location: "path", Required: true},
+				},
+				Response: Response{StatusCode: 200, GoType: "User", ContentType: "application/json"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	// Generated file should NOT import pkg/ox when there are no stream request bodies.
+	require.NotContains(t, src, `"github.com/example/app/pkg/ox"`+"\n")
+}
+
+func TestGenerateServer_StreamCoexistsWithJSON(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "GetUser",
+				Method:      "GET",
+				Path:        "/users/{id}",
+				RequestType: "GetUserRequest",
+				Params: []Param{
+					{Name: "id", GoName: "ID", GoType: "string", Location: "path", Required: true},
+				},
+				Response: Response{StatusCode: 200, GoType: "User", ContentType: "application/json", OAPIType: "object"},
+			},
+			{
+				Name:   "DownloadBlob",
+				Method: "GET",
+				Path:   "/blob",
+				Response: Response{
+					StatusCode: 200,
+					IsStream:   true,
+					Produces:   []string{"application/octet-stream"},
+				},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err)
+
+	require.Contains(t, src, "runtime.WriteJSON(w, 200, resp)")
+	require.Contains(t, src, "runtime.WriteStream(w, 200, resp)")
+}
+
 func TestGenerateServer_BooleanQueryParams(t *testing.T) {
 	api := &API{
 		PackageName: "v4",

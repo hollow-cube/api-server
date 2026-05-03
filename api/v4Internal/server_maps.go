@@ -1,20 +1,21 @@
 package v4Internal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gohugoio/hashstructure"
 	"github.com/google/uuid"
+	legacyV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/object"
 	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/pkg/player"
@@ -350,6 +351,63 @@ func (s *Server) DeleteMap(ctx context.Context, request DeleteMapRequest) error 
 
 	s.clearCachedMapSearches(ctx)
 
+	return nil
+}
+
+// GET /maps/{mapId}/world
+// ox:produces application/vnd.hollowcube.polar, application/vnd.hollowcube.anvil, application/vnd.hollowcube.anvil-legacy
+func (s *Server) GetMapWorld(ctx context.Context, request MapRequest) (*ox.Stream, error) {
+	worldData, err := s.mapsBucket.Download(ctx, request.MapID)
+	if errors.Is(err, object.ErrNotFound) {
+		return nil, ox.NotFound{}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to fetch world data: %w", err)
+	}
+
+	return &ox.Stream{
+		ContentType:   "application/vnd.hollowcube.polar",
+		Body:          bytes.NewReader(worldData),
+		ContentLength: int64(len(worldData)),
+	}, nil
+}
+
+type UpdateMapWorldRequest struct {
+	MapID    string `path:"mapId"`
+	LoadTime int64  `query:"loadTime"` // Unix millis when the world was loaded by the editing client.
+	Body     *ox.Stream
+}
+
+// PUT /maps/{mapId}/world
+// ox:consumes application/vnd.hollowcube.polar, application/vnd.hollowcube.anvil, application/vnd.hollowcube.anvil-legacy
+func (s *Server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldRequest) error {
+	m, err := s.map_(ctx, request.MapID)
+	if err != nil {
+		return err
+	}
+
+	// Kind of a hacky solution we should probably have some fancier solution in the future.
+	// This is a last line of defense for not updating a map during or after verification if someone
+	// manages to stay in an edit world during that period.
+	// If the map is currently being verified, never allow it to be saved
+	if m.Verification != nil && *m.Verification == int64(model.VerificationPending) {
+		// Note: this exacerbates a race condition on exiting/saving a map -> starting to verify it.
+		// If another builder is in the map as you begin verification they will be kicked, but the kick-save
+		// may occur before the verification status is updated. In that case changes since the last autosave
+		// will be lost.
+		// For now we can accept this, and always save when the owner of the map leaves as a stop-gap.
+		return fmt.Errorf("map is currently being verified, cannot save")
+	}
+	// If the map is now published and the world was loaded prior to the publish date, never allow it to be saved
+	if m.PublishedAt != nil && request.LoadTime < (*m.PublishedAt).UnixMilli() {
+		return fmt.Errorf("map was published after world load, cannot save")
+	}
+
+	uploadStart := time.Now()
+	if err = s.mapsBucket.UploadStream(ctx, m.ID, request.Body.Body); err != nil {
+		return err
+	}
+
+	legacyV3.MapUploadDuration.Observe(time.Since(uploadStart).Seconds())
 	return nil
 }
 
@@ -786,7 +844,7 @@ type GetMapSlotsResponse struct {
 // GET /players/{playerId}/map-slots
 func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (*GetMapSlotsResponse, error) {
 	// Get maps from existing slots
-	slots, err := s.mapStore.GetMapSlots(ctx, request.PlayerId)
+	slots, err := s.mapStore.GetMapSlots(ctx, request.PlayerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch map slots: %w", err)
 	}
@@ -808,7 +866,7 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 	// Get all published maps
 	published, err := s.mapStore.SearchMaps(ctx, mapdb.SearchMapsParams{
 		Variants:  []string{"parkour", "building"},
-		Owner:     &request.PlayerId,
+		Owner:     &request.PlayerID,
 		Sort:      "published",
 		SortOrder: "desc",
 		Page:      0,
@@ -832,7 +890,7 @@ func (s *Server) GetMapPlayerSlots(ctx context.Context, request PlayerRequest) (
 				Builders:  []MapBuilder{},
 			}
 
-			if request.PlayerId == m.Map.Owner {
+			if request.PlayerID == m.Map.Owner {
 				sl.Role = RoleOwner
 			} else {
 				sl.Role = RoleBuilder
@@ -901,126 +959,6 @@ func (s *Server) GetPlayerMapHistory(ctx context.Context, request PlayerPaginate
 		result.Count = int(m.TotalCount)
 	}
 	return &result, nil
-}
-
-type (
-	PaginatedPlayerTopTimeList struct {
-		Count   int             `json:"count"`
-		Results []PlayerTopTime `json:"results"`
-	}
-	PlayerTopTime struct {
-		MapID          string `json:"mapId"`
-		PublishedID    int    `json:"publishedId"`
-		MapName        string `json:"mapName"`
-		CompletionTime int    `json:"completionTime"`
-		Rank           int    `json:"rank"`
-	}
-)
-
-// GET /players/{playerId}/top-times
-func (s *Server) GetPlayerTopTimes(ctx context.Context, request PlayerPaginatedRequest) (*PaginatedPlayerTopTimeList, error) {
-	offset, limit := defaultPageParams(request.Page, request.PageSize)
-
-	bestTimes, err := s.mapStore.GetPlayerBestTimes(ctx, request.PlayerID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch player best times: %w", err)
-	}
-
-	if len(bestTimes) == 0 {
-		return &PaginatedPlayerTopTimeList{
-			Count:   0,
-			Results: []PlayerTopTime{},
-		}, nil
-	}
-
-	// Use a redis pipeline to avoid network rtt
-	// Use ZCOUNT to count players with strictly lower times (to handle ties).
-	// E.g. if 6 players share the same time, ZCOUNT returns 0 for all of them, so they all get rank 1.
-	cmds := make(rueidis.Commands, len(bestTimes))
-	for i, bt := range bestTimes {
-		leaderboardKey := mapLeaderboardKey(bt.MapID, "playtime")
-		roundedPlaytime := int(math.Round(float64(bt.Playtime)/50.0)) * 50
-		threshold := roundedPlaytime - 25
-		cmds[i] = s.redis.B().Zcount().Key(leaderboardKey).
-			Min("-inf").Max(fmt.Sprintf("(%d", threshold)).Build()
-	}
-
-	// Exec pipeline
-	results := s.redis.DoMulti(ctx, cmds...)
-
-	// Collect entries - ZCOUNT returns the count of players with better times
-	type rankedEntry struct {
-		MapID       string
-		PublishedID int
-		MapName     string
-		Playtime    int
-		Rank        int
-	}
-	var entries []rankedEntry
-	for i, resp := range results {
-		betterCount, err := resp.AsInt64()
-		if err != nil {
-			s.log.Warnw("failed to get rank for map", "mapId", bestTimes[i].MapID, "error", err)
-			continue
-		}
-
-		mapName := ""
-		if bestTimes[i].MapName != nil {
-			mapName = *bestTimes[i].MapName
-		}
-
-		publishedID := 0
-		if bestTimes[i].PublishedID != nil {
-			publishedID = *bestTimes[i].PublishedID
-		}
-
-		// Round playtime to 50ms for display (consistent with rank calculation)
-		roundedPlaytime := int(math.Round(float64(bestTimes[i].Playtime)/50.0)) * 50
-		entries = append(entries, rankedEntry{
-			MapID:       bestTimes[i].MapID,
-			PublishedID: publishedID,
-			MapName:     mapName,
-			Playtime:    roundedPlaytime,
-			Rank:        int(betterCount) + 1, // Rank = count of better times + 1
-		})
-	}
-
-	// Sort by rank ascending (best placements first)
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Rank < entries[j].Rank
-	})
-
-	// Paginate
-	totalItems := int64(len(entries))
-	start := int(offset)
-	end := int(limit)
-
-	if start >= len(entries) {
-		return &PaginatedPlayerTopTimeList{
-			Count:   int(totalItems),
-			Results: []PlayerTopTime{},
-		}, nil
-	}
-
-	if end > len(entries) {
-		end = len(entries)
-	}
-
-	items := make([]PlayerTopTime, 0, end-start)
-	for _, e := range entries[start:end] {
-		items = append(items, PlayerTopTime{
-			MapID:          e.MapID,
-			PublishedID:    e.PublishedID,
-			MapName:        e.MapName,
-			CompletionTime: e.Playtime,
-			Rank:           e.Rank,
-		})
-	}
-
-	return &PaginatedPlayerTopTimeList{
-		Count:   int(totalItems),
-		Results: items,
-	}, nil
 }
 
 // utils

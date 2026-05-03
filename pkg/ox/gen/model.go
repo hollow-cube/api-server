@@ -21,11 +21,17 @@ type Endpoint struct {
 	Response    Response
 }
 
-// RequestBody represents a JSON request body parameter.
+// RequestBody represents a request body parameter.
 type RequestBody struct {
-	GoName   string // Parameter name or "Body" if from struct field
+	GoName   string // Parameter name or struct field name (e.g. "body" or "Body")
 	GoType   string // Go type as string
 	Required bool   // Always true for body parameters
+
+	// IsStream is true when the body is *ox.Stream (raw bytes). The runtime
+	// populates ContentType/Body/ContentLength from the request rather than
+	// JSON-decoding. Consumes enumerates the MIME types the endpoint accepts.
+	IsStream bool
+	Consumes []string
 }
 
 // Param represents a request parameter extracted from struct tags.
@@ -47,4 +53,10 @@ type Response struct {
 	OAPIType    string
 	OAPIFmt     string
 	ContentType string // "text/plain" for string, "application/json" for structs
+
+	// IsStream is true when the handler returns *ox.Stream. In that case the
+	// response is a binary/streaming body and Produces enumerates the MIME
+	// types the endpoint may emit at runtime.
+	IsStream bool
+	Produces []string
 }

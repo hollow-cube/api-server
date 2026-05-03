@@ -41,6 +41,7 @@ type (
 	}
 )
 
+// GET /maps/search
 func (s *Server) SearchMaps(ctx context.Context, request SearchMapsRequest) (*PaginatedMapList, error) {
 	var params mapdb.SearchMapsParams
 	if errText := parseSearchQueryParams(&params, request); errText != "" {

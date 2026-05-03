@@ -98,6 +98,22 @@ paths:
                             schema:
                                 type: object
     /maps/{mapId}:
+        delete:
+            operationId: deleteMap
+            parameters:
+                - name: actorId
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+                - name: reason
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+            responses:
+                "204":
+                    description: Successful response
         get:
             operationId: getMap
             parameters:
@@ -219,6 +235,394 @@ paths:
             responses:
                 "200":
                     description: Successful response
+    /maps/{mapId}/leaderboard:
+        delete:
+            operationId: deleteMapLeaderboard
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+                - name: notify
+                  in: query
+                  required: true
+                  schema:
+                    type: boolean
+            responses:
+                "204":
+                    description: Successful response
+        get:
+            operationId: getMapLeaderboard
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+        put:
+            operationId: restoreMapLeaderboard
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/publish:
+        post:
+            operationId: publishMap
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/ratings/{playerId}:
+        get:
+            operationId: getMapPlayerRating
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+        put:
+            operationId: setMapPlayerRating
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/report:
+        post:
+            operationId: reportMap
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/states/{playerId}/{stateId}:
+        put:
+            operationId: upsertSaveState
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: stateId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/states/{playerId}/best:
+        get:
+            operationId: getBestSaveState
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/states/{playerId}/latest:
+        get:
+            operationId: getLatestSaveState
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: typeFilter
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/verify:
+        delete:
+            operationId: deleteMapVerification
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: Successful response
+        post:
+            operationId: beginMapVerification
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+    /maps/{mapId}/world:
+        get:
+            operationId: getMapWorld
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/vnd.hollowcube.anvil:
+                            schema:
+                                type: string
+                                format: binary
+                        application/vnd.hollowcube.anvil-legacy:
+                            schema:
+                                type: string
+                                format: binary
+                        application/vnd.hollowcube.polar:
+                            schema:
+                                type: string
+                                format: binary
+        put:
+            operationId: updateMapWorld
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: loadTime
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+            requestBody:
+                required: true
+                content:
+                    application/vnd.hollowcube.anvil:
+                        schema:
+                            type: string
+                            format: binary
+                    application/vnd.hollowcube.anvil-legacy:
+                        schema:
+                            type: string
+                            format: binary
+                    application/vnd.hollowcube.polar:
+                        schema:
+                            type: string
+                            format: binary
+            responses:
+                "200":
+                    description: Successful response
+    /maps/hub/leaderboard/{leaderboardId}:
+        get:
+            operationId: getGlobalLeaderboard
+            parameters:
+                - name: leaderboardId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: playerId
+                  in: query
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/search:
+        get:
+            operationId: searchMaps
+            parameters:
+                - name: building
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: contest
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: difficulty
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: owner
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: parkour
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: quality
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: query
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: sort
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: sortOrder
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/search/progress:
+        post:
+            operationId: searchMapProgress
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /notifications:
         get:
             operationId: getNotifications
@@ -376,6 +780,32 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /players/{playerId}/map-history:
+        get:
+            operationId: getPlayerMapHistory
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /players/{playerId}/map-slots:
         get:
             operationId: getMapPlayerSlots
@@ -385,6 +815,32 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /players/{playerId}/top-times:
+        get:
+            operationId: getPlayerTopTimes
+            parameters:
+                - name: playerId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
+                - name: pageSize
+                  in: query
+                  required: true
+                  schema:
+                    type: integer
             responses:
                 "200":
                     description: Successful response

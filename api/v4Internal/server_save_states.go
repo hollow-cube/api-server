@@ -25,7 +25,7 @@ type GetLatestSaveStateRequest struct {
 	MapID    string `path:"mapId"`
 	PlayerID string `path:"playerId"`
 
-	Type SaveStateType `query:"typeFilter"`
+	Type SaveStateType `query:"type"`
 }
 
 // GET /maps/{mapId}/states/{playerId}/latest
@@ -64,7 +64,7 @@ type GetBestSaveStateRequest struct {
 	PlayerID string `path:"playerId"`
 }
 
-// GET /maps/{mapId}/states/{playerId}/latest
+// GET /maps/{mapId}/states/{playerId}/best
 func (s *Server) GetBestSaveState(ctx context.Context, request GetBestSaveStateRequest) (*SaveState, error) {
 	ss, err := s.mapStore.GetBestSaveState(ctx, request.MapID, request.PlayerID)
 	if errors.Is(err, mapdb.ErrNoRows) {
