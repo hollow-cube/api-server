@@ -34,75 +34,7 @@ var mapUploadDuration = prometheus.NewHistogram(
 	},
 )
 
-// v4
-func (s *server) CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error) {
-	if request.Body.Slot != nil && *request.Body.Slot == mapContestSlot {
-		// TODO: re-implement
-		return CreateMap400JSONResponse{BadRequestJSONResponse{
-			Error: "Contest maps not implemented",
-		}}, nil
-	}
-	if request.Body.Slot != nil && *request.Body.Slot < -1 {
-		return CreateMap400JSONResponse{BadRequestJSONResponse{
-			Error: "Slot out of range",
-		}}, nil
-	}
-
-	size := mapSizeFromAPI(request.Body.Size)
-	mapParams, err := model.CreateDefaultMap(request.Body.Owner, size)
-	if err != nil {
-		return nil, err
-	}
-
-	var slot *mapdb.InsertMapSlotParams
-	if request.Body.IsOrg {
-		mapParams.MType = string(model.TypeOrg)
-	} else {
-		pd, err := s.GetMapPlayerDataWithIndexedSlots(ctx, request.Body.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch player data: %w", err)
-		}
-
-		// Ensure they have permission for the size map they are creating
-		// TODO: should check here, but for now we assume the server doesnt make a mistake.
-
-		slot = &mapdb.InsertMapSlotParams{
-			PlayerID:  pd.ID,
-			MapID:     mapParams.ID,
-			CreatedAt: time.Now(),
-		}
-		slot.Index, err = s.getMapSlotIndex(ctx, &pd, mapParams.ID, request.Body.Slot)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get slot index: %w", err)
-		}
-	}
-
-	createdMap, err := mapdb.Tx(ctx, s.store, func(ctx context.Context, tx *mapdb.Store) (*mapdb.Map, error) {
-		m, err := tx.CreateMap(ctx, mapParams)
-		if err != nil {
-			return nil, fmt.Errorf("db write failed: %w", err)
-		}
-
-		if slot != nil {
-			err = tx.InsertMapSlot(ctx, *slot)
-			if err != nil {
-				return nil, fmt.Errorf("insert slot failed: %w", err)
-			}
-		}
-
-		return &m, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create map: %w", err)
-	}
-
-	go s.metrics.Write(model.MapCreatedEvent{
-		PlayerId: request.Body.Owner,
-	})
-
-	return CreateMap201JSONResponse{s.hydrateMap(*createdMap, []mapdb.MapTag{})}, nil
-}
-
+// v4 removed
 func (s *server) GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error) {
 	raw, err := s.store.MultiGetPublishedMapsById(ctx, strings.Split(request.Params.MapIds, ","))
 	if err != nil {
@@ -169,6 +101,7 @@ func (s *server) SearchMaps(ctx context.Context, request SearchMapsRequestObject
 	return result, nil
 }
 
+// v4
 func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressBulkRequestObject) (GetMapProgressBulkResponseObject, error) {
 	mapIds := strings.Split(request.Params.MapIds, ",")
 	entries, err := s.store.GetMultiMapProgress(ctx, request.Params.PlayerId, mapIds)
@@ -197,6 +130,7 @@ func (s *server) GetMapProgressBulk(ctx context.Context, request GetMapProgressB
 	}}, nil
 }
 
+// v4
 func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMapResponseObject, error) {
 	// todo should switch this to split between getmap and getpublishedmap and change all the dependent places.
 	if common.IsUUID(request.MapId) {
@@ -234,6 +168,7 @@ func (s *server) GetMap(ctx context.Context, request GetMapRequestObject) (GetMa
 	return GetMap200JSONResponse{s.hydratePublishedMap(pm.PublishedMap, pm.Tags)}, nil
 }
 
+// v4
 func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) (UpdateMapResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -430,6 +365,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 	return UpdateMap204Response{}, nil
 }
 
+// v4
 func (s *server) DeleteMap(ctx context.Context, request DeleteMapRequestObject) (DeleteMapResponseObject, error) {
 	// BEGIN HARDCODED SPAWN BEHAVIOR
 	// This will be fixed when we have orgs and do not need to hardcode the spawn map
@@ -545,6 +481,7 @@ func (s *server) UpdateMapWorld(ctx context.Context, request UpdateMapWorldReque
 	return UpdateMapWorld200Response{}, err
 }
 
+// v4
 func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerificationRequestObject) (BeginMapVerificationResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -588,6 +525,7 @@ func (s *server) BeginMapVerification(ctx context.Context, request BeginMapVerif
 	return BeginMapVerification200Response{}, nil
 }
 
+// v4
 func (s *server) DeleteMapVerification(ctx context.Context, request DeleteMapVerificationRequestObject) (DeleteMapVerificationResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -623,19 +561,7 @@ func (s *server) DeleteMapVerification(ctx context.Context, request DeleteMapVer
 	return DeleteMapVerification200Response{}, nil
 }
 
-// PublishMap handles verifying that a map may be published, and then publishing it.
-// Publishing a map requires that it passes a number of status checks. These checks are all described below,
-// and must be implemented here, as well as in the server to provide realtime feedback.
-// todo: find a better source of truth for this, perhaps some internal documentation.
-//
-// 1. The authorizer must have admin permission on the map.
-// 2. The map must not be published already.
-// 3. The map must have a name.
-// 4. The map must have an icon.
-// 5. The map must have a world associated (eg must have been edited and saved).
-// 6. The map must have a variant.
-// 7. If the map is a parkour map, it must be verified.
-// todo none of the above checks are implemented
+// v4
 func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject) (PublishMapResponseObject, error) {
 	// BEGIN HARDCODED SPAWN BEHAVIOR
 	// This will be fixed when we have orgs and do not need to hardcode the spawn map
@@ -723,6 +649,7 @@ func (s *server) PublishMap(ctx context.Context, request PublishMapRequestObject
 	return PublishMap200JSONResponse{s.hydratePublishedMap(publishedMap.PublishedMap, publishedMap.Tags)}, nil
 }
 
+// v4
 func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) (ReportMapResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -781,6 +708,7 @@ func (s *server) ReportMap(ctx context.Context, request ReportMapRequestObject) 
 	return ReportMap200Response{}, nil
 }
 
+// v4
 func (s *server) GetMapRating(ctx context.Context, request GetMapRatingRequestObject) (GetMapRatingResponseObject, error) {
 	rating, err := s.store.GetMapRatingForMapBy(ctx, request.MapId, request.PlayerId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -794,6 +722,7 @@ func (s *server) GetMapRating(ctx context.Context, request GetMapRatingRequestOb
 	return GetMapRating200JSONResponse{mapRatingToAPI(rating)}, nil
 }
 
+// v4
 func (s *server) RateMap(ctx context.Context, request RateMapRequestObject) (RateMapResponseObject, error) {
 	rating := mapRatingStateFromAPI(request.Body.State)
 	if rating < model.RatingState__Min || rating > model.RatingState__Max {
@@ -1239,7 +1168,7 @@ func mapReportCategoryFromAPI(category MapReportCategory) int {
 	case Spam:
 		return model.MapReportSpam
 	case Dmca:
-		return model.MapReportDCMA
+		return model.MapReportDMCA
 	case Troll:
 		return model.MapReportTroll
 	case Unplayable:

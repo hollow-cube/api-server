@@ -336,6 +336,54 @@ func (q *Queries) GetRecentMaps(ctx context.Context, arg GetRecentMapsParams) ([
 	return items, nil
 }
 
+const getRecentMaps2 = `-- name: GetRecentMaps2 :many
+select map_id, count(*) over () as total_count
+from save_states
+where player_id = $1
+  and type = $2
+  and deleted is null
+group by map_id
+order by max(updated) desc
+offset $3 limit $4
+`
+
+type GetRecentMaps2Params struct {
+	PlayerID string        `json:"playerId"`
+	Type     SaveStateType `json:"type"`
+	Offset   int32         `json:"offset"`
+	Limit    int32         `json:"limit"`
+}
+
+type GetRecentMaps2Row struct {
+	MapID      string `json:"mapId"`
+	TotalCount int64  `json:"totalCount"`
+}
+
+func (q *Queries) GetRecentMaps2(ctx context.Context, arg GetRecentMaps2Params) ([]GetRecentMaps2Row, error) {
+	rows, err := q.db.Query(ctx, getRecentMaps2,
+		arg.PlayerID,
+		arg.Type,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRecentMaps2Row{}
+	for rows.Next() {
+		var i GetRecentMaps2Row
+		if err := rows.Scan(&i.MapID, &i.TotalCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSaveState = `-- name: GetSaveState :one
 select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
 from public.save_states

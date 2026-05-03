@@ -2,6 +2,7 @@ package v4Internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
@@ -41,6 +42,15 @@ const (
 	DifficultyNightmare MapDifficulty = "nightmare"
 )
 
+var mapDifficultyIndex = map[MapDifficulty]int{
+	DifficultyUnknown:   0,
+	DifficultyEasy:      1,
+	DifficultyMedium:    2,
+	DifficultyHard:      3,
+	DifficultyExpert:    4,
+	DifficultyNightmare: 5,
+}
+
 type MapQuality string
 
 const (
@@ -52,7 +62,7 @@ const (
 	QualityMasterpiece MapQuality = "masterpiece"
 )
 
-var qualityIndex = map[MapQuality]int64{
+var mapQualityIndex = map[MapQuality]int64{
 	QualityUnrated:     0,
 	QualityGood:        1,
 	QualityGreat:       2,
@@ -137,10 +147,83 @@ type MapSlot struct {
 	Builders  []MapBuilder `json:"builders"` // Present for unpublished maps
 }
 
+type MapRatingState string
+
+const (
+	MapRatingStateUnrated  MapRatingState = "unrated"
+	MapRatingStateLiked    MapRatingState = "liked"
+	MapRatingStateDisliked MapRatingState = "disliked"
+)
+
+var mapRatingStateIndex = map[MapRatingState]int{
+	MapRatingStateUnrated:  0,
+	MapRatingStateLiked:    1,
+	MapRatingStateDisliked: 2,
+}
+
 type MapBuilder struct {
 	ID        string    `json:"id"` // The player id
 	CreatedAt time.Time `json:"createdAt"`
 	Pending   bool      `json:"pending"`
+}
+
+type MapRating struct {
+	State   MapRatingState `json:"state"`
+	Comment string         `json:"comment,omitempty"`
+}
+
+type MapReportCategory string
+
+const (
+	Cheated         MapReportCategory = "cheated"
+	Discrimination  MapReportCategory = "discrimination"
+	Dmca            MapReportCategory = "dmca"
+	ExplicitContent MapReportCategory = "explicit_content"
+	Spam            MapReportCategory = "spam"
+	Troll           MapReportCategory = "troll"
+	Unplayable      MapReportCategory = "unplayable"
+)
+
+var mapReportCategoryIndex = map[MapReportCategory]int{
+	Cheated:         model.MapReportCheated,
+	Discrimination:  model.MapReportDiscrimination,
+	ExplicitContent: model.MapReportExplicitContent,
+	Spam:            model.MapReportSpam,
+	Dmca:            model.MapReportDMCA,
+	Troll:           model.MapReportTroll,
+	Unplayable:      model.MapReportUnplayable,
+}
+
+type MapProgress string
+
+const (
+	MapProgressComplete MapProgress = "complete"
+	MapProgressNone     MapProgress = "none"
+	MapProgressStarted  MapProgress = "started"
+)
+
+type MapSortType string
+
+const (
+	Best      MapSortType = "best"
+	Published MapSortType = "published"
+)
+
+var mapSortIndex = map[MapSortType]model.MapSortType{
+	Best:      model.MapSortBest,
+	Published: model.MapSortPublished,
+}
+
+type MapSortOrder string
+
+const (
+	Asc  MapSortOrder = "asc"
+	Desc MapSortOrder = "desc"
+)
+
+var mapSortOrderIndex = map[MapSortOrder]model.MapSortOrder{
+	Asc:  model.MapSortAsc,
+	Desc: model.MapSortDesc,
 }
 
 var defaultPlaytimeLeaderboard = Leaderboard{
@@ -354,4 +437,26 @@ func hydrateMapSize(size int64) MapSize {
 
 func hydrateMapVariant(variant string) MapVariant {
 	return MapVariant(variant)
+}
+
+func mapLeaderboardKey(mapId, lbType string) string {
+	return fmt.Sprintf("map:%s:lb_%s", mapId, lbType)
+}
+
+func hydrateMapRating(rating mapdb.MapRating) MapRating {
+	return MapRating{
+		State:   hydrateMapRatingState(rating.Rating),
+		Comment: util.NilToEmpty(rating.Comment),
+	}
+}
+
+func hydrateMapRatingState(state int) MapRatingState {
+	switch state {
+	case int(model.RatingStateLiked):
+		return MapRatingStateLiked
+	case int(model.RatingStateDisliked):
+		return MapRatingStateDisliked
+	default:
+		return MapRatingStateUnrated
+	}
 }

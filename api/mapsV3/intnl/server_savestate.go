@@ -14,35 +14,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *server) CreateSaveState(ctx context.Context, request CreateSaveStateRequestObject) (CreateSaveStateResponseObject, error) {
-	m, err := s.store.GetMapById(ctx, request.MapId)
-	if errors.Is(err, mapdb.ErrNoRows) {
-		return CreateSaveState404Response{}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to fetch map: %w", err)
-	}
-
-	var stateType mapdb.SaveStateType
-	if m.PublishedAt != nil {
-		stateType = mapdb.SaveStateTypePlaying
-	} else if m.Verification != nil && *m.Verification == int64(model.VerificationPending) {
-		stateType = mapdb.SaveStateTypeVerifying
-	} else {
-		stateType = mapdb.SaveStateTypeEditing
-	}
-
-	ss, err := s.store.CreateSaveState(ctx, mapdb.CreateSaveStateParams{
-		MapID:           request.PlayerId,
-		PlayerID:        request.MapId,
-		Type:            stateType,
-		ProtocolVersion: &request.Body.ProtocolVersion,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create save state: %w", err)
-	}
-	return CreateSaveState201JSONResponse{hydrateSaveState(ss)}, nil
-}
-
 func (s *server) GetLatestSaveState(ctx context.Context, request GetLatestSaveStateRequestObject) (GetLatestSaveStateResponseObject, error) {
 	m, err := s.store.GetMapById(ctx, request.MapId)
 	if errors.Is(err, mapdb.ErrNoRows) {
@@ -336,18 +307,6 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 	}
 
 	return UpdateSaveState200JSONResponse{resp}, nil
-}
-
-func (s *server) DeleteSaveState(ctx context.Context, request DeleteSaveStateRequestObject) (DeleteSaveStateResponseObject, error) {
-	deleted, err := s.store.DeleteSaveState(ctx, request.MapId, request.PlayerId, request.SaveStateId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete save state: %w", err)
-	}
-	if deleted == 0 {
-		return DeleteSaveState404Response{}, nil
-	}
-
-	return DeleteSaveState200Response{}, nil
 }
 
 func hydrateSaveState(ss mapdb.SaveState) SaveStateDataJSONResponse {

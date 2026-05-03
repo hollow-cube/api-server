@@ -8,10 +8,13 @@ import (
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
+	"github.com/hollow-cube/api-server/internal/object"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/notification"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/internal/world"
 	"github.com/hollow-cube/api-server/pkg/ox"
+	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -24,9 +27,13 @@ type ServerParams struct {
 	MapStore     *mapdb.Store
 	SessionStore *sessiondb.Queries
 	JetStream    *natsutil.JetStreamWrapper
+	Redis        rueidis.Client
+
+	MapsBucket object.Client `name:"object-mapmaker"`
 
 	Notifications notification.Manager
 	Interactions  *interaction.Handler
+	Worlds        *world.Tracker
 }
 
 type Server struct {
@@ -36,9 +43,13 @@ type Server struct {
 	mapStore     *mapdb.Store
 	sessionStore *sessiondb.Queries
 	jetStream    *natsutil.JetStreamWrapper
+	redis        rueidis.Client
+
+	mapsBucket object.Client
 
 	notifications notification.Manager
 	interactions  *interaction.Handler
+	worlds        *world.Tracker
 }
 
 func NewServer(p ServerParams) (*Server, error) {
@@ -48,8 +59,11 @@ func NewServer(p ServerParams) (*Server, error) {
 		mapStore:      p.MapStore,
 		sessionStore:  p.SessionStore,
 		jetStream:     p.JetStream,
+		redis:         p.Redis,
+		mapsBucket:    p.MapsBucket,
 		notifications: p.Notifications,
 		interactions:  p.Interactions,
+		worlds:        p.Worlds,
 	}
 
 	return s, nil
@@ -62,6 +76,16 @@ func (s *Server) player(ctx context.Context, id string) (pd playerdb.PlayerData,
 		return pd, ox.NotFound{}
 	} else if err != nil {
 		return pd, fmt.Errorf("failed to get player data: %w", err)
+	}
+	return
+}
+
+func (s *Server) map_(ctx context.Context, id string) (md mapdb.Map, err error) {
+	md, err = s.mapStore.GetMapById(ctx, id)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return md, ox.NotFound{}
+	} else if err != nil {
+		return md, fmt.Errorf("failed to get map data: %w", err)
 	}
 	return
 }

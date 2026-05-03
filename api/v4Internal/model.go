@@ -2,6 +2,12 @@ package v4Internal
 
 import "github.com/hollow-cube/api-server/internal/mapdb"
 
+type PlayerPaginatedRequest struct {
+	PlayerID string `path:"playerId"`
+	Page     int    `query:"page"`
+	PageSize int    `query:"pageSize"`
+}
+
 type Pos struct {
 	Point
 	Pitch float64 `json:"pitch"`
