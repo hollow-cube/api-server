@@ -18,7 +18,7 @@ func EmptyToNil(s string) *string {
 	if s == "" {
 		return nil
 	}
-	return s
+	return &s
 }
 
 var idPattern = regexp.MustCompile(`^([0-9]{3})-([0-9]{3})-([0-9]{3})$`)

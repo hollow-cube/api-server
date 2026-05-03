@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hollow-cube/api-server/internal/pkg/util"
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/api-server/pkg/hog"
 	"github.com/hollow-cube/api-server/pkg/ox"
@@ -50,12 +49,12 @@ func (s *Server) CreatePlayerData(ctx context.Context, body CreatePlayerDataRequ
 }
 
 type PlayerRequest struct {
-	PlayerId string `path:"playerId"`
+	PlayerID string `path:"playerId"`
 }
 
 // GET /players/{playerId}
 func (s *Server) GetPlayerData(ctx context.Context, request PlayerRequest) (*PlayerData, error) {
-	pd, err := s.playerStore.GetPlayerData(ctx, util.RemapUUID(request.PlayerId))
+	pd, err := s.playerStore.SafeLookupPlayerIdByIdOrUsername(ctx, request.PlayerID)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {
@@ -161,11 +160,11 @@ func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataR
 
 // GET /players/{playerId}/display-name
 func (s *Server) GetPlayerDisplayName(ctx context.Context, request PlayerRequest) (DisplayName, error) {
-	if orgName, ok := orgMapNames[request.PlayerId]; ok {
+	if orgName, ok := orgMapNames[request.PlayerID]; ok {
 		return orgName, nil
 	}
 
-	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
+	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerID)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {
@@ -183,7 +182,7 @@ type GetPlayerHypercubeResponse struct {
 
 // GET /players/{playerId}/hypercube
 func (s *Server) GetPlayerHypercube(ctx context.Context, request PlayerRequest) (*GetPlayerHypercubeResponse, error) {
-	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
+	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerID)
 	if errors.Is(err, playerdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {
@@ -201,19 +200,13 @@ func (s *Server) GetPlayerHypercube(ctx context.Context, request PlayerRequest) 
 	}, nil
 }
 
-type (
-	GetPlayerAltsResponse struct {
-		Results []PlayerAltAccount `json:"results"`
-	}
-	PlayerAltAccount struct {
-		Id       string `json:"id"`
-		Username string `json:"username"`
-	}
-)
+type GetPlayerAltsResponse struct {
+	Results []PlayerDataStub `json:"results"`
+}
 
 // GET /players/{playerId}/alts
 func (s *Server) GetPlayerAlts(ctx context.Context, request PlayerRequest) (*GetPlayerAltsResponse, error) {
-	playerIPs, err := s.playerStore.GetPlayerIPHistory(ctx, request.PlayerId)
+	playerIPs, err := s.playerStore.GetPlayerIPHistory(ctx, request.PlayerID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,15 +216,25 @@ func (s *Server) GetPlayerAlts(ctx context.Context, request PlayerRequest) (*Get
 		return nil, err
 	}
 
-	results := make([]PlayerAltAccount, 0, 10)
+	results := make([]PlayerDataStub, 0, 10)
 	for _, row := range sharedPlayers {
-		if row.ID == request.PlayerId {
+		if row.ID == request.PlayerID {
 			continue
 		}
 
-		results = append(results, PlayerAltAccount{
-			Id:       row.ID,
-			Username: row.Username,
+		// always return empty map not null if no settings have been changed
+		// TODO: should just make the column notnull and then this isnt necessary
+		var settings map[string]any
+		if row.Settings != nil {
+			settings = row.Settings
+		} else {
+			settings = make(map[string]any)
+		}
+
+		results = append(results, PlayerDataStub{
+			ID:          row.ID,
+			DisplayName: s.computeDisplayName(row),
+			Settings:    settings,
 		})
 	}
 
