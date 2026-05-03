@@ -33,17 +33,6 @@ paths:
               schema: { $ref: '#/components/schemas/MapListResponse' }
         '400':
           $ref: '#/components/responses/BadRequest'
-    post:
-      operationId: createMap
-      tags: [ map ]
-      summary: Create a new map
-      requestBody:
-        $ref: '#/components/requestBodies/MapCreateRequest'
-      responses:
-        '201':
-          $ref: '#/components/responses/MapData'
-        '400':
-          $ref: '#/components/responses/BadRequest'
   /maps/search:
     get:
       operationId: searchMaps
@@ -291,28 +280,6 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /maps/{mapId}/savestates/{playerId}:
-    post:
-      operationId: createSaveState
-      tags: [ savestate ]
-      summary: Create a new savestate for the given player on the given map
-      description: The type is inferred from the current map state
-      parameters:
-        - name: mapId
-          in: path
-          required: true
-          schema: { type: string }
-        - name: playerId
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        $ref: '#/components/requestBodies/SaveStateCreateRequest'
-      responses:
-        '201':
-          $ref: '#/components/responses/SaveStateData'
-        '404':
-          $ref: '#/components/responses/MapNotFound'
   /maps/{mapId}/savestates/{playerId}/latest:
     get:
       operationId: getLatestSaveState
@@ -379,29 +346,6 @@ paths:
           $ref: '#/components/responses/SaveStateUpdate'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/SaveStateNotFound'
-    delete:
-      operationId: deleteSaveState
-      tags: [ savestate ]
-      summary: Delete a savestate
-      parameters:
-        - name: mapId
-          in: path
-          required: true
-          schema: { type: string }
-        - name: playerId
-          in: path
-          required: true
-          schema: { type: string }
-        - name: saveStateId
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          x-type: empty
-          description: Save state successfully deleted
         '404':
           $ref: '#/components/responses/SaveStateNotFound'
 

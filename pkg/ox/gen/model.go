@@ -21,22 +21,35 @@ type Endpoint struct {
 	Response    Response
 }
 
-// RequestBody represents a JSON request body parameter.
+// RequestBody represents a request body parameter.
 type RequestBody struct {
-	GoName   string // Parameter name or "Body" if from struct field
+	GoName   string // Parameter name or struct field name (e.g. "body" or "Body")
 	GoType   string // Go type as string
 	Required bool   // Always true for body parameters
+
+	// IsStream is true when the body is *ox.Stream (raw bytes). The runtime
+	// populates ContentType/Body/ContentLength from the request rather than
+	// JSON-decoding. Consumes enumerates the MIME types the endpoint accepts.
+	IsStream bool
+	Consumes []string
 }
 
 // Param represents a request parameter extracted from struct tags.
 type Param struct {
 	Name     string // Tag value (URL param name, query key, header name)
 	GoName   string // Go struct field name
-	GoType   string // Go type as string ("string", "int", etc.)
+	GoType   string // Underlying basic kind for parsing ("string", "int", "int64", "bool")
+	ElemType string // Concrete (possibly named) Go type to assign to the field. Equals GoType for unnamed basics.
 	Location string // "path", "query", or "header"
-	Required bool
-	OAPIType string // OpenAPI type
-	OAPIFmt  string // OpenAPI format, empty if not applicable
+
+	// IsPointer is true when the field is a pointer (*T). Pointer params are
+	// implicitly optional — Required is forced to false. The generated
+	// decoder allocates a value and assigns the pointer only when the
+	// query/header value is non-empty.
+	IsPointer bool
+	Required  bool
+	OAPIType  string // OpenAPI type
+	OAPIFmt   string // OpenAPI format, empty if not applicable
 }
 
 // Response describes the handler's return type.
@@ -47,4 +60,10 @@ type Response struct {
 	OAPIType    string
 	OAPIFmt     string
 	ContentType string // "text/plain" for string, "application/json" for structs
+
+	// IsStream is true when the handler returns *ox.Stream. In that case the
+	// response is a binary/streaming body and Produces enumerates the MIME
+	// types the endpoint may emit at runtime.
+	IsStream bool
+	Produces []string
 }

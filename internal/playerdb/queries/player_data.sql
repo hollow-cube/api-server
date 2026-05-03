@@ -20,7 +20,7 @@ from public.player_data
 where lower(username) = lower($1);
 
 -- name: LookupPlayerByIdOrUsername :one
-select id
+select *
 from public.player_data
 where id = $1
    or lower(username) = lower($2);

@@ -9,3 +9,5 @@ deploy/helm-chart/charts
 
 # ignore compiled service binaries in the root
 services/*/*-service
+
+node_modules

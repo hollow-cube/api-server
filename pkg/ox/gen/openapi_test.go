@@ -96,6 +96,84 @@ func TestGenerateOpenAPI_NoContent204(t *testing.T) {
 	require.NotContains(t, yaml, "application/json")
 }
 
+func TestGenerateOpenAPI_StreamResponse(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:   "GetMapWorld",
+				Method: "GET",
+				Path:   "/maps/{mapId}/world",
+				Params: []Param{
+					{Name: "mapId", GoName: "MapID", GoType: "string", Location: "path", Required: true, OAPIType: "string"},
+				},
+				Response: Response{
+					StatusCode: 200,
+					IsStream:   true,
+					Produces: []string{
+						"application/vnd.hollowcube.polar",
+						"application/vnd.hollowcube.anvil",
+					},
+				},
+			},
+		},
+	}
+
+	yamlBytes, err := GenerateOpenAPI(api)
+	require.NoError(t, err)
+	yaml := string(yamlBytes)
+
+	require.Contains(t, yaml, `"200":`)
+	require.Contains(t, yaml, "application/vnd.hollowcube.polar:")
+	require.Contains(t, yaml, "application/vnd.hollowcube.anvil:")
+	require.Contains(t, yaml, "type: string")
+	require.Contains(t, yaml, "format: binary")
+	require.NotContains(t, yaml, "application/json")
+}
+
+func TestGenerateOpenAPI_StreamRequestBody(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:   "UpdateMapWorld",
+				Method: "PUT",
+				Path:   "/maps/{mapId}/world",
+				Params: []Param{
+					{Name: "mapId", GoName: "MapID", GoType: "string", Location: "path", Required: true, OAPIType: "string"},
+				},
+				RequestBody: &RequestBody{
+					GoName:   "Body",
+					GoType:   "*ox.Stream",
+					Required: true,
+					IsStream: true,
+					Consumes: []string{
+						"application/vnd.hollowcube.polar",
+						"application/vnd.hollowcube.anvil",
+					},
+				},
+				Response: Response{StatusCode: 200},
+			},
+		},
+	}
+
+	yamlBytes, err := GenerateOpenAPI(api)
+	require.NoError(t, err)
+	yaml := string(yamlBytes)
+
+	require.Contains(t, yaml, "requestBody:")
+	require.Contains(t, yaml, "application/vnd.hollowcube.polar:")
+	require.Contains(t, yaml, "application/vnd.hollowcube.anvil:")
+	require.Contains(t, yaml, "type: string")
+	require.Contains(t, yaml, "format: binary")
+	// requestBody should not list application/json for stream bodies
+	require.NotContains(t, yaml, "application/json")
+}
+
 func TestLcFirst(t *testing.T) {
 	tests := []struct {
 		input string

@@ -235,17 +235,36 @@ func (q *Queries) LegacySearchPlayersFuzzy(ctx context.Context, username string,
 }
 
 const lookupPlayerByIdOrUsername = `-- name: LookupPlayerByIdOrUsername :one
-select id
+select id, username, first_join, last_online, playtime, experience, beta_enabled, settings, coins, cubits, skin, online, hypercube_start, hypercube_end, role, extra_map_slots, max_map_size, map_builders
 from public.player_data
 where id = $1
    or lower(username) = lower($2)
 `
 
-func (q *Queries) LookupPlayerByIdOrUsername(ctx context.Context, iD string, lower string) (string, error) {
+func (q *Queries) LookupPlayerByIdOrUsername(ctx context.Context, iD string, lower string) (PlayerData, error) {
 	row := q.db.QueryRow(ctx, lookupPlayerByIdOrUsername, iD, lower)
-	var id string
-	err := row.Scan(&id)
-	return id, err
+	var i PlayerData
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.FirstJoin,
+		&i.LastOnline,
+		&i.Playtime,
+		&i.Experience,
+		&i.BetaEnabled,
+		&i.Settings,
+		&i.Coins,
+		&i.Cubits,
+		&i.Skin,
+		&i.Online,
+		&i.HypercubeStart,
+		&i.HypercubeEnd,
+		&i.Role,
+		&i.ExtraMapSlots,
+		&i.MaxMapSize,
+		&i.MapBuilders,
+	)
+	return i, err
 }
 
 const lookupPlayerByUsername = `-- name: LookupPlayerByUsername :one

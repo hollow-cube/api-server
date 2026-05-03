@@ -49,28 +49,42 @@ func (q *Queries) GetPlayerIPHistory(ctx context.Context, playerID string) ([]st
 }
 
 const getPlayersByIPs = `-- name: GetPlayersByIPs :many
-select player_data.id, player_data.username
+select player_data.id, player_data.username, player_data.first_join, player_data.last_online, player_data.playtime, player_data.experience, player_data.beta_enabled, player_data.settings, player_data.coins, player_data.cubits, player_data.skin, player_data.online, player_data.hypercube_start, player_data.hypercube_end, player_data.role, player_data.extra_map_slots, player_data.max_map_size, player_data.map_builders
 from ip_history
          inner join player_data on ip_history.player_id = player_data.id
 where address = ANY ($1::text[])
 group by player_data.id
 `
 
-type GetPlayersByIPsRow struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-}
-
-func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]GetPlayersByIPsRow, error) {
+func (q *Queries) GetPlayersByIPs(ctx context.Context, dollar_1 []string) ([]PlayerData, error) {
 	rows, err := q.db.Query(ctx, getPlayersByIPs, dollar_1)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetPlayersByIPsRow{}
+	items := []PlayerData{}
 	for rows.Next() {
-		var i GetPlayersByIPsRow
-		if err := rows.Scan(&i.ID, &i.Username); err != nil {
+		var i PlayerData
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.FirstJoin,
+			&i.LastOnline,
+			&i.Playtime,
+			&i.Experience,
+			&i.BetaEnabled,
+			&i.Settings,
+			&i.Coins,
+			&i.Cubits,
+			&i.Skin,
+			&i.Online,
+			&i.HypercubeStart,
+			&i.HypercubeEnd,
+			&i.Role,
+			&i.ExtraMapSlots,
+			&i.MaxMapSize,
+			&i.MapBuilders,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -341,7 +341,7 @@ func (s *Server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObje
 		return nil, fmt.Errorf("failed to lookup player: %w", err)
 	}
 
-	return GetPlayerId200TextResponse(pid), nil
+	return GetPlayerId200TextResponse(pid.ID), nil
 }
 
 // v4

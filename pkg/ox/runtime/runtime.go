@@ -3,7 +3,9 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/hollow-cube/api-server/pkg/ox"
 	"go.uber.org/zap"
@@ -21,6 +23,34 @@ func WriteText(w http.ResponseWriter, status int, v string) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(status)
 	w.Write([]byte(v))
+}
+
+// WriteStream writes a binary/streaming response. ContentType defaults to
+// application/octet-stream if empty. Content-Length is written only when
+// s.ContentLength > 0. If s.Body implements io.Closer it is closed after the
+// copy. Once headers are written there is no recovery from a copy failure;
+// failures are logged.
+func WriteStream(w http.ResponseWriter, status int, s *ox.Stream) {
+	if s == nil || s.Body == nil {
+		zap.S().Errorw("stream response has nil body")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	ct := s.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	if s.ContentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(s.ContentLength, 10))
+	}
+	w.WriteHeader(status)
+	if c, ok := s.Body.(io.Closer); ok {
+		defer c.Close()
+	}
+	if _, err := io.Copy(w, s.Body); err != nil {
+		zap.S().Warnw("stream copy failed mid-response", "error", err)
+	}
 }
 
 // HandleError writes an HTTP error response. If err implements HTTPError,

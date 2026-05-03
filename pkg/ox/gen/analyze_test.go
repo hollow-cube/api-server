@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"errors"
 	"go/types"
 	"reflect"
 	"testing"
@@ -8,14 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseRouteComment(t *testing.T) {
+func TestParseDirectives(t *testing.T) {
 	tests := []struct {
-		name       string
-		doc        string
-		wantMethod string
-		wantPath   string
-		wantDesc   string
-		wantErr    bool
+		name         string
+		doc          string
+		wantMethod   string
+		wantPath     string
+		wantDesc     string
+		wantProduces []string
+		wantConsumes []string
+		wantErr      bool
+		wantNoRoute  bool // err should be errNoRouteComment
 	}{
 		{
 			name:       "GET simple path",
@@ -37,28 +41,29 @@ func TestParseRouteComment(t *testing.T) {
 			wantDesc:   "Returns all users in the system.",
 		},
 		{
-			name:       "ox:route directive",
-			doc:        "Some description.\nox:route GET /items/{id}",
-			wantMethod: "GET",
-			wantPath:   "/items/{id}",
-			wantDesc:   "Some description.",
-		},
-		{
-			name:       "ox:route directive with other directives filtered",
-			doc:        "Some description.\nox:route PUT /items/{id}\nox:tags items",
+			name:       "first line route with other ox directives filtered",
+			doc:        "PUT /items/{id}\nSome description.\nox:tags items",
 			wantMethod: "PUT",
 			wantPath:   "/items/{id}",
 			wantDesc:   "Some description.",
 		},
 		{
-			name:    "empty doc",
-			doc:     "",
-			wantErr: true,
+			name:        "empty doc",
+			doc:         "",
+			wantErr:     true,
+			wantNoRoute: true,
 		},
 		{
-			name:    "no route declaration",
-			doc:     "This is just a comment.\nNothing useful here.",
-			wantErr: true,
+			name:        "no route declaration",
+			doc:         "This is just a comment.\nNothing useful here.",
+			wantErr:     true,
+			wantNoRoute: true,
+		},
+		{
+			name:        "ox:route is no longer supported",
+			doc:         "Some description.\nox:route GET /items/{id}",
+			wantErr:     true,
+			wantNoRoute: true,
 		},
 		{
 			name:       "DELETE method",
@@ -72,19 +77,288 @@ func TestParseRouteComment(t *testing.T) {
 			wantMethod: "PATCH",
 			wantPath:   "/users/{id}",
 		},
+		{
+			name:         "ox:produces single type",
+			doc:          "GET /maps/{id}/world\nox:produces application/vnd.hollowcube.polar",
+			wantMethod:   "GET",
+			wantPath:     "/maps/{id}/world",
+			wantProduces: []string{"application/vnd.hollowcube.polar"},
+		},
+		{
+			name:       "ox:produces multiple types",
+			doc:        "GET /maps/{id}/world\nox:produces application/vnd.hollowcube.polar, application/vnd.hollowcube.anvil, application/vnd.hollowcube.anvil-legacy",
+			wantMethod: "GET",
+			wantPath:   "/maps/{id}/world",
+			wantProduces: []string{
+				"application/vnd.hollowcube.polar",
+				"application/vnd.hollowcube.anvil",
+				"application/vnd.hollowcube.anvil-legacy",
+			},
+		},
+		{
+			name:         "ox:produces with description",
+			doc:          "GET /maps/{id}/world\nStream the world data.\nox:produces application/octet-stream",
+			wantMethod:   "GET",
+			wantPath:     "/maps/{id}/world",
+			wantDesc:     "Stream the world data.",
+			wantProduces: []string{"application/octet-stream"},
+		},
+		{
+			name:         "ox:consumes single type",
+			doc:          "PUT /maps/{id}/world\nox:consumes application/vnd.hollowcube.polar",
+			wantMethod:   "PUT",
+			wantPath:     "/maps/{id}/world",
+			wantConsumes: []string{"application/vnd.hollowcube.polar"},
+		},
+		{
+			name:       "ox:consumes multiple types",
+			doc:        "PUT /maps/{id}/world\nox:consumes application/vnd.hollowcube.polar, application/vnd.hollowcube.anvil",
+			wantMethod: "PUT",
+			wantPath:   "/maps/{id}/world",
+			wantConsumes: []string{
+				"application/vnd.hollowcube.polar",
+				"application/vnd.hollowcube.anvil",
+			},
+		},
+		{
+			name:    "ox:produces missing slash",
+			doc:     "GET /foo\nox:produces notamimetype",
+			wantErr: true,
+		},
+		{
+			name:    "ox:produces with whitespace inside type",
+			doc:     "GET /foo\nox:produces application/foo bar",
+			wantErr: true,
+		},
+		{
+			name:    "ox:consumes missing slash",
+			doc:     "PUT /foo\nox:consumes notamimetype",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			method, path, desc, err := parseRouteComment(tt.doc)
+			d, err := parseDirectives(tt.doc)
 			if tt.wantErr {
 				require.Error(t, err)
+				if tt.wantNoRoute {
+					require.True(t, errors.Is(err, errNoRouteComment), "expected errNoRouteComment, got %v", err)
+				} else {
+					require.False(t, errors.Is(err, errNoRouteComment), "expected non-sentinel error, got %v", err)
+				}
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tt.wantMethod, method)
-			require.Equal(t, tt.wantPath, path)
-			require.Equal(t, tt.wantDesc, desc)
+			require.Equal(t, tt.wantMethod, d.Method)
+			require.Equal(t, tt.wantPath, d.Path)
+			require.Equal(t, tt.wantDesc, d.Description)
+			require.Equal(t, tt.wantProduces, d.Produces)
+			require.Equal(t, tt.wantConsumes, d.Consumes)
+		})
+	}
+}
+
+func TestValidateResponse(t *testing.T) {
+	tests := []struct {
+		name    string
+		resp    Response
+		wantErr bool
+	}{
+		{
+			name: "stream with produces",
+			resp: Response{
+				IsStream:   true,
+				Produces:   []string{"application/octet-stream"},
+				StatusCode: 200,
+			},
+		},
+		{
+			name: "stream without produces",
+			resp: Response{
+				IsStream:   true,
+				StatusCode: 200,
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-stream with produces",
+			resp: Response{
+				Produces:   []string{"application/octet-stream"},
+				StatusCode: 200,
+			},
+			wantErr: true,
+		},
+		{
+			name: "stream with 204",
+			resp: Response{
+				IsStream:   true,
+				Produces:   []string{"application/octet-stream"},
+				StatusCode: 204,
+			},
+			wantErr: true,
+		},
+		{
+			name: "ordinary response unchanged",
+			resp: Response{
+				StatusCode:  200,
+				GoType:      "User",
+				ContentType: "application/json",
+				OAPIType:    "object",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateResponse(tt.resp)
+			if tt.wantErr {
+				require.Error(t, err)
+				require.False(t, errors.Is(err, errNoRouteComment))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateRequestBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     *RequestBody
+		consumes []string
+		wantErr  bool
+	}{
+		{name: "no body, no consumes", body: nil},
+		{name: "no body but consumes set", consumes: []string{"application/octet-stream"}, wantErr: true},
+		{
+			name:     "stream body with consumes",
+			body:     &RequestBody{IsStream: true, GoName: "Body", GoType: "*ox.Stream"},
+			consumes: []string{"application/octet-stream"},
+		},
+		{
+			name:    "stream body without consumes",
+			body:    &RequestBody{IsStream: true, GoName: "Body", GoType: "*ox.Stream"},
+			wantErr: true,
+		},
+		{
+			name:     "json body with consumes",
+			body:     &RequestBody{GoName: "Body", GoType: "Foo"},
+			consumes: []string{"application/octet-stream"},
+			wantErr:  true,
+		},
+		{
+			name: "json body without consumes",
+			body: &RequestBody{GoName: "Body", GoType: "Foo"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRequestBody(tt.body, tt.consumes)
+			if tt.wantErr {
+				require.Error(t, err)
+				require.False(t, errors.Is(err, errNoRouteComment))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExtractParamsAndBody_StreamBody(t *testing.T) {
+	const oxPath = "github.com/hollow-cube/api-server/pkg/ox"
+	streamPkg := types.NewPackage(oxPath, "ox")
+	streamNamed := types.NewNamed(
+		types.NewTypeName(0, streamPkg, "Stream", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+	streamPtr := types.NewPointer(streamNamed)
+
+	// struct { MapID string `path:"mapId"`; Body *ox.Stream }
+	fields := []*types.Var{
+		types.NewField(0, nil, "MapID", types.Typ[types.String], false),
+		types.NewField(0, nil, "Body", streamPtr, false),
+	}
+	tags := []string{
+		`path:"mapId"`,
+		``,
+	}
+	st := types.NewStruct(fields, tags)
+
+	params, body := extractParamsAndBody(st, oxPath)
+
+	require.Len(t, params, 1)
+	require.Equal(t, "mapId", params[0].Name)
+
+	require.NotNil(t, body)
+	require.True(t, body.IsStream)
+	require.Equal(t, "Body", body.GoName)
+}
+
+func TestExtractParamsAndBody_StreamWithCustomFieldName(t *testing.T) {
+	const oxPath = "github.com/hollow-cube/api-server/pkg/ox"
+	streamPkg := types.NewPackage(oxPath, "ox")
+	streamNamed := types.NewNamed(
+		types.NewTypeName(0, streamPkg, "Stream", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+	streamPtr := types.NewPointer(streamNamed)
+
+	// struct { Stream *ox.Stream } — name doesn't have to be "Body" for streams
+	fields := []*types.Var{
+		types.NewField(0, nil, "Stream", streamPtr, false),
+	}
+	tags := []string{``}
+	st := types.NewStruct(fields, tags)
+
+	_, body := extractParamsAndBody(st, oxPath)
+
+	require.NotNil(t, body)
+	require.True(t, body.IsStream)
+	require.Equal(t, "Stream", body.GoName)
+}
+
+func TestIsOxStream(t *testing.T) {
+	const oxPath = "github.com/hollow-cube/api-server/pkg/ox"
+
+	streamPkg := types.NewPackage(oxPath, "ox")
+	streamNamed := types.NewNamed(
+		types.NewTypeName(0, streamPkg, "Stream", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+
+	otherPkg := types.NewPackage("example.com/other", "other")
+	otherStream := types.NewNamed(
+		types.NewTypeName(0, otherPkg, "Stream", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+
+	wrongName := types.NewNamed(
+		types.NewTypeName(0, streamPkg, "NotStream", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+
+	tests := []struct {
+		name string
+		typ  types.Type
+		want bool
+	}{
+		{"pointer to ox.Stream", types.NewPointer(streamNamed), true},
+		{"value ox.Stream rejected", streamNamed, false},
+		{"pointer to other-package Stream", types.NewPointer(otherStream), false},
+		{"pointer to wrong-name type", types.NewPointer(wrongName), false},
+		{"basic type", types.Typ[types.String], false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, isOxStream(tt.typ, oxPath))
 		})
 	}
 }
@@ -206,7 +480,7 @@ func TestExtractParamsAndBody(t *testing.T) {
 	}
 	st := types.NewStruct(fields, tags)
 
-	params, body := extractParamsAndBody(st)
+	params, body := extractParamsAndBody(st, "")
 
 	require.Len(t, params, 3) // Internal has no tag, should be skipped
 	require.Nil(t, body)      // No Body field
@@ -251,7 +525,7 @@ func TestExtractParamsAndBody_BodyField(t *testing.T) {
 	}
 	st := types.NewStruct(fields, tags)
 
-	params, body := extractParamsAndBody(st)
+	params, body := extractParamsAndBody(st, "")
 
 	require.Len(t, params, 1)
 	require.NotNil(t, body)
@@ -278,7 +552,7 @@ func TestExtractParamsAndBody_EmbeddedBody(t *testing.T) {
 	}
 	st := types.NewStruct(fields, tags)
 
-	params, body := extractParamsAndBody(st)
+	params, body := extractParamsAndBody(st, "")
 
 	require.Len(t, params, 1)
 	require.NotNil(t, body)
@@ -305,7 +579,7 @@ func TestExtractParamsAndBody_EmbeddedBodyWithJSONTags(t *testing.T) {
 	}
 	st := types.NewStruct(fields, tags)
 
-	params, body := extractParamsAndBody(st)
+	params, body := extractParamsAndBody(st, "")
 
 	require.Len(t, params, 1)
 	require.NotNil(t, body)
@@ -332,7 +606,7 @@ func TestExtractParamsAndBody_NoEmbeddedBodyWithParamTag(t *testing.T) {
 	}
 	st := types.NewStruct(fields, tags)
 
-	params, body := extractParamsAndBody(st)
+	params, body := extractParamsAndBody(st, "")
 
 	require.Len(t, params, 2) // ID and the embedded struct treated as param
 	require.Nil(t, body)      // No body because embedded field has param tag

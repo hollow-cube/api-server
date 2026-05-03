@@ -173,23 +173,17 @@ const (
 	MapReportDiscrimination  = 1
 	MapReportExplicitContent = 2
 	MapReportSpam            = 3
-	MapReportDCMA            = 4
+	MapReportDMCA            = 4
 	MapReportTroll           = 5
 	MapReportUnplayable      = 6
 )
-
-var ReportCategoryNameMap = []string{
-	"Cheated Verification", "Discrimination",
-	"Inappropriate/Explicit Content",
-	"Spam", "Troll Map", "Crashes/Unloadable",
-}
 
 var ReportCategoriesToDislike = map[int]bool{
 	MapReportDiscrimination:  true,
 	MapReportExplicitContent: true,
 	MapReportSpam:            true,
 	MapReportTroll:           true,
-	MapReportDCMA:            true,
+	MapReportDMCA:            true,
 }
 
 type MapSortOrder = string

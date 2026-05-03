@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -156,6 +158,90 @@ func TestHandleError(t *testing.T) {
 			}
 		})
 	}
+}
+
+type closingReader struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closingReader) Close() error {
+	c.closed = true
+	return nil
+}
+
+func TestWriteStream(t *testing.T) {
+	t.Run("writes content type, length, and body", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		body := []byte("hello world")
+		WriteStream(w, 200, &ox.Stream{
+			ContentType:   "application/vnd.hollowcube.polar",
+			Body:          bytes.NewReader(body),
+			ContentLength: int64(len(body)),
+		})
+
+		require.Equal(t, 200, w.Code)
+		require.Equal(t, "application/vnd.hollowcube.polar", w.Header().Get("Content-Type"))
+		require.Equal(t, "11", w.Header().Get("Content-Length"))
+		require.Equal(t, "hello world", w.Body.String())
+	})
+
+	t.Run("omits content-length when zero", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("data")),
+		})
+
+		require.Equal(t, "", w.Header().Get("Content-Length"))
+		require.Equal(t, "data", w.Body.String())
+	})
+
+	t.Run("defaults empty content type to octet-stream", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			Body: bytes.NewReader([]byte("x")),
+		})
+
+		require.Equal(t, "application/octet-stream", w.Header().Get("Content-Type"))
+	})
+
+	t.Run("closes body when it implements io.Closer", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		cr := &closingReader{Reader: bytes.NewReader([]byte("abc"))}
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        cr,
+		})
+
+		require.True(t, cr.closed, "expected body Close to have been called")
+	})
+
+	t.Run("nil stream returns 500 without panic", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		require.NotPanics(t, func() {
+			WriteStream(w, 200, nil)
+		})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("nil body returns 500 without panic", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		require.NotPanics(t, func() {
+			WriteStream(w, 200, &ox.Stream{ContentType: "application/octet-stream"})
+		})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("custom status code", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 202, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("queued")),
+		})
+
+		require.Equal(t, 202, w.Code)
+	})
 }
 
 func TestWriteBadRequest(t *testing.T) {

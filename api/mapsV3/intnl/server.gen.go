@@ -341,14 +341,6 @@ type SaveStateUpdate struct {
 	Rewards      *string `json:"rewards,omitempty"`
 }
 
-// MapCreateRequest defines model for MapCreateRequest.
-type MapCreateRequest struct {
-	IsOrg bool    `json:"isOrg"`
-	Owner string  `json:"owner"`
-	Size  MapSize `json:"size"`
-	Slot  *int    `json:"slot,omitempty"`
-}
-
 // MapDeleteRequest defines model for MapDeleteRequest.
 type MapDeleteRequest struct {
 	Reason *string `json:"reason,omitempty"`
@@ -389,11 +381,6 @@ type MapUpdateRequest struct {
 // RateMapRequest defines model for RateMapRequest.
 type RateMapRequest = MapRating
 
-// SaveStateCreateRequest defines model for SaveStateCreateRequest.
-type SaveStateCreateRequest struct {
-	ProtocolVersion int `json:"protocolVersion"`
-}
-
 // SaveStateUpdateRequest defines model for SaveStateUpdateRequest.
 type SaveStateUpdateRequest struct {
 	Completed       *bool                   `json:"completed,omitempty"`
@@ -422,14 +409,6 @@ type GetPlayerTopTimesParams struct {
 type GetMapsParams struct {
 	// MapIds Comma separated list of map IDs to return
 	MapIds string `form:"mapIds" json:"mapIds"`
-}
-
-// CreateMapJSONBody defines parameters for CreateMap.
-type CreateMapJSONBody struct {
-	IsOrg bool    `json:"isOrg"`
-	Owner string  `json:"owner"`
-	Size  MapSize `json:"size"`
-	Slot  *int    `json:"slot,omitempty"`
 }
 
 // GetGlobalLeaderboardParams defines parameters for GetGlobalLeaderboard.
@@ -508,11 +487,6 @@ type ReportMapJSONBody struct {
 	Reporter string                  `json:"reporter"`
 }
 
-// CreateSaveStateJSONBody defines parameters for CreateSaveState.
-type CreateSaveStateJSONBody struct {
-	ProtocolVersion int `json:"protocolVersion"`
-}
-
 // GetLatestSaveStateParams defines parameters for GetLatestSaveState.
 type GetLatestSaveStateParams struct {
 	TypeFilter *string `form:"typeFilter,omitempty" json:"typeFilter,omitempty"`
@@ -537,9 +511,6 @@ type UpdateMapWorldParams struct {
 	LoadTime *int `form:"loadTime,omitempty" json:"loadTime,omitempty"`
 }
 
-// CreateMapJSONRequestBody defines body for CreateMap for application/json ContentType.
-type CreateMapJSONRequestBody CreateMapJSONBody
-
 // DeleteMapJSONRequestBody defines body for DeleteMap for application/json ContentType.
 type DeleteMapJSONRequestBody DeleteMapJSONBody
 
@@ -554,9 +525,6 @@ type RateMapJSONRequestBody = MapRating
 
 // ReportMapJSONRequestBody defines body for ReportMap for application/json ContentType.
 type ReportMapJSONRequestBody ReportMapJSONBody
-
-// CreateSaveStateJSONRequestBody defines body for CreateSaveState for application/json ContentType.
-type CreateSaveStateJSONRequestBody CreateSaveStateJSONBody
 
 // UpdateSaveStateJSONRequestBody defines body for UpdateSaveState for application/json ContentType.
 type UpdateSaveStateJSONRequestBody UpdateSaveStateJSONBody
@@ -578,9 +546,6 @@ type ServerInterface interface {
 	// Get requested maps
 	// (GET /maps)
 	GetMaps(w http.ResponseWriter, r *http.Request, params GetMapsParams)
-	// Create a new map
-	// (POST /maps)
-	CreateMap(w http.ResponseWriter, r *http.Request)
 	// Get a global leaderboard by its name, optionally including player info
 	// (GET /maps/hub/leaderboard/{leaderboardName})
 	GetGlobalLeaderboard(w http.ResponseWriter, r *http.Request, leaderboardName string, params GetGlobalLeaderboardParams)
@@ -620,18 +585,12 @@ type ServerInterface interface {
 	// Submit a report for a map by its full ID
 	// (POST /maps/{mapId}/report)
 	ReportMap(w http.ResponseWriter, r *http.Request, mapId string)
-	// Create a new savestate for the given player on the given map
-	// (POST /maps/{mapId}/savestates/{playerId})
-	CreateSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string)
 	// Get the best savestate for the given player on the given map
 	// (GET /maps/{mapId}/savestates/{playerId}/best)
 	GetBestSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string)
 	// Get the latest savestate for the given player on the given map
 	// (GET /maps/{mapId}/savestates/{playerId}/latest)
 	GetLatestSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string, params GetLatestSaveStateParams)
-	// Delete a savestate
-	// (DELETE /maps/{mapId}/savestates/{playerId}/{saveStateId})
-	DeleteSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string, saveStateId string)
 	// Update a savestate
 	// (PATCH /maps/{mapId}/savestates/{playerId}/{saveStateId})
 	UpdateSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string, saveStateId string)
@@ -827,20 +786,6 @@ func (siw *ServerInterfaceWrapper) GetMaps(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMaps(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateMap operation middleware
-func (siw *ServerInterfaceWrapper) CreateMap(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateMap(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1298,40 +1243,6 @@ func (siw *ServerInterfaceWrapper) ReportMap(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
-// CreateSaveState operation middleware
-func (siw *ServerInterfaceWrapper) CreateSaveState(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "mapId" -------------
-	var mapId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateSaveState(w, r, mapId, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetBestSaveState operation middleware
 func (siw *ServerInterfaceWrapper) GetBestSaveState(w http.ResponseWriter, r *http.Request) {
 
@@ -1402,49 +1313,6 @@ func (siw *ServerInterfaceWrapper) GetLatestSaveState(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetLatestSaveState(w, r, mapId, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteSaveState operation middleware
-func (siw *ServerInterfaceWrapper) DeleteSaveState(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "mapId" -------------
-	var mapId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "mapId", r.PathValue("mapId"), &mapId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mapId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "saveStateId" -------------
-	var saveStateId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "saveStateId", r.PathValue("saveStateId"), &saveStateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "saveStateId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteSaveState(w, r, mapId, playerId, saveStateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1733,7 +1601,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/map-players/{playerId}/states", wrapper.DeleteMapPlayerStates)
 	m.HandleFunc("GET "+options.BaseURL+"/map-players/{playerId}/topTimes", wrapper.GetPlayerTopTimes)
 	m.HandleFunc("GET "+options.BaseURL+"/maps", wrapper.GetMaps)
-	m.HandleFunc("POST "+options.BaseURL+"/maps", wrapper.CreateMap)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/hub/leaderboard/{leaderboardName}", wrapper.GetGlobalLeaderboard)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/progress", wrapper.GetMapProgressBulk)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/search", wrapper.SearchMaps)
@@ -1747,10 +1614,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/maps/{mapId}/ratings/{playerId}", wrapper.GetMapRating)
 	m.HandleFunc("PUT "+options.BaseURL+"/maps/{mapId}/ratings/{playerId}", wrapper.RateMap)
 	m.HandleFunc("POST "+options.BaseURL+"/maps/{mapId}/report", wrapper.ReportMap)
-	m.HandleFunc("POST "+options.BaseURL+"/maps/{mapId}/savestates/{playerId}", wrapper.CreateSaveState)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/{mapId}/savestates/{playerId}/best", wrapper.GetBestSaveState)
 	m.HandleFunc("GET "+options.BaseURL+"/maps/{mapId}/savestates/{playerId}/latest", wrapper.GetLatestSaveState)
-	m.HandleFunc("DELETE "+options.BaseURL+"/maps/{mapId}/savestates/{playerId}/{saveStateId}", wrapper.DeleteSaveState)
 	m.HandleFunc("PATCH "+options.BaseURL+"/maps/{mapId}/savestates/{playerId}/{saveStateId}", wrapper.UpdateSaveState)
 	m.HandleFunc("DELETE "+options.BaseURL+"/maps/{mapId}/verify", wrapper.DeleteMapVerification)
 	m.HandleFunc("POST "+options.BaseURL+"/maps/{mapId}/verify", wrapper.BeginMapVerification)
@@ -1929,32 +1794,6 @@ func (response GetMaps200JSONResponse) VisitGetMapsResponse(w http.ResponseWrite
 type GetMaps400JSONResponse struct{ BadRequestJSONResponse }
 
 func (response GetMaps400JSONResponse) VisitGetMapsResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type CreateMapRequestObject struct {
-	Body *CreateMapJSONRequestBody
-}
-
-type CreateMapResponseObject interface {
-	VisitCreateMapResponse(w http.ResponseWriter) error
-}
-
-type CreateMap201JSONResponse struct{ MapDataJSONResponse }
-
-func (response CreateMap201JSONResponse) VisitCreateMapResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type CreateMap400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response CreateMap400JSONResponse) VisitCreateMapResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
@@ -2314,32 +2153,6 @@ func (response ReportMap404Response) VisitReportMapResponse(w http.ResponseWrite
 	return nil
 }
 
-type CreateSaveStateRequestObject struct {
-	MapId    string `json:"mapId"`
-	PlayerId string `json:"playerId"`
-	Body     *CreateSaveStateJSONRequestBody
-}
-
-type CreateSaveStateResponseObject interface {
-	VisitCreateSaveStateResponse(w http.ResponseWriter) error
-}
-
-type CreateSaveState201JSONResponse struct{ SaveStateDataJSONResponse }
-
-func (response CreateSaveState201JSONResponse) VisitCreateSaveStateResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type CreateSaveState404Response = MapNotFoundResponse
-
-func (response CreateSaveState404Response) VisitCreateSaveStateResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 type GetBestSaveStateRequestObject struct {
 	MapId    string `json:"mapId"`
 	PlayerId string `json:"playerId"`
@@ -2387,31 +2200,6 @@ func (response GetLatestSaveState200JSONResponse) VisitGetLatestSaveStateRespons
 type GetLatestSaveState404Response = SaveStateNotFoundResponse
 
 func (response GetLatestSaveState404Response) VisitGetLatestSaveStateResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type DeleteSaveStateRequestObject struct {
-	MapId       string `json:"mapId"`
-	PlayerId    string `json:"playerId"`
-	SaveStateId string `json:"saveStateId"`
-}
-
-type DeleteSaveStateResponseObject interface {
-	VisitDeleteSaveStateResponse(w http.ResponseWriter) error
-}
-
-type DeleteSaveState200Response struct {
-}
-
-func (response DeleteSaveState200Response) VisitDeleteSaveStateResponse(w http.ResponseWriter) error {
-	w.WriteHeader(200)
-	return nil
-}
-
-type DeleteSaveState404Response = SaveStateNotFoundResponse
-
-func (response DeleteSaveState404Response) VisitDeleteSaveStateResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -2626,9 +2414,6 @@ type StrictServerInterface interface {
 	// Get requested maps
 	// (GET /maps)
 	GetMaps(ctx context.Context, request GetMapsRequestObject) (GetMapsResponseObject, error)
-	// Create a new map
-	// (POST /maps)
-	CreateMap(ctx context.Context, request CreateMapRequestObject) (CreateMapResponseObject, error)
 	// Get a global leaderboard by its name, optionally including player info
 	// (GET /maps/hub/leaderboard/{leaderboardName})
 	GetGlobalLeaderboard(ctx context.Context, request GetGlobalLeaderboardRequestObject) (GetGlobalLeaderboardResponseObject, error)
@@ -2668,18 +2453,12 @@ type StrictServerInterface interface {
 	// Submit a report for a map by its full ID
 	// (POST /maps/{mapId}/report)
 	ReportMap(ctx context.Context, request ReportMapRequestObject) (ReportMapResponseObject, error)
-	// Create a new savestate for the given player on the given map
-	// (POST /maps/{mapId}/savestates/{playerId})
-	CreateSaveState(ctx context.Context, request CreateSaveStateRequestObject) (CreateSaveStateResponseObject, error)
 	// Get the best savestate for the given player on the given map
 	// (GET /maps/{mapId}/savestates/{playerId}/best)
 	GetBestSaveState(ctx context.Context, request GetBestSaveStateRequestObject) (GetBestSaveStateResponseObject, error)
 	// Get the latest savestate for the given player on the given map
 	// (GET /maps/{mapId}/savestates/{playerId}/latest)
 	GetLatestSaveState(ctx context.Context, request GetLatestSaveStateRequestObject) (GetLatestSaveStateResponseObject, error)
-	// Delete a savestate
-	// (DELETE /maps/{mapId}/savestates/{playerId}/{saveStateId})
-	DeleteSaveState(ctx context.Context, request DeleteSaveStateRequestObject) (DeleteSaveStateResponseObject, error)
 	// Update a savestate
 	// (PATCH /maps/{mapId}/savestates/{playerId}/{saveStateId})
 	UpdateSaveState(ctx context.Context, request UpdateSaveStateRequestObject) (UpdateSaveStateResponseObject, error)
@@ -2851,37 +2630,6 @@ func (sh *strictHandler) GetMaps(w http.ResponseWriter, r *http.Request, params 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMapsResponseObject); ok {
 		if err := validResponse.VisitGetMapsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateMap operation middleware
-func (sh *strictHandler) CreateMap(w http.ResponseWriter, r *http.Request) {
-	var request CreateMapRequestObject
-
-	var body CreateMapJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateMap(ctx, request.(CreateMapRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateMap")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateMapResponseObject); ok {
-		if err := validResponse.VisitCreateMapResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -3271,40 +3019,6 @@ func (sh *strictHandler) ReportMap(w http.ResponseWriter, r *http.Request, mapId
 	}
 }
 
-// CreateSaveState operation middleware
-func (sh *strictHandler) CreateSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string) {
-	var request CreateSaveStateRequestObject
-
-	request.MapId = mapId
-	request.PlayerId = playerId
-
-	var body CreateSaveStateJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateSaveState(ctx, request.(CreateSaveStateRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateSaveState")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateSaveStateResponseObject); ok {
-		if err := validResponse.VisitCreateSaveStateResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetBestSaveState operation middleware
 func (sh *strictHandler) GetBestSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string) {
 	var request GetBestSaveStateRequestObject
@@ -3353,34 +3067,6 @@ func (sh *strictHandler) GetLatestSaveState(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetLatestSaveStateResponseObject); ok {
 		if err := validResponse.VisitGetLatestSaveStateResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteSaveState operation middleware
-func (sh *strictHandler) DeleteSaveState(w http.ResponseWriter, r *http.Request, mapId string, playerId string, saveStateId string) {
-	var request DeleteSaveStateRequestObject
-
-	request.MapId = mapId
-	request.PlayerId = playerId
-	request.SaveStateId = saveStateId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteSaveState(ctx, request.(DeleteSaveStateRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteSaveState")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteSaveStateResponseObject); ok {
-		if err := validResponse.VisitDeleteSaveStateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

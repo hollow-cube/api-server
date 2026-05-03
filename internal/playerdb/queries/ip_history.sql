@@ -11,7 +11,7 @@ where player_id = $1
 order by last_seen desc;
 
 -- name: GetPlayersByIPs :many
-select player_data.id, player_data.username
+select player_data.*
 from ip_history
          inner join player_data on ip_history.player_id = player_data.id
 where address = ANY ($1::text[])

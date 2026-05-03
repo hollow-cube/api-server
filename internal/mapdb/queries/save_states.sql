@@ -123,6 +123,16 @@ group by map_id
 order by max(updated) desc
 offset sqlc.arg('page')::int * sqlc.arg('page_size')::int limit sqlc.arg('page_size')::int + 1;
 
+-- name: GetRecentMaps2 :many
+select map_id, count(*) over () as total_count
+from save_states
+where player_id = $1
+  and type = $2
+  and deleted is null
+group by map_id
+order by max(updated) desc
+offset $3 limit $4;
+
 -- name: GetCompletedMaps :many
 select distinct map_id
 from save_states
