@@ -352,7 +352,14 @@ func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *Request
 
 		var p Param
 		p.GoName = field.Name()
-		p.GoType = types.TypeString(field.Type(), nil)
+
+		ft := field.Type()
+		if ptr, ok := ft.(*types.Pointer); ok {
+			p.IsPointer = true
+			ft = ptr.Elem()
+		}
+		p.ElemType = goTypeName(ft)
+		p.GoType = basicKindName(ft)
 
 		if v, ok := tag.Lookup("path"); ok {
 			p.Name = tagName(v)
@@ -371,7 +378,12 @@ func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *Request
 			continue
 		}
 
-		p.OAPIType, p.OAPIFmt = goTypeToOpenAPI(field.Type())
+		// Pointer fields are inherently optional — nil represents absence.
+		if p.IsPointer {
+			p.Required = false
+		}
+
+		p.OAPIType, p.OAPIFmt = goTypeToOpenAPI(ft)
 		params = append(params, p)
 	}
 	return params, body
@@ -404,6 +416,9 @@ func parseTagOpts(v string) (name string, optional bool) {
 }
 
 func goTypeToOpenAPI(t types.Type) (typ, format string) {
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
 	switch t := t.Underlying().(type) {
 	case *types.Basic:
 		switch t.Kind() {
@@ -426,6 +441,36 @@ func goTypeToOpenAPI(t types.Type) (typ, format string) {
 		}
 	}
 	return "object", ""
+}
+
+// goTypeName returns the Go type name for use in generated code: the bare
+// type name without a package qualifier (the generated file is in the same
+// package as the type). Pointers should be unwrapped before calling.
+func goTypeName(t types.Type) string {
+	qualifier := func(*types.Package) string { return "" }
+	return types.TypeString(t, qualifier)
+}
+
+// basicKindName returns the underlying basic kind ("string", "int", "int64",
+// "bool") of t, or empty if t does not reduce to a supported basic. Used to
+// drive the codegen switch — distinct from the concrete (possibly named)
+// type used for assignment.
+func basicKindName(t types.Type) string {
+	b, ok := t.Underlying().(*types.Basic)
+	if !ok {
+		return ""
+	}
+	switch b.Kind() {
+	case types.String:
+		return "string"
+	case types.Bool:
+		return "bool"
+	case types.Int, types.Int8, types.Int16, types.Int32, types.Uint, types.Uint8, types.Uint16, types.Uint32:
+		return "int"
+	case types.Int64, types.Uint64:
+		return "int64"
+	}
+	return ""
 }
 
 // isOxStream reports whether t is *ox.Stream from the package at oxPkgPath.

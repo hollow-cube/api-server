@@ -169,92 +169,130 @@ func writeParamBinding(buf *bytes.Buffer, p *Param) {
 }
 
 func writePathParam(buf *bytes.Buffer, p *Param) {
+	// Path parameters are not optional and not pointers — there is no way
+	// to express absence in a URL path. We only need the simple cases.
+	source := fmt.Sprintf("r.PathValue(%q)", p.Name)
 	switch p.GoType {
 	case "string":
-		fmt.Fprintf(buf, "\treq.%s = r.PathValue(%q)\n", p.GoName, p.Name)
-	case "int":
-		fmt.Fprintf(buf, "\tif v, err := strconv.Atoi(r.PathValue(%q)); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\treturn\n")
-		fmt.Fprintf(buf, "\t} else {\n")
-		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t}\n")
-	case "int64":
-		fmt.Fprintf(buf, "\tif v, err := strconv.ParseInt(r.PathValue(%q), 10, 64); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\treturn\n")
-		fmt.Fprintf(buf, "\t} else {\n")
-		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t}\n")
-	case "bool":
-		fmt.Fprintf(buf, "\tif v, err := strconv.ParseBool(r.PathValue(%q)); err != nil {\n", p.Name)
-		fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid path parameter: "+p.Name)
-		fmt.Fprintf(buf, "\t\treturn\n")
-		fmt.Fprintf(buf, "\t} else {\n")
-		fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-		fmt.Fprintf(buf, "\t}\n")
+		if needsCast(p) {
+			fmt.Fprintf(buf, "\treq.%s = %s(%s)\n", p.GoName, p.ElemType, source)
+		} else {
+			fmt.Fprintf(buf, "\treq.%s = %s\n", p.GoName, source)
+		}
+	case "int", "int64", "bool":
+		writeParseAndAssign(buf, p, "path", source, "req."+p.GoName)
 	}
 }
 
 func writeQueryParam(buf *bytes.Buffer, p *Param) {
+	source := fmt.Sprintf("r.URL.Query().Get(%q)", p.Name)
+
+	// Pointer query params: gate on non-empty, allocate, assign pointer.
+	if p.IsPointer {
+		fmt.Fprintf(buf, "\tif qs := %s; qs != \"\" {\n", source)
+		switch p.GoType {
+		case "string":
+			if needsCast(p) {
+				fmt.Fprintf(buf, "\t\tv := %s(qs)\n", p.ElemType)
+			} else {
+				fmt.Fprintf(buf, "\t\tv := qs\n")
+			}
+			fmt.Fprintf(buf, "\t\treq.%s = &v\n", p.GoName)
+		case "int", "int64", "bool":
+			writeParseAndAssignPtr(buf, p, "qs")
+		}
+		fmt.Fprintf(buf, "\t}\n")
+		return
+	}
+
 	switch p.GoType {
 	case "string":
-		fmt.Fprintf(buf, "\treq.%s = r.URL.Query().Get(%q)\n", p.GoName, p.Name)
-	case "int":
-		if p.Required {
-			fmt.Fprintf(buf, "\tif v, err := strconv.Atoi(r.URL.Query().Get(%q)); err != nil {\n", p.Name)
-			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\treturn\n")
-			fmt.Fprintf(buf, "\t} else {\n")
-			fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t}\n")
+		if needsCast(p) {
+			fmt.Fprintf(buf, "\treq.%s = %s(%s)\n", p.GoName, p.ElemType, source)
 		} else {
-			fmt.Fprintf(buf, "\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
-			fmt.Fprintf(buf, "\t\tif v, err := strconv.Atoi(qs); err != nil {\n")
-			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\t\treturn\n")
-			fmt.Fprintf(buf, "\t\t} else {\n")
-			fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t\t}\n")
-			fmt.Fprintf(buf, "\t}\n")
+			fmt.Fprintf(buf, "\treq.%s = %s\n", p.GoName, source)
 		}
-	case "int64":
+	case "int", "int64", "bool":
 		if p.Required {
-			fmt.Fprintf(buf, "\tif v, err := strconv.ParseInt(r.URL.Query().Get(%q), 10, 64); err != nil {\n", p.Name)
-			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\treturn\n")
-			fmt.Fprintf(buf, "\t} else {\n")
-			fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t}\n")
+			writeParseAndAssign(buf, p, "query", source, "req."+p.GoName)
 		} else {
-			fmt.Fprintf(buf, "\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
-			fmt.Fprintf(buf, "\t\tif v, err := strconv.ParseInt(qs, 10, 64); err != nil {\n")
-			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\t\treturn\n")
-			fmt.Fprintf(buf, "\t\t} else {\n")
-			fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t\t}\n")
-			fmt.Fprintf(buf, "\t}\n")
-		}
-	case "bool":
-		if p.Required {
-			fmt.Fprintf(buf, "\tif v, err := strconv.ParseBool(r.URL.Query().Get(%q)); err != nil {\n", p.Name)
-			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\treturn\n")
-			fmt.Fprintf(buf, "\t} else {\n")
-			fmt.Fprintf(buf, "\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t}\n")
-		} else {
-			fmt.Fprintf(buf, "\tif qs := r.URL.Query().Get(%q); qs != \"\" {\n", p.Name)
-			fmt.Fprintf(buf, "\t\tif v, err := strconv.ParseBool(qs); err != nil {\n")
-			fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
-			fmt.Fprintf(buf, "\t\t\treturn\n")
-			fmt.Fprintf(buf, "\t\t} else {\n")
-			fmt.Fprintf(buf, "\t\t\treq.%s = v\n", p.GoName)
-			fmt.Fprintf(buf, "\t\t}\n")
+			fmt.Fprintf(buf, "\tif qs := %s; qs != \"\" {\n", source)
+			writeParseAndAssignIndented(buf, p, "qs", "req."+p.GoName)
 			fmt.Fprintf(buf, "\t}\n")
 		}
 	}
+}
+
+// needsCast reports whether the field's concrete (assigned) type differs
+// from the basic kind being parsed. Old code paths and tests construct
+// Param values with only GoType set, so an empty ElemType is treated as
+// equivalent to GoType (no cast needed).
+func needsCast(p *Param) bool {
+	return p.ElemType != "" && p.ElemType != p.GoType
+}
+
+// writeParseAndAssign emits a parse+assign block for required (non-pointer)
+// numeric/bool params at top indent. The source expression is parsed; on
+// failure WriteBadRequest is returned, otherwise v is assigned to dst (cast
+// through ElemType when the field is a named type).
+func writeParseAndAssign(buf *bytes.Buffer, p *Param, location, source, dst string) {
+	parser := parserCall(p.GoType, source)
+	fmt.Fprintf(buf, "\tif v, err := %s; err != nil {\n", parser)
+	fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, %q)\n", "invalid "+location+" parameter: "+p.Name)
+	fmt.Fprintf(buf, "\t\treturn\n")
+	fmt.Fprintf(buf, "\t} else {\n")
+	if needsCast(p) {
+		fmt.Fprintf(buf, "\t\t%s = %s(v)\n", dst, p.ElemType)
+	} else {
+		fmt.Fprintf(buf, "\t\t%s = v\n", dst)
+	}
+	fmt.Fprintf(buf, "\t}\n")
+}
+
+// writeParseAndAssignIndented is like writeParseAndAssign but nested one
+// level deeper (inside an `if qs := ...; qs != "" {` block).
+func writeParseAndAssignIndented(buf *bytes.Buffer, p *Param, source, dst string) {
+	parser := parserCall(p.GoType, source)
+	fmt.Fprintf(buf, "\t\tif v, err := %s; err != nil {\n", parser)
+	fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
+	fmt.Fprintf(buf, "\t\t\treturn\n")
+	fmt.Fprintf(buf, "\t\t} else {\n")
+	if needsCast(p) {
+		fmt.Fprintf(buf, "\t\t\t%s = %s(v)\n", dst, p.ElemType)
+	} else {
+		fmt.Fprintf(buf, "\t\t\t%s = v\n", dst)
+	}
+	fmt.Fprintf(buf, "\t\t}\n")
+}
+
+// writeParseAndAssignPtr emits a parse+assign-pointer block for pointer
+// numeric/bool params, indented one level (inside the non-empty gate).
+func writeParseAndAssignPtr(buf *bytes.Buffer, p *Param, source string) {
+	parser := parserCall(p.GoType, source)
+	fmt.Fprintf(buf, "\t\tv, err := %s\n", parser)
+	fmt.Fprintf(buf, "\t\tif err != nil {\n")
+	fmt.Fprintf(buf, "\t\t\truntime.WriteBadRequest(w, %q)\n", "invalid query parameter: "+p.Name)
+	fmt.Fprintf(buf, "\t\t\treturn\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	if needsCast(p) {
+		fmt.Fprintf(buf, "\t\tcv := %s(v)\n", p.ElemType)
+		fmt.Fprintf(buf, "\t\treq.%s = &cv\n", p.GoName)
+	} else {
+		fmt.Fprintf(buf, "\t\treq.%s = &v\n", p.GoName)
+	}
+}
+
+// parserCall returns the strconv call for the given basic kind.
+func parserCall(kind, source string) string {
+	switch kind {
+	case "int":
+		return fmt.Sprintf("strconv.Atoi(%s)", source)
+	case "int64":
+		return fmt.Sprintf("strconv.ParseInt(%s, 10, 64)", source)
+	case "bool":
+		return fmt.Sprintf("strconv.ParseBool(%s)", source)
+	}
+	return ""
 }
 
 func needsStrconv(api *API) bool {

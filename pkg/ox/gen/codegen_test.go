@@ -652,3 +652,52 @@ func TestGenerateServer_BooleanQueryParams(t *testing.T) {
 	// strconv should be imported for bool params
 	require.Contains(t, src, `"strconv"`)
 }
+
+func TestGenerateServer_PointerQueryParams(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "SearchMaps",
+				Method:      "GET",
+				Path:        "/maps/search",
+				RequestType: "SearchMapsRequest",
+				Params: []Param{
+					// *string with no named type — assigned via *string pointer.
+					{Name: "query", GoName: "Query", GoType: "string", ElemType: "string", Location: "query", IsPointer: true},
+					// *bool — parse, allocate, assign.
+					{Name: "parkour", GoName: "Parkour", GoType: "bool", ElemType: "bool", Location: "query", IsPointer: true},
+					// *NamedString (e.g. type MapSortType string) — cast through named type.
+					{Name: "sort", GoName: "Sort", GoType: "string", ElemType: "MapSortType", Location: "query", IsPointer: true},
+				},
+				Response: Response{StatusCode: 200, GoType: "PaginatedMapList", IsPtr: true, ContentType: "application/json"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	// *string pointer params: gate on non-empty, allocate, assign address.
+	require.Contains(t, src, `if qs := r.URL.Query().Get("query"); qs != ""`)
+	require.Contains(t, src, `v := qs`)
+	require.Contains(t, src, `req.Query = &v`)
+
+	// *bool pointer params: parse via strconv, then assign address.
+	require.Contains(t, src, `if qs := r.URL.Query().Get("parkour"); qs != ""`)
+	require.Contains(t, src, `strconv.ParseBool(qs)`)
+	require.Contains(t, src, `req.Parkour = &v`)
+
+	// *NamedString pointer params: cast through the named type before taking address.
+	require.Contains(t, src, `if qs := r.URL.Query().Get("sort"); qs != ""`)
+	require.Contains(t, src, `v := MapSortType(qs)`)
+	require.Contains(t, src, `req.Sort = &v`)
+}

@@ -299,7 +299,7 @@ func (s *Server) UpdateMap(ctx context.Context, request MapRequest, body UpdateM
 }
 
 type DeleteMapRequest struct {
-	MapID   string  `json:"mapId"`
+	MapID   string  `path:"mapId"`
 	ActorID string  `query:"actorId"` // Player performing the deletion
 	Reason  *string `query:"reason"`  // Required if the map is published or the deleter is not the owner
 }
@@ -508,9 +508,7 @@ func (s *Server) BeginMapVerification(ctx context.Context, request MapRequest) e
 
 	// TODO: there is kind of a race here for new build worlds to be created in this gap before setting the verification.
 	// However it kinda also doesnt matter for safety because that world will fail to save.
-
-	newVerification := int64(model.VerificationPending)
-	err = s.mapStore.UpdateMapVerification(ctx, m.ID, &newVerification, nil)
+	err = s.mapStore.UpdateMapVerification(ctx, m.ID, new(int64(model.VerificationPending)), nil)
 	if err != nil {
 		return fmt.Errorf("failed to update map: %w", err)
 	}

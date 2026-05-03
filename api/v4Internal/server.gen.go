@@ -216,6 +216,58 @@ func (h *handlers) restoreMapLeaderboard(w http.ResponseWriter, r *http.Request)
 
 func (h *handlers) searchMaps(w http.ResponseWriter, r *http.Request) {
 	var req SearchMapsRequest
+	if qs := r.URL.Query().Get("building"); qs != "" {
+		v, err := strconv.ParseBool(qs)
+		if err != nil {
+			runtime.WriteBadRequest(w, "invalid query parameter: building")
+			return
+		}
+		req.Building = &v
+	}
+	if qs := r.URL.Query().Get("contest"); qs != "" {
+		v := qs
+		req.Contest = &v
+	}
+	if qs := r.URL.Query().Get("difficulty"); qs != "" {
+		v := qs
+		req.Difficulty = &v
+	}
+	if qs := r.URL.Query().Get("owner"); qs != "" {
+		v := qs
+		req.Owner = &v
+	}
+	if qs := r.URL.Query().Get("parkour"); qs != "" {
+		v, err := strconv.ParseBool(qs)
+		if err != nil {
+			runtime.WriteBadRequest(w, "invalid query parameter: parkour")
+			return
+		}
+		req.Parkour = &v
+	}
+	if qs := r.URL.Query().Get("quality"); qs != "" {
+		v := qs
+		req.Quality = &v
+	}
+	if qs := r.URL.Query().Get("query"); qs != "" {
+		v := qs
+		req.Query = &v
+	}
+	if qs := r.URL.Query().Get("sort"); qs != "" {
+		v := MapSortType(qs)
+		req.Sort = &v
+	}
+	if qs := r.URL.Query().Get("sortOrder"); qs != "" {
+		v := MapSortOrder(qs)
+		req.SortOrder = &v
+	}
+	if qs := r.URL.Query().Get("page"); qs != "" {
+		v := qs
+		req.Page = &v
+	}
+	if qs := r.URL.Query().Get("pageSize"); qs != "" {
+		v := qs
+		req.PageSize = &v
+	}
 	resp, err := h.server.SearchMaps(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -281,7 +333,12 @@ func (h *handlers) updateMap(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) deleteMap(w http.ResponseWriter, r *http.Request) {
 	var req DeleteMapRequest
+	req.MapID = r.PathValue("mapId")
 	req.ActorID = r.URL.Query().Get("actorId")
+	if qs := r.URL.Query().Get("reason"); qs != "" {
+		v := qs
+		req.Reason = &v
+	}
 	err := h.server.DeleteMap(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)
@@ -651,6 +708,7 @@ func (h *handlers) getLatestSaveState(w http.ResponseWriter, r *http.Request) {
 	var req GetLatestSaveStateRequest
 	req.MapID = r.PathValue("mapId")
 	req.PlayerID = r.PathValue("playerId")
+	req.Type = SaveStateType(r.URL.Query().Get("type"))
 	resp, err := h.server.GetLatestSaveState(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)

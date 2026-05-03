@@ -38,11 +38,18 @@ type RequestBody struct {
 type Param struct {
 	Name     string // Tag value (URL param name, query key, header name)
 	GoName   string // Go struct field name
-	GoType   string // Go type as string ("string", "int", etc.)
+	GoType   string // Underlying basic kind for parsing ("string", "int", "int64", "bool")
+	ElemType string // Concrete (possibly named) Go type to assign to the field. Equals GoType for unnamed basics.
 	Location string // "path", "query", or "header"
-	Required bool
-	OAPIType string // OpenAPI type
-	OAPIFmt  string // OpenAPI format, empty if not applicable
+
+	// IsPointer is true when the field is a pointer (*T). Pointer params are
+	// implicitly optional — Required is forced to false. The generated
+	// decoder allocates a value and assigns the pointer only when the
+	// query/header value is non-empty.
+	IsPointer bool
+	Required  bool
+	OAPIType  string // OpenAPI type
+	OAPIFmt   string // OpenAPI format, empty if not applicable
 }
 
 // Response describes the handler's return type.

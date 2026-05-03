@@ -43,12 +43,12 @@ const (
 )
 
 var mapDifficultyIndex = map[MapDifficulty]int{
-	DifficultyUnknown:   0,
-	DifficultyEasy:      1,
-	DifficultyMedium:    2,
-	DifficultyHard:      3,
-	DifficultyExpert:    4,
-	DifficultyNightmare: 5,
+	DifficultyUnknown:   -1,
+	DifficultyEasy:      0,
+	DifficultyMedium:    1,
+	DifficultyHard:      2,
+	DifficultyExpert:    3,
+	DifficultyNightmare: 4,
 }
 
 type MapQuality string

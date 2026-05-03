@@ -101,6 +101,11 @@ paths:
         delete:
             operationId: deleteMap
             parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
                 - name: actorId
                   in: query
                   required: true
@@ -108,9 +113,9 @@ paths:
                     type: string
                 - name: reason
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
             responses:
                 "204":
                     description: Successful response
@@ -428,7 +433,7 @@ paths:
                   required: true
                   schema:
                     type: string
-                - name: typeFilter
+                - name: type
                   in: query
                   required: true
                   schema:
@@ -547,59 +552,59 @@ paths:
             parameters:
                 - name: building
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: boolean
                 - name: contest
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: difficulty
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: owner
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: parkour
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: boolean
                 - name: quality
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: query
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: sort
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: sortOrder
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: page
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
                 - name: pageSize
                   in: query
-                  required: true
+                  required: false
                   schema:
-                    type: object
+                    type: string
             responses:
                 "200":
                     description: Successful response

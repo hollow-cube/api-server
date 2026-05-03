@@ -162,7 +162,7 @@ func parseSearchQueryParams(params *mapdb.SearchMapsParams, req SearchMapsReques
 			if !ok {
 				return fmt.Sprintf("invalid difficulty: %s", rawDifficulty)
 			}
-			params.Difficulty = append(params.Difficulty, int(difficulty))
+			params.Difficulty = append(params.Difficulty, difficulty)
 		}
 	}
 
