@@ -3,6 +3,7 @@
 package v1Public
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/hollow-cube/api-server/pkg/ox/runtime"
@@ -18,6 +19,11 @@ type RegisterParams struct {
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/@me/status", h.getPlayerStatus)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}", h.getProject)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.getProjectFile)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.updateProjectFile)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.deleteProjectFile)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}/events", h.streamProjectEvents)
 }
 
 // handlers wraps the server and provides HTTP handler methods.
@@ -34,4 +40,70 @@ func (h *handlers) getPlayerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getProject(w http.ResponseWriter, r *http.Request) {
+	var req GetProjectRequest
+	req.ProjectID = r.PathValue("projectId")
+	resp, err := h.server.GetProject(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getProjectFile(w http.ResponseWriter, r *http.Request) {
+	var req GetProjectFileRequest
+	req.ProjectID = r.PathValue("projectId")
+	req.Path = r.PathValue("path")
+	resp, err := h.server.GetProjectFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) updateProjectFile(w http.ResponseWriter, r *http.Request) {
+	var req UpdateProjectFileRequest
+	req.ProjectID = r.PathValue("projectId")
+	req.Path = r.PathValue("path")
+	req.ContentType = r.Header.Get("Content-Type")
+	if b, err := io.ReadAll(r.Body); err != nil {
+		runtime.WriteBadRequest(w, "failed to read request body")
+		return
+	} else {
+		req.Body = b
+	}
+	resp, err := h.server.UpdateProjectFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) deleteProjectFile(w http.ResponseWriter, r *http.Request) {
+	var req DeleteProjectFileRequest
+	req.ProjectID = r.PathValue("projectId")
+	req.Path = r.PathValue("path")
+	err := h.server.DeleteProjectFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (h *handlers) streamProjectEvents(w http.ResponseWriter, r *http.Request) {
+	var req StreamProjectEventsRequest
+	req.ProjectID = r.PathValue("projectId")
+	req.LastEventID = r.Header.Get("Last-Event-ID")
+	resp, err := h.server.StreamProjectEvents(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteSSE[ProjectEvent](w, r, resp)
 }

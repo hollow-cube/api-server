@@ -34,10 +34,11 @@ type oaRequestBody struct {
 }
 
 type oaParameter struct {
-	Name     string    `yaml:"name"`
-	In       string    `yaml:"in"`
-	Required bool      `yaml:"required"`
-	Schema   *oaSchema `yaml:"schema"`
+	Name        string    `yaml:"name"`
+	In          string    `yaml:"in"`
+	Required    bool      `yaml:"required"`
+	Description string    `yaml:"description,omitempty"`
+	Schema      *oaSchema `yaml:"schema"`
 }
 
 type oaResponse struct {
@@ -66,10 +67,14 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 	}
 
 	for _, ep := range api.Endpoints {
-		pathItem, ok := spec.Paths[ep.Path]
+		// OpenAPI has no wildcard path syntax — strip the leading * from
+		// {*name} segments. The wildcard nature is conveyed via the param
+		// description on the corresponding oaParameter entry.
+		oaPath := strings.ReplaceAll(ep.Path, "{*", "{")
+		pathItem, ok := spec.Paths[oaPath]
 		if !ok {
 			pathItem = make(oaPathItem)
-			spec.Paths[ep.Path] = pathItem
+			spec.Paths[oaPath] = pathItem
 		}
 
 		op := &oaOperation{
@@ -79,25 +84,41 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 		}
 
 		for _, p := range ep.Params {
-			op.Parameters = append(op.Parameters, oaParameter{
+			oap := oaParameter{
 				Name:     p.Name,
 				In:       p.Location,
 				Required: p.Required,
 				Schema:   &oaSchema{Type: p.OAPIType, Format: p.OAPIFmt},
-			})
+			}
+			if p.IsWildcard {
+				oap.Description = "Wildcard path segment: captures one or more path segments (no leading slash)."
+			}
+			op.Parameters = append(op.Parameters, oap)
 		}
 
 		// Add request body if present
 		if ep.RequestBody != nil {
 			rb := &oaRequestBody{Required: ep.RequestBody.Required}
-			if ep.RequestBody.IsStream {
+			switch {
+			case ep.RequestBody.IsStream:
 				rb.Content = make(map[string]*oaMediaType, len(ep.RequestBody.Consumes))
 				for _, mt := range ep.RequestBody.Consumes {
 					rb.Content[mt] = &oaMediaType{
 						Schema: &oaSchema{Type: "string", Format: "binary"},
 					}
 				}
-			} else {
+			case ep.RequestBody.IsRawBytes:
+				mts := ep.RequestBody.Consumes
+				if len(mts) == 0 {
+					mts = []string{"application/octet-stream"}
+				}
+				rb.Content = make(map[string]*oaMediaType, len(mts))
+				for _, mt := range mts {
+					rb.Content[mt] = &oaMediaType{
+						Schema: &oaSchema{Type: "string", Format: "binary"},
+					}
+				}
+			default:
 				rb.Content = map[string]*oaMediaType{
 					"application/json": {
 						Schema: &oaSchema{Type: "object"},
@@ -112,6 +133,13 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 			Description: "Successful response",
 		}
 		switch {
+		case ep.Response.IsSSE:
+			resp.Description = "Server-Sent Events stream"
+			resp.Content = map[string]*oaMediaType{
+				"text/event-stream": {
+					Schema: &oaSchema{Type: "string"},
+				},
+			}
 		case ep.Response.IsStream:
 			resp.Content = make(map[string]*oaMediaType, len(ep.Response.Produces))
 			for _, mt := range ep.Response.Produces {

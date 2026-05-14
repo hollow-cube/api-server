@@ -184,6 +184,17 @@ type MapBuilders struct {
 	IsPending *bool     `json:"isPending"`
 }
 
+type MapFiles struct {
+	MapID       string    `json:"mapId"`
+	Path        string    `json:"path"`
+	Content     []byte    `json:"content"`
+	ContentHash []byte    `json:"contentHash"`
+	ContentType string    `json:"contentType"`
+	Size        int       `json:"size"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 type MapOrgs struct {
 	ID         string  `json:"id"`
 	WebhookUrl *string `json:"webhookUrl"`

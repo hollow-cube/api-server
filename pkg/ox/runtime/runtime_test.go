@@ -244,6 +244,59 @@ func TestWriteStream(t *testing.T) {
 	})
 }
 
+func TestWriteSSE(t *testing.T) {
+	type payload struct {
+		Path string `json:"path"`
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/events", nil)
+
+	seq := func(yield func(ox.Event[payload], error) bool) {
+		if !yield(ox.Event[payload]{ID: "1", Name: "change", Data: payload{Path: "a.txt"}}, nil) {
+			return
+		}
+		if !yield(ox.Event[payload]{ID: "2", Data: payload{Path: "b.txt"}}, nil) {
+			return
+		}
+	}
+
+	WriteSSE(w, r, seq)
+
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+	require.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
+
+	body := w.Body.String()
+	require.Contains(t, body, "id: 1\n")
+	require.Contains(t, body, "event: change\n")
+	require.Contains(t, body, `data: {"path":"a.txt"}`+"\n\n")
+	require.Contains(t, body, "id: 2\n")
+	require.Contains(t, body, `data: {"path":"b.txt"}`+"\n\n")
+}
+
+func TestWriteSSE_ErrorEndsStream(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/events", nil)
+
+	seq := func(yield func(ox.Event[string], error) bool) {
+		if !yield(ox.Event[string]{ID: "1", Data: "ok"}, nil) {
+			return
+		}
+		if !yield(ox.Event[string]{}, fmt.Errorf("boom")) {
+			return
+		}
+		if !yield(ox.Event[string]{ID: "2", Data: "unreached"}, nil) {
+			return
+		}
+	}
+
+	WriteSSE(w, r, seq)
+
+	body := w.Body.String()
+	require.Contains(t, body, `data: "ok"`)
+	require.NotContains(t, body, `"unreached"`)
+}
+
 func TestWriteBadRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	WriteBadRequest(w, "invalid input")

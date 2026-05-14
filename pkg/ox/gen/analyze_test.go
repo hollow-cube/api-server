@@ -363,6 +363,70 @@ func TestIsOxStream(t *testing.T) {
 	}
 }
 
+func TestParseWildcardParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		want    []string
+		wantErr bool
+	}{
+		{name: "no wildcards", path: "/users/{id}", want: nil},
+		{name: "single wildcard", path: "/files/{*path}", want: []string{"path"}},
+		{name: "wildcard not last", path: "/files/{*path}/extra", wantErr: true},
+		{name: "two wildcards", path: "/files/{*a}/{*b}", wantErr: true},
+		{name: "empty wildcard name", path: "/files/{*}", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseWildcardParams(tt.path)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, len(tt.want))
+			for _, name := range tt.want {
+				require.True(t, got[name], "expected %q to be a wildcard", name)
+			}
+		})
+	}
+}
+
+func TestIsRawBytes(t *testing.T) {
+	byteSlice := types.NewSlice(types.Typ[types.Uint8])
+	stringSlice := types.NewSlice(types.Typ[types.String])
+
+	require.True(t, isRawBytes(byteSlice))
+	require.False(t, isRawBytes(stringSlice))
+	require.False(t, isRawBytes(types.Typ[types.String]))
+}
+
+func TestApplyWildcards_RejectsNonString(t *testing.T) {
+	ep := &Endpoint{
+		Params: []Param{
+			{Name: "path", Location: "path", GoType: "int", ElemType: "int"},
+		},
+	}
+	err := applyWildcards(ep, map[string]bool{"path": true})
+	require.Error(t, err)
+}
+
+func TestApplyWildcards_MissingField(t *testing.T) {
+	ep := &Endpoint{Params: nil}
+	err := applyWildcards(ep, map[string]bool{"path": true})
+	require.Error(t, err)
+}
+
+func TestApplyWildcards_MarksMatchingParam(t *testing.T) {
+	ep := &Endpoint{
+		Params: []Param{
+			{Name: "path", Location: "path", GoType: "string", ElemType: "string"},
+		},
+	}
+	require.NoError(t, applyWildcards(ep, map[string]bool{"path": true}))
+	require.True(t, ep.Params[0].IsWildcard)
+}
+
 func TestIsHTTPMethod(t *testing.T) {
 	valid := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 	for _, m := range valid {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
+	"regexp"
 )
 
 // GenerateServer produces the server.gen.go glue code from the analyzed API.
@@ -19,6 +20,9 @@ func GenerateServer(api *API) ([]byte, error) {
 
 	// Imports
 	fmt.Fprintf(&buf, "import (\n")
+	if needsIO(api) {
+		fmt.Fprintf(&buf, "\t\"io\"\n")
+	}
 	fmt.Fprintf(&buf, "\t\"net/http\"\n")
 	if needsStrconv(api) {
 		fmt.Fprintf(&buf, "\t\"strconv\"\n")
@@ -42,7 +46,7 @@ func GenerateServer(api *API) ([]byte, error) {
 	fmt.Fprintf(&buf, "func RegisterRoutes(s *%s, params RegisterParams) {\n", api.StructName)
 	fmt.Fprintf(&buf, "\th := &handlers{server: s}\n")
 	for _, ep := range api.Endpoints {
-		fmt.Fprintf(&buf, "\tparams.Mux.HandleFunc(%q+params.BaseURL+%q, h.%s)\n", ep.Method+" ", ep.Path, lcFirst(ep.Name))
+		fmt.Fprintf(&buf, "\tparams.Mux.HandleFunc(%q+params.BaseURL+%q, h.%s)\n", ep.Method+" ", muxPath(ep.Path), lcFirst(ep.Name))
 	}
 	fmt.Fprintf(&buf, "}\n\n")
 
@@ -76,9 +80,12 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 		}
 		// If request struct has a Body field or embedded body, decode it
 		if ep.RequestBody != nil && ep.RequestBody.GoName != "body" {
-			if ep.RequestBody.IsStream {
+			switch {
+			case ep.RequestBody.IsStream:
 				writeStreamBodyAssign(buf, "req."+ep.RequestBody.GoName)
-			} else {
+			case ep.RequestBody.IsRawBytes:
+				writeRawBytesBodyAssign(buf, "req."+ep.RequestBody.GoName)
+			default:
 				fmt.Fprintf(buf, "\tif err := runtime.DecodeJSON(r, &req.%s); err != nil {\n", ep.RequestBody.GoName)
 				fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
 				fmt.Fprintf(buf, "\t\treturn\n")
@@ -91,13 +98,20 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 	var bodyVar string
 	if ep.RequestBody != nil && ep.RequestBody.GoName == "body" {
 		bodyVar = ep.RequestBody.GoName
-		if ep.RequestBody.IsStream {
+		switch {
+		case ep.RequestBody.IsStream:
 			fmt.Fprintf(buf, "\t%s := &ox.Stream{\n", bodyVar)
 			fmt.Fprintf(buf, "\t\tContentType:   r.Header.Get(\"Content-Type\"),\n")
 			fmt.Fprintf(buf, "\t\tBody:          r.Body,\n")
 			fmt.Fprintf(buf, "\t\tContentLength: r.ContentLength,\n")
 			fmt.Fprintf(buf, "\t}\n")
-		} else {
+		case ep.RequestBody.IsRawBytes:
+			fmt.Fprintf(buf, "\t%s, err := io.ReadAll(r.Body)\n", bodyVar)
+			fmt.Fprintf(buf, "\tif err != nil {\n")
+			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"failed to read request body\")\n")
+			fmt.Fprintf(buf, "\t\treturn\n")
+			fmt.Fprintf(buf, "\t}\n")
+		default:
 			fmt.Fprintf(buf, "\tvar %s %s\n", bodyVar, ep.RequestBody.GoType)
 			fmt.Fprintf(buf, "\tif err := runtime.DecodeJSON(r, &%s); err != nil {\n", bodyVar)
 			fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"invalid request body\")\n")
@@ -136,6 +150,8 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 	switch {
 	case !useResp:
 		fmt.Fprintf(buf, "\tw.WriteHeader(%d)\n", ep.Response.StatusCode)
+	case ep.Response.IsSSE:
+		fmt.Fprintf(buf, "\truntime.WriteSSE[%s](w, r, resp)\n", ep.Response.SSEPayloadGoType)
 	case ep.Response.IsStream:
 		fmt.Fprintf(buf, "\truntime.WriteStream(w, %d, resp)\n", ep.Response.StatusCode)
 	case ep.Response.ContentType == "text/plain":
@@ -154,6 +170,18 @@ func writeStreamBodyAssign(buf *bytes.Buffer, lvalue string) {
 	fmt.Fprintf(buf, "\t\tContentType:   r.Header.Get(\"Content-Type\"),\n")
 	fmt.Fprintf(buf, "\t\tBody:          r.Body,\n")
 	fmt.Fprintf(buf, "\t\tContentLength: r.ContentLength,\n")
+	fmt.Fprintf(buf, "\t}\n")
+}
+
+// writeRawBytesBodyAssign emits a read of the request body into the given
+// lvalue (a []byte field on the request struct). On read failure the
+// generated handler returns 400.
+func writeRawBytesBodyAssign(buf *bytes.Buffer, lvalue string) {
+	fmt.Fprintf(buf, "\tif b, err := io.ReadAll(r.Body); err != nil {\n")
+	fmt.Fprintf(buf, "\t\truntime.WriteBadRequest(w, \"failed to read request body\")\n")
+	fmt.Fprintf(buf, "\t\treturn\n")
+	fmt.Fprintf(buf, "\t} else {\n")
+	fmt.Fprintf(buf, "\t\t%s = b\n", lvalue)
 	fmt.Fprintf(buf, "\t}\n")
 }
 
@@ -282,6 +310,16 @@ func writeParseAndAssignPtr(buf *bytes.Buffer, p *Param, source string) {
 	}
 }
 
+// wildcardSeg matches a {*name} path segment in a route string.
+var wildcardSeg = regexp.MustCompile(`\{\*([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// muxPath translates a route path containing {*name} wildcard segments into
+// the net/http ServeMux equivalent {name...}. Non-wildcard segments are
+// preserved verbatim.
+func muxPath(path string) string {
+	return wildcardSeg.ReplaceAllString(path, "{$1...}")
+}
+
 // parserCall returns the strconv call for the given basic kind.
 func parserCall(kind, source string) string {
 	switch kind {
@@ -301,6 +339,17 @@ func needsStrconv(api *API) bool {
 			if p.GoType != "string" {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// needsIO reports whether the generated file imports "io" — currently only
+// when a request body is bound as raw []byte (which uses io.ReadAll).
+func needsIO(api *API) bool {
+	for _, ep := range api.Endpoints {
+		if ep.RequestBody != nil && ep.RequestBody.IsRawBytes {
+			return true
 		}
 	}
 	return false

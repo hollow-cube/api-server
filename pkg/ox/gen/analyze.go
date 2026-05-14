@@ -146,6 +146,11 @@ func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint,
 		return nil, err
 	}
 
+	wildcards, err := parseWildcardParams(d.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	ep := &Endpoint{
 		Name:        method.Name(),
 		Method:      d.Method,
@@ -165,10 +170,11 @@ func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint,
 		if paramName == "body" {
 			typeName := getTypeName(paramType)
 			ep.RequestBody = &RequestBody{
-				GoName:   paramName,
-				GoType:   typeName,
-				Required: true,
-				IsStream: isOxStream(paramType, oxPkgPath),
+				GoName:     paramName,
+				GoType:     typeName,
+				Required:   true,
+				IsStream:   isOxStream(paramType, oxPkgPath),
+				IsRawBytes: isRawBytes(paramType),
 			}
 			continue
 		}
@@ -180,6 +186,12 @@ func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint,
 				ep.Params, ep.RequestBody = extractParamsAndBody(st, oxPkgPath)
 			}
 		}
+	}
+
+	// Mark wildcard path params and validate. Each path param declared in the
+	// route as {*name} must have a matching string field in the request struct.
+	if err := applyWildcards(ep, wildcards); err != nil {
+		return nil, err
 	}
 
 	if ep.RequestBody != nil {
@@ -280,6 +292,9 @@ func validateResponse(r Response) error {
 	if r.IsStream && r.StatusCode == 204 {
 		return fmt.Errorf("stream response with 204 No Content is incoherent")
 	}
+	if r.IsSSE && r.StatusCode == 204 {
+		return fmt.Errorf("SSE response with 204 No Content is incoherent")
+	}
 	return nil
 }
 
@@ -293,8 +308,62 @@ func validateRequestBody(b *RequestBody, consumes []string) error {
 	if b.IsStream && len(consumes) == 0 {
 		return fmt.Errorf("stream request body requires //ox:consumes directive")
 	}
-	if !b.IsStream && len(consumes) > 0 {
-		return fmt.Errorf("//ox:consumes is only valid with *ox.Stream request body")
+	if !b.IsStream && !b.IsRawBytes && len(consumes) > 0 {
+		return fmt.Errorf("//ox:consumes is only valid with *ox.Stream or []byte request body")
+	}
+	return nil
+}
+
+// parseWildcardParams scans a route path for {*name} segments and returns
+// the set of wildcard parameter names. It enforces "only one wildcard per
+// route" and "wildcard must be the last segment" so the rest of the
+// pipeline can rely on those invariants.
+func parseWildcardParams(path string) (map[string]bool, error) {
+	wildcards := map[string]bool{}
+	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i, seg := range segments {
+		if !strings.HasPrefix(seg, "{") || !strings.HasSuffix(seg, "}") {
+			continue
+		}
+		inner := seg[1 : len(seg)-1]
+		if !strings.HasPrefix(inner, "*") {
+			continue
+		}
+		name := inner[1:]
+		if name == "" {
+			return nil, fmt.Errorf("wildcard path segment must have a name: %q", seg)
+		}
+		if i != len(segments)-1 {
+			return nil, fmt.Errorf("wildcard path segment %q must be the last segment in the route", seg)
+		}
+		if len(wildcards) > 0 {
+			return nil, fmt.Errorf("only one wildcard path segment is allowed per route")
+		}
+		wildcards[name] = true
+	}
+	return wildcards, nil
+}
+
+// applyWildcards marks each Param that maps to a {*name} segment with
+// IsWildcard, and validates that every wildcard declared in the route has
+// a matching string path field on the request struct.
+func applyWildcards(ep *Endpoint, wildcards map[string]bool) error {
+	matched := map[string]bool{}
+	for i := range ep.Params {
+		p := &ep.Params[i]
+		if p.Location != "path" || !wildcards[p.Name] {
+			continue
+		}
+		if p.GoType != "string" {
+			return fmt.Errorf("wildcard path param %q must be a string field, got %s", p.Name, p.ElemType)
+		}
+		p.IsWildcard = true
+		matched[p.Name] = true
+	}
+	for name := range wildcards {
+		if !matched[name] {
+			return fmt.Errorf("wildcard path param %q has no matching field on the request struct", name)
+		}
 	}
 	return nil
 }
@@ -331,9 +400,10 @@ func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *Request
 		if field.Name() == "Body" && tag == "" {
 			typeName := getTypeName(field.Type())
 			body = &RequestBody{
-				GoName:   field.Name(),
-				GoType:   typeName,
-				Required: true,
+				GoName:     field.Name(),
+				GoType:     typeName,
+				Required:   true,
+				IsRawBytes: isRawBytes(field.Type()),
 			}
 			continue
 		}
@@ -473,6 +543,60 @@ func basicKindName(t types.Type) string {
 	return ""
 }
 
+// isRawBytes reports whether t is exactly []byte. Named slice types (e.g.
+// `type FileContents []byte`) are intentionally not treated as raw bytes —
+// the user can opt in to that by using the underlying []byte directly.
+func isRawBytes(t types.Type) bool {
+	slice, ok := t.(*types.Slice)
+	if !ok {
+		return false
+	}
+	basic, ok := slice.Elem().(*types.Basic)
+	if !ok {
+		return false
+	}
+	return basic.Kind() == types.Uint8
+}
+
+// isOxEventSeq reports whether t is iter.Seq2[ox.Event[T], error]. When it
+// is, the returned types.Type is the payload type T.
+func isOxEventSeq(t types.Type, oxPkgPath string) (types.Type, bool) {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil, false
+	}
+	obj := named.Obj()
+	if obj == nil || obj.Name() != "Seq2" {
+		return nil, false
+	}
+	if obj.Pkg() == nil || obj.Pkg().Path() != "iter" {
+		return nil, false
+	}
+	args := named.TypeArgs()
+	if args == nil || args.Len() != 2 {
+		return nil, false
+	}
+	if !types.Identical(args.At(1), types.Universe.Lookup("error").Type()) {
+		return nil, false
+	}
+	evt, ok := args.At(0).(*types.Named)
+	if !ok {
+		return nil, false
+	}
+	evtObj := evt.Obj()
+	if evtObj == nil || evtObj.Name() != "Event" {
+		return nil, false
+	}
+	if evtObj.Pkg() == nil || evtObj.Pkg().Path() != oxPkgPath {
+		return nil, false
+	}
+	evtArgs := evt.TypeArgs()
+	if evtArgs == nil || evtArgs.Len() != 1 {
+		return nil, false
+	}
+	return evtArgs.At(0), true
+}
+
 // isOxStream reports whether t is *ox.Stream from the package at oxPkgPath.
 // Only the pointer form is accepted to keep one canonical handler signature.
 func isOxStream(t types.Type, oxPkgPath string) bool {
@@ -506,6 +630,14 @@ func extractResponse(sig *types.Signature, methodName string, oxPkgPath string) 
 
 	if isOxStream(t, oxPkgPath) {
 		resp.IsStream = true
+		return resp
+	}
+
+	if payloadT, ok := isOxEventSeq(t, oxPkgPath); ok {
+		resp.IsSSE = true
+		resp.SSEPayloadGoType = goTypeName(payloadT)
+		resp.GoType = goTypeName(t)
+		resp.ContentType = "text/event-stream"
 		return resp
 	}
 

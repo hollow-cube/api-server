@@ -653,6 +653,123 @@ func TestGenerateServer_BooleanQueryParams(t *testing.T) {
 	require.Contains(t, src, `"strconv"`)
 }
 
+func TestMuxPath(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"/users", "/users"},
+		{"/users/{id}", "/users/{id}"},
+		{"/files/{*path}", "/files/{path...}"},
+		{"/projects/{projectId}/files/{*path}", "/projects/{projectId}/files/{path...}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			require.Equal(t, tt.want, muxPath(tt.in))
+		})
+	}
+}
+
+func TestGenerateServer_WildcardPath(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "GetFile",
+				Method:      "GET",
+				Path:        "/files/{*path}",
+				RequestType: "GetFileRequest",
+				Params: []Param{
+					{Name: "path", GoName: "Path", GoType: "string", ElemType: "string", Location: "path", Required: true, IsWildcard: true},
+				},
+				Response: Response{StatusCode: 200, GoType: "File"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+	src := string(code)
+
+	require.Contains(t, src, `"GET "+params.BaseURL+"/files/{path...}"`)
+	require.Contains(t, src, `req.Path = r.PathValue("path")`)
+}
+
+func TestGenerateServer_RawBytesBodyField(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "UploadBlob",
+				Method:      "PUT",
+				Path:        "/blobs/{id}",
+				RequestType: "UploadBlobRequest",
+				Params: []Param{
+					{Name: "id", GoName: "ID", GoType: "string", Location: "path", Required: true},
+				},
+				RequestBody: &RequestBody{
+					GoName:     "Body",
+					GoType:     "[]byte",
+					Required:   true,
+					IsRawBytes: true,
+				},
+				Response: Response{StatusCode: 200, GoType: "Blob"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	require.Contains(t, src, `"io"`)
+	require.Contains(t, src, "io.ReadAll(r.Body)")
+	require.Contains(t, src, "req.Body = b")
+	require.NotContains(t, src, "runtime.DecodeJSON")
+}
+
+func TestGenerateServer_SSEResponse(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "StreamEvents",
+				Method:      "GET",
+				Path:        "/events",
+				RequestType: "StreamEventsRequest",
+				Response: Response{
+					StatusCode:       200,
+					GoType:           "iter.Seq2[ox.Event[ChangeEvent], error]",
+					IsSSE:            true,
+					SSEPayloadGoType: "ChangeEvent",
+					ContentType:      "text/event-stream",
+				},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	require.Contains(t, src, "runtime.WriteSSE[ChangeEvent](w, r, resp)")
+	require.NotContains(t, src, "runtime.WriteJSON")
+	require.NotContains(t, src, "runtime.WriteStream")
+}
+
 func TestGenerateServer_PointerQueryParams(t *testing.T) {
 	api := &API{
 		PackageName: "v4",

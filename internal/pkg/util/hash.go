@@ -5,8 +5,12 @@ import (
 	"fmt"
 )
 
-func Sha256(input string) string {
+func Sha256b(input []byte) []byte {
 	h := sha256.New()
-	h.Write([]byte(input))
-	return fmt.Sprintf("%x", h.Sum(nil))
+	h.Write(input)
+	return h.Sum(nil)
+}
+
+func Sha256(input string) string {
+	return fmt.Sprintf("%x", Sha256b([]byte(input)))
 }

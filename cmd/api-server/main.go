@@ -190,6 +190,8 @@ func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 }
 
 type routeHandlerImpl struct {
+	env string
+
 	v1p *v1Public.Server
 	v4i *v4Internal.Server
 
@@ -220,7 +222,21 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 		Mux:     v1Mux,
 		BaseURL: "/v1",
 	})
-	r.Handle("/v1/*", v1Mux)
+	if v.env == "tilt" {
+		// Dev-only permissive CORS
+		r.Handle("/v1/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			v1Mux.ServeHTTP(w, r)
+		}))
+	} else {
+		r.Handle("/v1/*", v1Mux)
+	}
 
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
@@ -247,6 +263,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 func makeV2RouteHandler(p struct {
 	fx.In
 
+	Conf         *config.Config
 	V1P          *v1Public.Server
 	V4I          *v4Internal.Server
 	Public       v2Public.StrictServerInterface
@@ -259,6 +276,7 @@ func makeV2RouteHandler(p struct {
 	Discord      *discord.Handler
 }) httpTransport.RouteProvider {
 	return &routeHandlerImpl{
+		env:          p.Conf.Env,
 		v1p:          p.V1P,
 		v4i:          p.V4I,
 		public:       p.Public,

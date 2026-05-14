@@ -3,7 +3,9 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"iter"
 	"net/http"
 	"strconv"
 
@@ -78,4 +80,64 @@ func WriteBadRequest(w http.ResponseWriter, msg string) {
 // DecodeJSON decodes the request body as JSON into v.
 func DecodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+// WriteSSE streams events as a text/event-stream response. The response is
+// committed with status 200 as soon as the first byte is written; there is no
+// way to surface an HTTP error after this. If the iterator yields a non-nil
+// error, the connection is closed and clients will reconnect per standard
+// SSE retry semantics.
+func WriteSSE[T any](w http.ResponseWriter, r *http.Request, seq iter.Seq2[ox.Event[T], error]) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		zap.S().Errorw("SSE response writer does not support flushing")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	for ev, err := range seq {
+		if err != nil {
+			zap.S().Warnw("SSE stream ended with error", "error", err)
+			return
+		}
+		if err := writeSSEFrame(w, ev); err != nil {
+			zap.S().Warnw("SSE write failed", "error", err)
+			return
+		}
+		flusher.Flush()
+	}
+}
+
+func writeSSEFrame[T any](w io.Writer, ev ox.Event[T]) error {
+	if ev.ID != "" {
+		if _, err := fmt.Fprintf(w, "id: %s\n", ev.ID); err != nil {
+			return err
+		}
+	}
+	if ev.Name != "" {
+		if _, err := fmt.Fprintf(w, "event: %s\n", ev.Name); err != nil {
+			return err
+		}
+	}
+	if ev.Retry > 0 {
+		if _, err := fmt.Fprintf(w, "retry: %d\n", ev.Retry.Milliseconds()); err != nil {
+			return err
+		}
+	}
+	data, err := json.Marshal(ev.Data)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		return err
+	}
+	return nil
 }

@@ -1,21 +1,131 @@
 openapi: 3.0.3
 info:
-  title: Server API
-  version: "1.0"
+    title: Server API
+    version: "1.0"
 paths:
-  /@me/status:
-    get:
-      operationId: getPlayerStatus
-      parameters:
-        - name: x-auth-user
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
+    /@me/status:
+        get:
+            operationId: getPlayerStatus
+            parameters:
+                - name: x-auth-user
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /projects/{projectId}:
+        get:
+            operationId: getProject
+            parameters:
+                - name: projectId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /projects/{projectId}/events:
+        get:
+            operationId: streamProjectEvents
+            parameters:
+                - name: projectId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: Last-Event-ID
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Server-Sent Events stream
+                    content:
+                        text/event-stream:
+                            schema:
+                                type: string
+    /projects/{projectId}/files/{path}:
+        delete:
+            operationId: deleteProjectFile
+            parameters:
+                - name: projectId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: Successful response
+        get:
+            operationId: getProjectFile
+            parameters:
+                - name: projectId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/octet-stream:
+                            schema:
+                                type: string
+                                format: binary
+        put:
+            operationId: updateProjectFile
+            parameters:
+                - name: projectId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: Content-Type
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/octet-stream:
+                        schema:
+                            type: string
+                            format: binary
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
