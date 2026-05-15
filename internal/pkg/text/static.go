@@ -2,12 +2,13 @@ package text
 
 import (
 	"context"
+	"strings"
+	"unicode"
+
 	"go.uber.org/zap"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
-	"strings"
-	"unicode"
 )
 
 var charactersToReplace = map[rune]rune{
@@ -86,13 +87,14 @@ func sanitize(text string) string {
 		transformed = text
 	}
 
+	rs := []rune(transformed)
 	builder := strings.Builder{}
-	for i := 0; i < len(transformed); i++ {
-		char := rune(transformed[i])
+	for i := 0; i < len(rs); i++ {
+		char := rs[i]
 
 		multiReplacement, isPartOfMulti := multiCharactersToReplace[char]
 		if isPartOfMulti && i+1 < len(transformed) {
-			nextChar := rune(transformed[i+1])
+			nextChar := rs[i+1]
 
 			if replacement, ok := multiReplacement[nextChar]; ok {
 				builder.WriteRune(replacement)
