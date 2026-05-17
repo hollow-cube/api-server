@@ -19,6 +19,7 @@ type RegisterParams struct {
 // RegisterRoutes registers all API routes on the given ServeMux.
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/grant", h.createLaunchGrant)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/search", h.searchHeadDatabase)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
@@ -69,6 +70,20 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 // handlers wraps the server and provides HTTP handler methods.
 type handlers struct {
 	server *Server
+}
+
+func (h *handlers) createLaunchGrant(w http.ResponseWriter, r *http.Request) {
+	var body CreateLaunchGrantRequest
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.CreateLaunchGrant(r.Context(), body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 201, resp)
 }
 
 func (h *handlers) searchHeadDatabase(w http.ResponseWriter, r *http.Request) {

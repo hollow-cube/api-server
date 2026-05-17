@@ -1,3 +1,5 @@
+//go:generate go run ../../cmd/ox/main.go generate ./.Server
+
 package v4Internal
 
 import (

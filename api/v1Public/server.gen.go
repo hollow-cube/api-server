@@ -18,6 +18,8 @@ type RegisterParams struct {
 // RegisterRoutes registers all API routes on the given ServeMux.
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/redeem", h.redeemLaunchGrant)
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/token", h.refreshAccessToken)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/@me/status", h.getPlayerStatus)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}", h.getProject)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.getProjectFile)
@@ -29,6 +31,36 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 // handlers wraps the server and provides HTTP handler methods.
 type handlers struct {
 	server *Server
+}
+
+func (h *handlers) redeemLaunchGrant(w http.ResponseWriter, r *http.Request) {
+	var req RedeemRequest
+	req.DPoP = r.Header.Get("DPoP")
+	if err := runtime.DecodeJSON(r, &req.Body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.RedeemLaunchGrant(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) refreshAccessToken(w http.ResponseWriter, r *http.Request) {
+	var req RefreshAccessTokenRequest
+	req.DPoP = r.Header.Get("DPoP")
+	if err := runtime.DecodeJSON(r, &req.Body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.RefreshAccessToken(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
 }
 
 func (h *handlers) getPlayerStatus(w http.ResponseWriter, r *http.Request) {

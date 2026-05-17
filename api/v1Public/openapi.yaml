@@ -19,6 +19,50 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /auth/redeem:
+        post:
+            operationId: redeemLaunchGrant
+            parameters:
+                - name: DPoP
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /auth/token:
+        post:
+            operationId: refreshAccessToken
+            parameters:
+                - name: DPoP
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /projects/{projectId}:
         get:
             operationId: getProject

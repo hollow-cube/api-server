@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var ErrNoRows = pgx.ErrNoRows
+
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 

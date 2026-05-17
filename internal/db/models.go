@@ -5,10 +5,54 @@
 package db
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type ApiClientKind string
+
+const (
+	ApiClientKindWeb     ApiClientKind = "web"
+	ApiClientKindDesktop ApiClientKind = "desktop"
+)
+
+func (e *ApiClientKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ApiClientKind(s)
+	case string:
+		*e = ApiClientKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ApiClientKind: %T", src)
+	}
+	return nil
+}
+
+type NullApiClientKind struct {
+	ApiClientKind ApiClientKind
+	Valid         bool // Valid is true if ApiClientKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullApiClientKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.ApiClientKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ApiClientKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullApiClientKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ApiClientKind), nil
+}
 
 type MapState struct {
 	ID     string

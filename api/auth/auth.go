@@ -2,27 +2,26 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"errors"
 	"net/http"
 	"strings"
 
 	v31 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	"github.com/hollow-cube/api-server/config"
+	"github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/redis/rueidis"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	auth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/genproto/googleapis/rpc/status"
 )
 
-const ApiKeyPrefix = "sk-hc-"
-
 var publicEndpoints = []string{
 	"/_external/*",
+	"/v1/auth/redeem",
+	"/v1/auth/token",
 	"/v2/players/recap/*",
 	"/v2/payments/tebex/webhook",
 	"/v2/payments/tebex/basket",
@@ -31,17 +30,34 @@ var publicEndpoints = []string{
 type ServerParams struct {
 	fx.In
 
-	Store *playerdb.Store
+	Conf         *config.Config
+	Keyring      *TokenKeyring
+	PlayerStore  *playerdb.Store
+	SessionStore *db.Queries
+	Redis        rueidis.Client
 }
 
 type Server struct {
-	store *playerdb.Store
+	keyring      *TokenKeyring
+	playerStore  *playerdb.Store
+	sessionStore *db.Queries
+	redis        rueidis.Client
+	externalURL  string
 }
 
 func NewServer(params ServerParams) *Server {
 	return &Server{
-		store: params.Store,
+		keyring:      params.Keyring,
+		playerStore:  params.PlayerStore,
+		sessionStore: params.SessionStore,
+		redis:        params.Redis,
+		externalURL:  params.Conf.Auth.ExternalURL,
 	}
+}
+
+type authState struct {
+	Valid    bool
+	PlayerID string
 }
 
 func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *auth.CheckResponse, err error) {
@@ -57,30 +73,28 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 		}, nil
 	}
 
-	apiKeyStr := request.Attributes.Request.Http.Headers["x-api-key"]
+	var result authState
+	req := request.Attributes.Request.Http
 
-	var apiKey playerdb.ApiKey
+	apiKeyStr := req.Headers["x-api-key"]
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
-		h := sha256.Sum256([]byte(apiKeyStr))
-		hash := hex.EncodeToString(h[:])
-		apiKey, err = s.store.GetApiKeyByHash(ctx, hash)
-		if errors.Is(err, playerdb.ErrNoRows) {
-			apiKey.ID = ""
-		} else if err != nil {
-			return nil, err
+		result, err = s.checkApiKey(ctx, apiKeyStr)
+	} else {
+		authorization := req.Headers["authorization"]
+		if strings.HasPrefix(authorization, "DPoP ") {
+			rawToken := strings.TrimPrefix(authorization, "DPoP ")
+			result, err = s.checkDpopToken(ctx, req, rawToken)
 		}
 	}
 
-	if apiKey.ID == "" {
-		return &auth.CheckResponse{
-			Status: &status.Status{Code: /*PERMISSION_DENIED*/ 7},
-			HttpResponse: &auth.CheckResponse_DeniedResponse{
-				DeniedResponse: &auth.DeniedHttpResponse{
-					Status: &typev3.HttpStatus{Code: http.StatusUnauthorized},
-					Body:   `{"error": "invalid api key"}`,
-				},
-			},
-		}, nil
+	// Fail closed: an internal error must never become a transport error that
+	// a fail-open Envoy could admit. Deny, and don't leak the reason.
+	if err != nil {
+		zap.S().Errorw("auth check failed internally", "path", path, "error", err)
+		return deny(), nil
+	}
+	if !result.Valid {
+		return deny(), nil
 	}
 
 	return &auth.CheckResponse{
@@ -91,7 +105,7 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 					{
 						Header: &v31.HeaderValue{
 							Key:   "x-auth-user",
-							Value: apiKey.PlayerID,
+							Value: result.PlayerID,
 						},
 						// TODO: scopes or anything else
 					},
@@ -101,19 +115,21 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 	}, nil
 }
 
-var _ auth.AuthorizationServer = (*Server)(nil)
-
-func GenerateAPIKey() (key string, hash string, err error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", "", err
+// deny is the single 401 response for every authn failure — generic body so
+// nothing about the token, proof, or internal state leaks downstream.
+func deny() *auth.CheckResponse {
+	return &auth.CheckResponse{
+		Status: &status.Status{Code: /*PERMISSION_DENIED*/ 7},
+		HttpResponse: &auth.CheckResponse_DeniedResponse{
+			DeniedResponse: &auth.DeniedHttpResponse{
+				Status: &typev3.HttpStatus{Code: http.StatusUnauthorized},
+				Body:   `{"error": "unauthorized"}`,
+			},
+		},
 	}
-
-	key = ApiKeyPrefix + base64.URLEncoding.EncodeToString(b)
-	h := sha256.Sum256([]byte(key))
-	hash = hex.EncodeToString(h[:])
-	return key, hash, nil
 }
+
+var _ auth.AuthorizationServer = (*Server)(nil)
 
 func isPublicEndpoint(path string) bool {
 	if idx := strings.Index(path, "?"); idx != -1 {
@@ -125,23 +141,4 @@ func isPublicEndpoint(path string) bool {
 		}
 	}
 	return false
-}
-
-func matchPath(pattern, path string) bool {
-	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
-	pathParts := strings.Split(strings.Trim(path, "/"), "/")
-
-	if len(patternParts) != len(pathParts) {
-		return false
-	}
-
-	for i, p := range patternParts {
-		if p == "*" {
-			continue
-		}
-		if p != pathParts[i] {
-			return false
-		}
-	}
-	return true
 }
