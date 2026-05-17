@@ -20,12 +20,13 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/redeem", h.redeemLaunchGrant)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/token", h.refreshAccessToken)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/editor/bootstrap", h.getEditorBootstrap)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/editor/events", h.streamEditorEvents)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files", h.getMapFiles)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files/{path...}", h.getMapFile)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/files/{path...}", h.updateMapFile)
+	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/files/{path...}", h.deleteMapFile)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/@me/status", h.getPlayerStatus)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}", h.getProject)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.getProjectFile)
-	params.Mux.HandleFunc("PUT "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.updateProjectFile)
-	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/projects/{projectId}/files/{path...}", h.deleteProjectFile)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/projects/{projectId}/events", h.streamProjectEvents)
 }
 
 // handlers wraps the server and provides HTTP handler methods.
@@ -63,6 +64,88 @@ func (h *handlers) refreshAccessToken(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteJSON(w, 200, resp)
 }
 
+func (h *handlers) getEditorBootstrap(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.GetEditorBootstrap(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) streamEditorEvents(w http.ResponseWriter, r *http.Request) {
+	var req StreamEditorEventsRequest
+	req.MapID = r.PathValue("mapId")
+	req.LastEventID = r.Header.Get("Last-Event-ID")
+	resp, err := h.server.StreamEditorEvents(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteSSE[EditorEvent](w, r, resp)
+}
+
+func (h *handlers) getMapFiles(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.GetMapFiles(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getMapFile(w http.ResponseWriter, r *http.Request) {
+	var req GetMapFileRequest
+	req.MapID = r.PathValue("mapId")
+	req.Path = r.PathValue("path")
+	req.IfNoneMatch = r.Header.Get("If-None-Match")
+	resp, err := h.server.GetMapFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) updateMapFile(w http.ResponseWriter, r *http.Request) {
+	var req UpdateMapFileRequest
+	req.MapID = r.PathValue("mapId")
+	req.Path = r.PathValue("path")
+	req.ContentType = r.Header.Get("Content-Type")
+	req.IfMatch = r.Header.Get("If-Match")
+	req.IfNoneMatch = r.Header.Get("If-None-Match")
+	if b, err := io.ReadAll(r.Body); err != nil {
+		runtime.WriteBadRequest(w, "failed to read request body")
+		return
+	} else {
+		req.Body = b
+	}
+	resp, err := h.server.UpdateMapFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) deleteMapFile(w http.ResponseWriter, r *http.Request) {
+	var req DeleteMapFileRequest
+	req.MapID = r.PathValue("mapId")
+	req.Path = r.PathValue("path")
+	req.IfMatch = r.Header.Get("If-Match")
+	req.IfNoneMatch = r.Header.Get("If-None-Match")
+	err := h.server.DeleteMapFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
 func (h *handlers) getPlayerStatus(w http.ResponseWriter, r *http.Request) {
 	var req AuthenticatedRequest
 	req.PlayerID = r.Header.Get("x-auth-user")
@@ -72,70 +155,4 @@ func (h *handlers) getPlayerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getProject(w http.ResponseWriter, r *http.Request) {
-	var req GetProjectRequest
-	req.ProjectID = r.PathValue("projectId")
-	resp, err := h.server.GetProject(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getProjectFile(w http.ResponseWriter, r *http.Request) {
-	var req GetProjectFileRequest
-	req.ProjectID = r.PathValue("projectId")
-	req.Path = r.PathValue("path")
-	resp, err := h.server.GetProjectFile(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteStream(w, 200, resp)
-}
-
-func (h *handlers) updateProjectFile(w http.ResponseWriter, r *http.Request) {
-	var req UpdateProjectFileRequest
-	req.ProjectID = r.PathValue("projectId")
-	req.Path = r.PathValue("path")
-	req.ContentType = r.Header.Get("Content-Type")
-	if b, err := io.ReadAll(r.Body); err != nil {
-		runtime.WriteBadRequest(w, "failed to read request body")
-		return
-	} else {
-		req.Body = b
-	}
-	resp, err := h.server.UpdateProjectFile(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) deleteProjectFile(w http.ResponseWriter, r *http.Request) {
-	var req DeleteProjectFileRequest
-	req.ProjectID = r.PathValue("projectId")
-	req.Path = r.PathValue("path")
-	err := h.server.DeleteProjectFile(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(204)
-}
-
-func (h *handlers) streamProjectEvents(w http.ResponseWriter, r *http.Request) {
-	var req StreamProjectEventsRequest
-	req.ProjectID = r.PathValue("projectId")
-	req.LastEventID = r.Header.Get("Last-Event-ID")
-	resp, err := h.server.StreamProjectEvents(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteSSE[ProjectEvent](w, r, resp)
 }

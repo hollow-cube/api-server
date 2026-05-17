@@ -124,6 +124,13 @@ func TestHandleError(t *testing.T) {
 			wantError:  "validation error",
 		},
 		{
+			name:       "PreconditionFailed",
+			err:        ox.PreconditionFailed{},
+			wantStatus: 412,
+			wantJSON:   true,
+			wantError:  "precondition failed",
+		},
+		{
 			name:       "wrapped NotFound",
 			err:        fmt.Errorf("wrap: %w", ox.NotFound{}),
 			wantStatus: 404,
@@ -158,6 +165,15 @@ func TestHandleError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleError_NotModified(t *testing.T) {
+	w := httptest.NewRecorder()
+	HandleError(w, ox.NotModified{})
+
+	require.Equal(t, http.StatusNotModified, w.Code)
+	require.Empty(t, w.Body.String(), "304 must not carry a body")
+	require.NotEqual(t, "application/json", w.Header().Get("Content-Type"))
 }
 
 type closingReader struct {
@@ -241,6 +257,28 @@ func TestWriteStream(t *testing.T) {
 		})
 
 		require.Equal(t, 202, w.Code)
+	})
+
+	t.Run("emits ETag header when set", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("x")),
+			ETag:        `"deadbeef"`,
+		})
+
+		require.Equal(t, `"deadbeef"`, w.Header().Get("ETag"))
+	})
+
+	t.Run("omits ETag header when empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("x")),
+		})
+
+		_, ok := w.Header()["Etag"]
+		require.False(t, ok, "ETag header should be absent when Stream.ETag is empty")
 	})
 }
 

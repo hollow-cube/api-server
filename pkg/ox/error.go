@@ -35,3 +35,17 @@ type ValidationError struct{}
 
 func (ValidationError) StatusCode() int { return 422 }
 func (ValidationError) Error() string   { return "validation error" }
+
+// NotModified signals a conditional GET whose If-None-Match matched the
+// current representation. The runtime writes a bare 304 with no body.
+type NotModified struct{}
+
+func (NotModified) StatusCode() int { return 304 }
+func (NotModified) Error() string   { return "not modified" }
+
+// PreconditionFailed signals a failed If-Match / If-None-Match precondition
+// on a mutating request.
+type PreconditionFailed struct{}
+
+func (PreconditionFailed) StatusCode() int { return 412 }
+func (PreconditionFailed) Error() string   { return "precondition failed" }

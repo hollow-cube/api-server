@@ -7,7 +7,7 @@ from map_files
 where map_id = $1;
 
 -- name: GetMapFile :one
-select path, content, content_type, size
+select path, content, content_type, content_hash, size
 from map_files
 where map_id = $1
   and path = $2;

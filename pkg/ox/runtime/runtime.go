@@ -46,6 +46,9 @@ func WriteStream(w http.ResponseWriter, status int, s *ox.Stream) {
 	if s.ContentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(s.ContentLength, 10))
 	}
+	if s.ETag != "" {
+		w.Header().Set("ETag", s.ETag)
+	}
 	w.WriteHeader(status)
 	if c, ok := s.Body.(io.Closer); ok {
 		defer c.Close()
@@ -60,7 +63,13 @@ func WriteStream(w http.ResponseWriter, status int, s *ox.Stream) {
 func HandleError(w http.ResponseWriter, err error) {
 	var httpErr ox.HTTPError
 	if errors.As(err, &httpErr) {
-		WriteJSON(w, httpErr.StatusCode(), map[string]string{
+		code := httpErr.StatusCode()
+		// 304 (and other bodiless statuses) must not carry a JSON body.
+		if code == http.StatusNotModified {
+			w.WriteHeader(code)
+			return
+		}
+		WriteJSON(w, code, map[string]string{
 			"error": httpErr.Error(),
 		})
 		return

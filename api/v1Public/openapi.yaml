@@ -63,11 +63,11 @@ paths:
                         application/json:
                             schema:
                                 type: object
-    /projects/{projectId}:
+    /maps/{mapId}/editor/bootstrap:
         get:
-            operationId: getProject
+            operationId: getEditorBootstrap
             parameters:
-                - name: projectId
+                - name: mapId
                   in: path
                   required: true
                   schema:
@@ -79,11 +79,11 @@ paths:
                         application/json:
                             schema:
                                 type: object
-    /projects/{projectId}/events:
+    /maps/{mapId}/editor/events:
         get:
-            operationId: streamProjectEvents
+            operationId: streamEditorEvents
             parameters:
-                - name: projectId
+                - name: mapId
                   in: path
                   required: true
                   schema:
@@ -100,11 +100,27 @@ paths:
                         text/event-stream:
                             schema:
                                 type: string
-    /projects/{projectId}/files/{path}:
-        delete:
-            operationId: deleteProjectFile
+    /maps/{mapId}/files:
+        get:
+            operationId: getMapFiles
             parameters:
-                - name: projectId
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/files/{path}:
+        delete:
+            operationId: deleteMapFile
+            parameters:
+                - name: mapId
                   in: path
                   required: true
                   schema:
@@ -113,15 +129,25 @@ paths:
                   in: path
                   required: true
                   description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: If-Match
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                - name: If-None-Match
+                  in: header
+                  required: true
                   schema:
                     type: string
             responses:
                 "204":
                     description: Successful response
         get:
-            operationId: getProjectFile
+            operationId: getMapFile
             parameters:
-                - name: projectId
+                - name: mapId
                   in: path
                   required: true
                   schema:
@@ -130,6 +156,11 @@ paths:
                   in: path
                   required: true
                   description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: If-None-Match
+                  in: header
+                  required: true
                   schema:
                     type: string
             responses:
@@ -141,9 +172,9 @@ paths:
                                 type: string
                                 format: binary
         put:
-            operationId: updateProjectFile
+            operationId: updateMapFile
             parameters:
-                - name: projectId
+                - name: mapId
                   in: path
                   required: true
                   schema:
@@ -155,6 +186,16 @@ paths:
                   schema:
                     type: string
                 - name: Content-Type
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                - name: If-Match
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                - name: If-None-Match
                   in: header
                   required: true
                   schema:

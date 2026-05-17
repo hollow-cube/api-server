@@ -25,7 +25,7 @@ func (q *Queries) DeleteMapFile(ctx context.Context, mapID string, path string) 
 }
 
 const getMapFile = `-- name: GetMapFile :one
-select path, content, content_type, size
+select path, content, content_type, content_hash, size
 from map_files
 where map_id = $1
   and path = $2
@@ -35,6 +35,7 @@ type GetMapFileRow struct {
 	Path        string `json:"path"`
 	Content     []byte `json:"content"`
 	ContentType string `json:"contentType"`
+	ContentHash []byte `json:"contentHash"`
 	Size        int    `json:"size"`
 }
 
@@ -45,6 +46,7 @@ func (q *Queries) GetMapFile(ctx context.Context, mapID string, path string) (Ge
 		&i.Path,
 		&i.Content,
 		&i.ContentType,
+		&i.ContentHash,
 		&i.Size,
 	)
 	return i, err
