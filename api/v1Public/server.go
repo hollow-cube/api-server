@@ -114,6 +114,9 @@ func WithCORS(h http.Handler, isProd bool) http.Handler {
 			return
 		}
 
+		// TODO: move this elsewhere it should be its own middleware
+		r = auth.SetFromHeaders(r)
+
 		h.ServeHTTP(w, r)
 	})
 

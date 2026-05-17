@@ -1,4 +1,4 @@
--- name: GetProjectFiles :many
+-- name: GetMapFiles :many
 select path,
        content_type,
        content_hash,
@@ -6,13 +6,13 @@ select path,
 from map_files
 where map_id = $1;
 
--- name: GetProjectFile :one
+-- name: GetMapFile :one
 select path, content, content_type, size
 from map_files
 where map_id = $1
   and path = $2;
 
--- name: UpsertProjectFile :one
+-- name: UpsertMapFile :one
 insert into map_files (map_id, path, content, content_hash, content_type)
 values ($1, $2, $3, $4, $5)
 on conflict (map_id, path) do update
@@ -22,7 +22,7 @@ on conflict (map_id, path) do update
       updated_at   = now()
 returning path, content_type, content_hash, size;
 
--- name: DeleteProjectFile :one
+-- name: DeleteMapFile :one
 delete
 from map_files
 where map_id = $1

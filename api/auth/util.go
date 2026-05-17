@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"net/http"
 	"strings"
 )
 
@@ -39,4 +41,21 @@ func matchPath(pattern, path string) bool {
 		}
 	}
 	return true
+}
+
+type authContextKey string
+
+func SetFromHeaders(r *http.Request) *http.Request {
+	// Set by envoy so we know its valid.
+	authUser := r.Header.Get("x-auth-user")
+	if authUser == "" {
+		return r
+	}
+
+	return r.WithContext(context.WithValue(r.Context(), authContextKey("playerID"), authUser))
+}
+
+func GetPlayerID(ctx context.Context) (string, bool) {
+	playerID, ok := ctx.Value(authContextKey("playerID")).(string)
+	return playerID, ok
 }

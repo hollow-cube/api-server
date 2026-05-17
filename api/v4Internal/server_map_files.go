@@ -27,7 +27,7 @@ type (
 // GET /maps/{mapId}/files
 func (s *Server) ListMapFiles(ctx context.Context, request MapRequest) (*FileList, error) {
 
-	files, err := s.mapStore.GetProjectFiles(ctx, request.MapID)
+	files, err := s.mapStore.GetMapFiles(ctx, request.MapID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (s *Server) GetMapFile(ctx context.Context, request GetMapFileRequest) (*ox
 
 	// TODO: obviously need to validate that the person has access to this map, and that its a real map.
 
-	file, err := s.mapStore.GetProjectFile(ctx, request.MapID, path)
+	file, err := s.mapStore.GetMapFile(ctx, request.MapID, path)
 	if errors.Is(err, mapdb.ErrNoRows) {
 		return nil, ox.NotFound{}
 	} else if err != nil {

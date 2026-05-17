@@ -9,7 +9,7 @@ import (
 	"context"
 )
 
-const deleteProjectFile = `-- name: DeleteProjectFile :one
+const deleteMapFile = `-- name: DeleteMapFile :one
 delete
 from map_files
 where map_id = $1
@@ -17,30 +17,30 @@ where map_id = $1
 returning path as deleted_path
 `
 
-func (q *Queries) DeleteProjectFile(ctx context.Context, mapID string, path string) (string, error) {
-	row := q.db.QueryRow(ctx, deleteProjectFile, mapID, path)
+func (q *Queries) DeleteMapFile(ctx context.Context, mapID string, path string) (string, error) {
+	row := q.db.QueryRow(ctx, deleteMapFile, mapID, path)
 	var deleted_path string
 	err := row.Scan(&deleted_path)
 	return deleted_path, err
 }
 
-const getProjectFile = `-- name: GetProjectFile :one
+const getMapFile = `-- name: GetMapFile :one
 select path, content, content_type, size
 from map_files
 where map_id = $1
   and path = $2
 `
 
-type GetProjectFileRow struct {
+type GetMapFileRow struct {
 	Path        string `json:"path"`
 	Content     []byte `json:"content"`
 	ContentType string `json:"contentType"`
 	Size        int    `json:"size"`
 }
 
-func (q *Queries) GetProjectFile(ctx context.Context, mapID string, path string) (GetProjectFileRow, error) {
-	row := q.db.QueryRow(ctx, getProjectFile, mapID, path)
-	var i GetProjectFileRow
+func (q *Queries) GetMapFile(ctx context.Context, mapID string, path string) (GetMapFileRow, error) {
+	row := q.db.QueryRow(ctx, getMapFile, mapID, path)
+	var i GetMapFileRow
 	err := row.Scan(
 		&i.Path,
 		&i.Content,
@@ -50,7 +50,7 @@ func (q *Queries) GetProjectFile(ctx context.Context, mapID string, path string)
 	return i, err
 }
 
-const getProjectFiles = `-- name: GetProjectFiles :many
+const getMapFiles = `-- name: GetMapFiles :many
 select path,
        content_type,
        content_hash,
@@ -59,22 +59,22 @@ from map_files
 where map_id = $1
 `
 
-type GetProjectFilesRow struct {
+type GetMapFilesRow struct {
 	Path        string `json:"path"`
 	ContentType string `json:"contentType"`
 	ContentHash []byte `json:"contentHash"`
 	Size        int    `json:"size"`
 }
 
-func (q *Queries) GetProjectFiles(ctx context.Context, mapID string) ([]GetProjectFilesRow, error) {
-	rows, err := q.db.Query(ctx, getProjectFiles, mapID)
+func (q *Queries) GetMapFiles(ctx context.Context, mapID string) ([]GetMapFilesRow, error) {
+	rows, err := q.db.Query(ctx, getMapFiles, mapID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetProjectFilesRow{}
+	items := []GetMapFilesRow{}
 	for rows.Next() {
-		var i GetProjectFilesRow
+		var i GetMapFilesRow
 		if err := rows.Scan(
 			&i.Path,
 			&i.ContentType,
@@ -91,7 +91,7 @@ func (q *Queries) GetProjectFiles(ctx context.Context, mapID string) ([]GetProje
 	return items, nil
 }
 
-const upsertProjectFile = `-- name: UpsertProjectFile :one
+const upsertMapFile = `-- name: UpsertMapFile :one
 insert into map_files (map_id, path, content, content_hash, content_type)
 values ($1, $2, $3, $4, $5)
 on conflict (map_id, path) do update
@@ -102,7 +102,7 @@ on conflict (map_id, path) do update
 returning path, content_type, content_hash, size
 `
 
-type UpsertProjectFileParams struct {
+type UpsertMapFileParams struct {
 	MapID       string `json:"mapId"`
 	Path        string `json:"path"`
 	Content     []byte `json:"content"`
@@ -110,22 +110,22 @@ type UpsertProjectFileParams struct {
 	ContentType string `json:"contentType"`
 }
 
-type UpsertProjectFileRow struct {
+type UpsertMapFileRow struct {
 	Path        string `json:"path"`
 	ContentType string `json:"contentType"`
 	ContentHash []byte `json:"contentHash"`
 	Size        int    `json:"size"`
 }
 
-func (q *Queries) UpsertProjectFile(ctx context.Context, arg UpsertProjectFileParams) (UpsertProjectFileRow, error) {
-	row := q.db.QueryRow(ctx, upsertProjectFile,
+func (q *Queries) UpsertMapFile(ctx context.Context, arg UpsertMapFileParams) (UpsertMapFileRow, error) {
+	row := q.db.QueryRow(ctx, upsertMapFile,
 		arg.MapID,
 		arg.Path,
 		arg.Content,
 		arg.ContentHash,
 		arg.ContentType,
 	)
-	var i UpsertProjectFileRow
+	var i UpsertMapFileRow
 	err := row.Scan(
 		&i.Path,
 		&i.ContentType,
