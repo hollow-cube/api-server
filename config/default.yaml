@@ -66,6 +66,22 @@ map_isolate:
 github:
   private_key: ""
 
+keyring:
+  active_key_id: 1
+  keys: ""
+
+auth:
+  # Public origin clients reach the API through (Envoy front proxy). Used to
+  # rebuild the DPoP htu since Envoy's internal scheme/host differ.
+  external_url: "http://localhost:10000"
+  access_token_ttl: 15m
+  web:
+    idle_ttl: 168h # 7d
+    absolute_ttl: 720h # 30d
+  desktop:
+    idle_ttl: 2160h # 90d
+    absolute_ttl: 8760h # 365d
+
 punishment_ladders:
   - id: "chat-minor"
     name: "Minor Chat Infraction"

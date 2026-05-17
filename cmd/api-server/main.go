@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/hollow-cube/api-server/api/v1Public"
 	"github.com/hollow-cube/api-server/internal/world"
@@ -96,6 +100,7 @@ func main() {
 		fx.Provide(newSessionPostgresStore, newPlayerPostgresStore, newMapsPostgresStore),
 		fx.Provide(newGithubClient),
 		fx.Provide(newTebexHeadlessClient),
+		fx.Provide(newKeyring),
 
 		// Converted punishment ladders - for internal handler
 		fx.Provide(newLaddersFromConfig),
@@ -222,21 +227,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 		Mux:     v1Mux,
 		BaseURL: "/v1",
 	})
-	if v.env == "tilt" {
-		// Dev-only permissive CORS
-		r.Handle("/v1/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "*")
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			v1Mux.ServeHTTP(w, r)
-		}))
-	} else {
-		r.Handle("/v1/*", v1Mux)
-	}
+	r.Handle("/v1/*", v1Public.WithCORS(v1Mux, v.env == "prod"))
 
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
@@ -369,4 +360,35 @@ func newDynamicExporter(config common.OtlpConfig) (trace.SpanExporter, error) {
 		//)
 		return tracefx.NewNoopExporter()
 	}
+}
+
+func newKeyring(conf *config.Config) (*auth.TokenKeyring, error) {
+	if conf.Keyring.ActiveKeyID < 0 || conf.Keyring.ActiveKeyID > 255 {
+		return nil, fmt.Errorf("auth: active_key_id %d out of range", conf.Keyring.ActiveKeyID)
+	}
+	if strings.TrimSpace(conf.Keyring.Keys) == "" {
+		return nil, errors.New("auth: keys is empty")
+	}
+
+	keys := make(map[byte][]byte)
+	for _, entry := range strings.Split(conf.Keyring.Keys, ",") {
+		idStr, b64, ok := strings.Cut(strings.TrimSpace(entry), ":")
+		if !ok {
+			return nil, fmt.Errorf("auth: bad signing_keys entry %q", entry)
+		}
+		id, err := strconv.Atoi(idStr)
+		if err != nil || id < 0 || id > 255 {
+			return nil, fmt.Errorf("auth: bad key id %q", idStr)
+		}
+		secret, err := base64.RawStdEncoding.DecodeString(b64)
+		if err != nil {
+			return nil, fmt.Errorf("auth: key %d not valid base64: %w", id, err)
+		}
+		if len(secret) < 32 { // HMAC-SHA256 — want >=32 bytes of entropy
+			return nil, fmt.Errorf("auth: key %d too short (%d bytes)", id, len(secret))
+		}
+		keys[byte(id)] = secret
+	}
+
+	return auth.NewTokenKeyring(byte(conf.Keyring.ActiveKeyID), keys), nil
 }
