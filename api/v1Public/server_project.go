@@ -257,8 +257,8 @@ func (s *Server) StreamProjectEvents(ctx context.Context, request StreamProjectE
 }
 
 type mapFileMessage struct {
-	MapID string
-	Path  string
+	MapID string `json:"mapId"`
+	Path  string `json:"path"`
 }
 
 func (m *mapFileMessage) Subject() string {
