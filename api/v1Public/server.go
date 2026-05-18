@@ -86,9 +86,6 @@ func NewServer(p ServerParams) (*Server, error) {
 	return s, nil
 }
 
-// WithAuthContext lifts the Envoy-validated x-auth-user header into the request
-// context for handlers. CORS and preflight are handled at the Envoy edge, not
-// here.
 func WithAuthContext(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = auth.SetFromHeaders(r)

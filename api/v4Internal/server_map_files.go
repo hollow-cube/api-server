@@ -9,7 +9,6 @@ import (
 	"github.com/hollow-cube/api-server/internal/mapdb"
 	"github.com/hollow-cube/api-server/internal/pkg/util"
 	"github.com/hollow-cube/api-server/pkg/ox"
-	"go.uber.org/zap"
 )
 
 type (
@@ -26,7 +25,6 @@ type (
 
 // GET /maps/{mapId}/files
 func (s *Server) ListMapFiles(ctx context.Context, request MapRequest) (*FileList, error) {
-
 	files, err := s.mapStore.GetMapFiles(ctx, request.MapID)
 	if err != nil {
 		return nil, err
@@ -55,11 +53,8 @@ type GetMapFileRequest struct {
 func (s *Server) GetMapFile(ctx context.Context, request GetMapFileRequest) (*ox.Stream, error) {
 	path, err := util.NormalizePath(request.Path)
 	if err != nil {
-		zap.S().Infof("rejecting invalid path: %v", request.Path)
 		return nil, ox.BadRequest{}
 	}
-
-	// TODO: obviously need to validate that the person has access to this map, and that its a real map.
 
 	file, err := s.mapStore.GetMapFile(ctx, request.MapID, path)
 	if errors.Is(err, mapdb.ErrNoRows) {

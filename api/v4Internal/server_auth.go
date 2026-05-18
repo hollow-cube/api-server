@@ -45,7 +45,12 @@ func (s *Server) CreateLaunchGrant(ctx context.Context, body CreateLaunchGrantRe
 	}
 
 	return &LaunchGrant{
-		URL:       fmt.Sprintf("http://localhost:5173/editor#§k=%s", code),
+		// URL hash is so the token isnt sent to servers, §k is used to make the mc
+		// client render it obfuscated so someone screensharing/streaming doesnt leak
+		// the code.
+		// TODO: should convert to do base64-like encoding with a custom alphabet
+		//       of zero width private use unicode characters so its invisible.
+		URL:       fmt.Sprintf("%s#§k=%s", s.editorUrl, code),
 		Code:      code,
 		ExpiresAt: expiresAt,
 	}, nil

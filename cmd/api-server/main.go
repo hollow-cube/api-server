@@ -195,8 +195,6 @@ func newKubernetesClient(conf *config.Config) (*kubernetes.Clientset, error) {
 }
 
 type routeHandlerImpl struct {
-	env string
-
 	v1p *v1Public.Server
 	v4i *v4Internal.Server
 
@@ -254,7 +252,6 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 func makeV2RouteHandler(p struct {
 	fx.In
 
-	Conf         *config.Config
 	V1P          *v1Public.Server
 	V4I          *v4Internal.Server
 	Public       v2Public.StrictServerInterface
@@ -267,7 +264,6 @@ func makeV2RouteHandler(p struct {
 	Discord      *discord.Handler
 }) httpTransport.RouteProvider {
 	return &routeHandlerImpl{
-		env:          p.Conf.Env,
 		v1p:          p.V1P,
 		v4i:          p.V4I,
 		public:       p.Public,

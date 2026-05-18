@@ -401,6 +401,20 @@ func TestIsRawBytes(t *testing.T) {
 	require.False(t, isRawBytes(types.Typ[types.String]))
 }
 
+func TestIsReader(t *testing.T) {
+	mkNamed := func(pkgPath, name string) *types.Named {
+		pkg := types.NewPackage(pkgPath, "")
+		obj := types.NewTypeName(0, pkg, name, nil)
+		return types.NewNamed(obj, types.NewInterfaceType(nil, nil), nil)
+	}
+
+	require.True(t, isReader(mkNamed("io", "Reader")))
+	require.True(t, isReader(mkNamed("io", "ReadCloser")))
+	require.False(t, isReader(mkNamed("io", "Writer")))
+	require.False(t, isReader(mkNamed("bytes", "Reader")))
+	require.False(t, isReader(types.NewSlice(types.Typ[types.Uint8])))
+}
+
 func TestApplyWildcards_RejectsNonString(t *testing.T) {
 	ep := &Endpoint{
 		Params: []Param{

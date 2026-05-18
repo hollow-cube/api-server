@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/hollow-cube/api-server/internal/mapdb"
@@ -26,56 +27,6 @@ type (
 		Hash        string `json:"hash"`
 	}
 )
-
-// etagFor returns a strong ETag header value for the given content hash, e.g.
-// `"deadbeef"` (quotes included, per RFC 7232).
-func etagFor(hash []byte) string {
-	return fmt.Sprintf("%q", fmt.Sprintf("%x", hash))
-}
-
-// etagListMatches reports whether an If-Match / If-None-Match header value
-// matches the given strong ETag. "*" matches any current representation; the
-// header may be a comma-separated list. The weak prefix (W/) is ignored since
-// clients always echo back a tag we issued, which is always strong.
-func etagListMatches(header, etag string) bool {
-	header = strings.TrimSpace(header)
-	if header == "*" {
-		return true
-	}
-	for _, tag := range strings.Split(header, ",") {
-		tag = strings.TrimPrefix(strings.TrimSpace(tag), "W/")
-		if tag == etag {
-			return true
-		}
-	}
-	return false
-}
-
-// checkWritePreconditions evaluates If-Match / If-None-Match for a mutating
-// request against the current state of the target file, returning
-// ox.PreconditionFailed when a precondition is not satisfied.
-func checkWritePreconditions(exists bool, hash []byte, ifMatch, ifNoneMatch string) error {
-	if ifMatch != "" && (!exists || !etagListMatches(ifMatch, etagFor(hash))) {
-		return ox.PreconditionFailed{}
-	}
-	if ifNoneMatch != "" && exists && etagListMatches(ifNoneMatch, etagFor(hash)) {
-		return ox.PreconditionFailed{}
-	}
-	return nil
-}
-
-// currentFileETagState reports whether the file exists and its content hash,
-// for evaluating conditional-request preconditions.
-func (s *Server) currentFileETagState(ctx context.Context, mapID, path string) (exists bool, hash []byte, err error) {
-	cur, err := s.mapStore.GetMapFile(ctx, mapID, path)
-	if errors.Is(err, mapdb.ErrNoRows) {
-		return false, nil, nil
-	}
-	if err != nil {
-		return false, nil, err
-	}
-	return true, cur.ContentHash, nil
-}
 
 // GET /maps/{mapId}/files
 func (s *Server) GetMapFiles(ctx context.Context, request MapRequest) (*FileList, error) {
@@ -148,7 +99,7 @@ type UpdateMapFileRequest struct {
 	ContentType string `header:"Content-Type,optional"`
 	IfMatch     string `header:"If-Match,optional"`
 	IfNoneMatch string `header:"If-None-Match,optional"`
-	Body        []byte
+	Body        io.Reader
 }
 
 // PUT /maps/{mapId}/files/{*path}
@@ -156,11 +107,6 @@ func (s *Server) UpdateMapFile(ctx context.Context, request UpdateMapFileRequest
 	path, err := util.NormalizePath(request.Path)
 	if err != nil {
 		zap.S().Infof("rejecting invalid path: %v", request.Path)
-		return nil, ox.BadRequest{}
-	}
-
-	if len(request.Body) > maxFileSize {
-		zap.S().Infof("rejecting file that is too large: %d bytes", len(request.Body))
 		return nil, ox.BadRequest{}
 	}
 
@@ -179,6 +125,18 @@ func (s *Server) UpdateMapFile(ctx context.Context, request UpdateMapFileRequest
 		}
 	}
 
+	// Bound the read so an oversized (or unbounded) body cannot exhaust memory.
+	// Reading maxFileSize+1 lets us distinguish "exactly at the limit" from
+	// "over the limit" without buffering the whole payload.
+	content, err := io.ReadAll(io.LimitReader(request.Body, maxFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > maxFileSize {
+		zap.S().Infof("rejecting file that is too large: > %d bytes", maxFileSize)
+		return nil, ox.BadRequest{}
+	}
+
 	// TODO: not sure we should blindly trust the content type, but it also may not matter.
 	contentType := request.ContentType
 	if contentType == "" {
@@ -188,8 +146,8 @@ func (s *Server) UpdateMapFile(ctx context.Context, request UpdateMapFileRequest
 	file, err := s.mapStore.UpsertMapFile(ctx, mapdb.UpsertMapFileParams{
 		MapID:       request.MapID,
 		Path:        path,
-		Content:     request.Body,
-		ContentHash: util.Sha256b(request.Body),
+		Content:     content,
+		ContentHash: util.Sha256b(content),
 		ContentType: contentType,
 	})
 	if err != nil {
@@ -245,4 +203,44 @@ func (s *Server) DeleteMapFile(ctx context.Context, request DeleteMapFileRequest
 	s.publishFileEvent(ctx, request.MapID, path)
 
 	return nil
+}
+
+func etagFor(hash []byte) string {
+	// quoted, per RFC-7232
+	return fmt.Sprintf("%q", fmt.Sprintf("%x", hash))
+}
+
+func etagListMatches(header, etag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "*" {
+		return true
+	}
+	for _, tag := range strings.Split(header, ",") {
+		tag = strings.TrimPrefix(strings.TrimSpace(tag), "W/")
+		if tag == etag {
+			return true
+		}
+	}
+	return false
+}
+
+func checkWritePreconditions(exists bool, hash []byte, ifMatch, ifNoneMatch string) error {
+	if ifMatch != "" && (!exists || !etagListMatches(ifMatch, etagFor(hash))) {
+		return ox.PreconditionFailed{}
+	}
+	if ifNoneMatch != "" && exists && etagListMatches(ifNoneMatch, etagFor(hash)) {
+		return ox.PreconditionFailed{}
+	}
+	return nil
+}
+
+func (s *Server) currentFileETagState(ctx context.Context, mapID, path string) (exists bool, hash []byte, err error) {
+	cur, err := s.mapStore.GetMapFile(ctx, mapID, path)
+	if errors.Is(err, mapdb.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	return true, cur.ContentHash, nil
 }

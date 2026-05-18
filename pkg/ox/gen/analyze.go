@@ -175,6 +175,7 @@ func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint,
 				Required:   true,
 				IsStream:   isOxStream(paramType, oxPkgPath),
 				IsRawBytes: isRawBytes(paramType),
+				IsReader:   isReader(paramType),
 			}
 			continue
 		}
@@ -308,8 +309,8 @@ func validateRequestBody(b *RequestBody, consumes []string) error {
 	if b.IsStream && len(consumes) == 0 {
 		return fmt.Errorf("stream request body requires //ox:consumes directive")
 	}
-	if !b.IsStream && !b.IsRawBytes && len(consumes) > 0 {
-		return fmt.Errorf("//ox:consumes is only valid with *ox.Stream or []byte request body")
+	if !b.IsStream && !b.IsRawBytes && !b.IsReader && len(consumes) > 0 {
+		return fmt.Errorf("//ox:consumes is only valid with *ox.Stream, []byte, or io.Reader request body")
 	}
 	return nil
 }
@@ -404,6 +405,7 @@ func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *Request
 				GoType:     typeName,
 				Required:   true,
 				IsRawBytes: isRawBytes(field.Type()),
+				IsReader:   isReader(field.Type()),
 			}
 			continue
 		}
@@ -441,9 +443,10 @@ func extractParamsAndBody(st *types.Struct, oxPkgPath string) ([]Param, *Request
 			p.Location = "query"
 			p.Required = !optional
 		} else if v, ok := tag.Lookup("header"); ok {
-			p.Name = tagName(v)
+			name, optional := parseTagOpts(v)
+			p.Name = name
 			p.Location = "header"
-			p.Required = true
+			p.Required = !optional
 		} else {
 			continue
 		}
@@ -556,6 +559,22 @@ func isRawBytes(t types.Type) bool {
 		return false
 	}
 	return basic.Kind() == types.Uint8
+}
+
+// isReader reports whether t is the standard library io.Reader or
+// io.ReadCloser interface. Such a body is passed through from *http.Request
+// verbatim (r.Body satisfies io.ReadCloser) so the handler can bound the read
+// itself rather than the runtime buffering an unbounded body into memory.
+func isReader(t types.Type) bool {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != "io" {
+		return false
+	}
+	return obj.Name() == "Reader" || obj.Name() == "ReadCloser"
 }
 
 // isOxEventSeq reports whether t is iter.Seq2[ox.Event[T], error]. When it

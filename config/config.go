@@ -147,6 +147,7 @@ type Config struct {
 	Discord           Discord            `mapstructure:"discord"`
 	Keyring           Keyring            `mapstructure:"keyring"`
 	Auth              Auth               `mapstructure:"auth"`
+	EditorURL         string             `mapstructure:"editor_url"`
 }
 
 //go:embed default.yaml

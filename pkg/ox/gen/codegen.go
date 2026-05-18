@@ -83,6 +83,8 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 			switch {
 			case ep.RequestBody.IsStream:
 				writeStreamBodyAssign(buf, "req."+ep.RequestBody.GoName)
+			case ep.RequestBody.IsReader:
+				fmt.Fprintf(buf, "\treq.%s = r.Body\n", ep.RequestBody.GoName)
 			case ep.RequestBody.IsRawBytes:
 				writeRawBytesBodyAssign(buf, "req."+ep.RequestBody.GoName)
 			default:
@@ -105,6 +107,8 @@ func writeHandler(buf *bytes.Buffer, api *API, ep *Endpoint) {
 			fmt.Fprintf(buf, "\t\tBody:          r.Body,\n")
 			fmt.Fprintf(buf, "\t\tContentLength: r.ContentLength,\n")
 			fmt.Fprintf(buf, "\t}\n")
+		case ep.RequestBody.IsReader:
+			fmt.Fprintf(buf, "\t%s := r.Body\n", bodyVar)
 		case ep.RequestBody.IsRawBytes:
 			fmt.Fprintf(buf, "\t%s, err := io.ReadAll(r.Body)\n", bodyVar)
 			fmt.Fprintf(buf, "\tif err != nil {\n")

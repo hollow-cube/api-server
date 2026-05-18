@@ -17,28 +17,22 @@ type (
 		Body RedeemBody
 	}
 	RedeemBody struct {
-		LaunchCode string `json:"launchCode"`
-		ClientKind string `json:"clientKind"` // "web" | "desktop"
-		Label      string `json:"label,omitempty"`
-	}
-	Account struct {
-		ID       string `json:"id"`
-		Username string `json:"username"`
+		LaunchCode string  `json:"launchCode"`
+		ClientKind string  `json:"clientKind"` // "web" | "desktop"
+		Label      *string `json:"label"`
 	}
 	RedeemResponse struct {
 		AccessToken     string    `json:"accessToken"`
 		AccessExpiresAt time.Time `json:"accessExpiresAt"`
 		SessionID       string    `json:"sessionId"`
-		Account         Account   `json:"account"`
-		Project         *string   `json:"project,omitempty"`
+		MapID           *string   `json:"mapId,omitempty"`
 	}
 )
 
 // POST /auth/redeem
 func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (*RedeemResponse, error) {
-	// THIS ENDPOINT IS UNAUTHENTICATED INTENTIONALLY (it bootstraps auth). The
-	// launch grant is the game's vouch; the DPoP proof binds the new session to
-	// a client key the caller actually controls. Trust nothing else here.
+	// THIS ENDPOINT IS UNAUTHENTICATED INTENTIONALLY via envoy. We do a verification
+	// inside but be very careful about what comes before.
 
 	kind := request.Body.ClientKind
 	if kind != string(db.ApiClientKindWeb) && kind != string(db.ApiClientKindDesktop) {
@@ -58,31 +52,27 @@ func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (
 
 	lt := s.conf.Auth.Lifetime(kind)
 	now := time.Now()
-	var label *string
-	if request.Body.Label != "" {
-		label = &request.Body.Label
-	}
 
 	type redeemed struct {
 		sessionID string
 		playerID  string
 		mapID     *string
 	}
-	out, err := db.Tx(ctx, s.sessionStore, func(ctx context.Context, q *db.Queries) (*redeemed, error) {
+	out, err := db.Tx(ctx, s.sessionStore, func(ctx context.Context, tx *db.Queries) (*redeemed, error) {
 		// Row-locked + redeemed_at-null predicate makes the burn atomic against
 		// a concurrent redeem of the same code.
-		grant, err := q.GetLaunchGrantForRedeem(ctx, util.Sha256b([]byte(request.Body.LaunchCode)))
+		grant, err := tx.GetLaunchGrantForRedeem(ctx, util.Sha256b([]byte(request.Body.LaunchCode)))
 		if errors.Is(err, db.ErrNoRows) {
 			return nil, ox.Unauthorized{}
 		} else if err != nil {
 			return nil, err
 		}
 
-		clientID, err := q.UpsertApiClient(ctx, db.UpsertApiClientParams{
+		clientID, err := tx.UpsertApiClient(ctx, db.UpsertApiClientParams{
 			Kind:      db.ApiClientKind(kind),
 			PublicKey: derSPKI,
 			KeyID:     keyID,
-			Label:     label,
+			Label:     request.Body.Label,
 		})
 		if err != nil {
 			return nil, err
@@ -90,11 +80,11 @@ func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (
 
 		// Revoke-and-replace: a fresh game vouch supersedes any prior session
 		// for this (client, account).
-		if err = q.RevokeSessionsForClientAccount(ctx, clientID, grant.PlayerID); err != nil {
+		if err = tx.RevokeSessionsForClientAccount(ctx, clientID, grant.PlayerID); err != nil {
 			return nil, err
 		}
 
-		sessionID, err := q.CreateSession(ctx, db.CreateSessionParams{
+		sessionID, err := tx.CreateSession(ctx, db.CreateSessionParams{
 			ClientID:          clientID,
 			PlayerID:          grant.PlayerID,
 			IdleExpiresAt:     now.Add(lt.IdleTTL),
@@ -104,7 +94,7 @@ func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (
 			return nil, err
 		}
 
-		if err = q.MarkLaunchGrantRedeemed(ctx, grant.ID, &sessionID); err != nil {
+		if err = tx.MarkLaunchGrantRedeemed(ctx, grant.ID, &sessionID); err != nil {
 			return nil, err
 		}
 
@@ -115,20 +105,11 @@ func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (
 	}
 
 	ttl := s.conf.Auth.AccessTokenTTL
-	accessExpiresAt := time.Now().Add(ttl)
-	accessToken := s.keyring.Mint(out.sessionID, ttl)
-
-	pd, err := s.playerStore.GetPlayerData(ctx, out.playerID)
-	if err != nil {
-		return nil, err
-	}
-
 	return &RedeemResponse{
-		AccessToken:     accessToken,
-		AccessExpiresAt: accessExpiresAt,
+		AccessToken:     s.keyring.Mint(out.sessionID, ttl),
+		AccessExpiresAt: time.Now().Add(ttl),
 		SessionID:       out.sessionID,
-		Account:         Account{ID: pd.ID, Username: pd.Username},
-		Project:         out.mapID,
+		MapID:           out.mapID,
 	}, nil
 }
 
@@ -148,9 +129,8 @@ type (
 
 // POST /auth/token
 func (s *Server) RefreshAccessToken(ctx context.Context, request RefreshAccessTokenRequest) (*RefreshAccessTokenResponse, error) {
-	// THIS ENDPOINT IS UNAUTHENTICATED INTENTIONALLY (it is the "refresh"
-	// replacement). The active-session lookup is the revocation gate; the DPoP
-	// proof must be signed by the key the session is pinned to.
+	// THIS ENDPOINT IS UNAUTHENTICATED INTENTIONALLY via envoy. We do a verification
+	// inside but be very careful about what comes before.
 
 	session, err := s.sessionStore.GetActiveSession(ctx, request.Body.SessionID)
 	if errors.Is(err, db.ErrNoRows) {

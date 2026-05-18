@@ -140,14 +140,17 @@ func buildHTU(externalURL, path string) string {
 	return strings.TrimRight(externalURL, "/") + path
 }
 
-// claimJTI atomically reserves a proof's jti for maxDPoPAge. A failed reserve
-// (the nonce already exists) is a replay.
+// claimJTI atomically reserves a proof's jti for maxDPoPAge+maxClockSkew. A
+// failed reserve (the nonce already exists) is a replay. The retention window
+// must cover maxClockSkew on top of maxDPoPAge because a proof whose iat is up
+// to maxClockSkew in the future is still accepted, so its effective validity
+// extends that far past now.
 func claimJTI(ctx context.Context, redis rueidis.Client, jti string) error {
 	cmd := redis.B().Set().
 		Key("dpop:jti:" + jti).
 		Value("1").
 		Nx().
-		ExSeconds(int64(maxDPoPAge.Seconds())).
+		ExSeconds(int64((maxDPoPAge + maxClockSkew).Seconds())).
 		Build()
 	err := redis.Do(ctx, cmd).Error()
 	if err == nil {

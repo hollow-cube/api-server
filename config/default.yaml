@@ -82,6 +82,8 @@ auth:
     idle_ttl: 2160h # 90d
     absolute_ttl: 8760h # 365d
 
+editor_url: "http://localhost:5173/editor"
+
 punishment_ladders:
   - id: "chat-minor"
     name: "Minor Chat Infraction"

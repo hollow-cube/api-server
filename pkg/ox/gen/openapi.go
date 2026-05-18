@@ -107,7 +107,7 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 						Schema: &oaSchema{Type: "string", Format: "binary"},
 					}
 				}
-			case ep.RequestBody.IsRawBytes:
+			case ep.RequestBody.IsRawBytes, ep.RequestBody.IsReader:
 				mts := ep.RequestBody.Consumes
 				if len(mts) == 0 {
 					mts = []string{"application/octet-stream"}

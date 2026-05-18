@@ -101,6 +101,7 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 		Status: &status.Status{Code: /*OK*/ 0},
 		HttpResponse: &auth.CheckResponse_OkResponse{
 			OkResponse: &auth.OkHttpResponse{
+				HeadersToRemove: []string{"x-auth-user"},
 				Headers: []*v31.HeaderValueOption{
 					{
 						Header: &v31.HeaderValue{

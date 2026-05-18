@@ -90,7 +90,7 @@ paths:
                     type: string
                 - name: Last-Event-ID
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
             responses:
@@ -133,12 +133,12 @@ paths:
                     type: string
                 - name: If-Match
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
                 - name: If-None-Match
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
             responses:
@@ -160,7 +160,7 @@ paths:
                     type: string
                 - name: If-None-Match
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
             responses:
@@ -187,17 +187,17 @@ paths:
                     type: string
                 - name: Content-Type
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
                 - name: If-Match
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
                 - name: If-None-Match
                   in: header
-                  required: true
+                  required: false
                   schema:
                     type: string
             requestBody:

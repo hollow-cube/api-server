@@ -3,7 +3,6 @@
 package v1Public
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/hollow-cube/api-server/pkg/ox/runtime"
@@ -118,12 +117,7 @@ func (h *handlers) updateMapFile(w http.ResponseWriter, r *http.Request) {
 	req.ContentType = r.Header.Get("Content-Type")
 	req.IfMatch = r.Header.Get("If-Match")
 	req.IfNoneMatch = r.Header.Get("If-None-Match")
-	if b, err := io.ReadAll(r.Body); err != nil {
-		runtime.WriteBadRequest(w, "failed to read request body")
-		return
-	} else {
-		req.Body = b
-	}
+	req.Body = r.Body
 	resp, err := h.server.UpdateMapFile(r.Context(), req)
 	if err != nil {
 		runtime.HandleError(w, err)

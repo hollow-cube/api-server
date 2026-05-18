@@ -38,6 +38,14 @@ type RequestBody struct {
 	// application/octet-stream in the OpenAPI spec by default; Consumes may
 	// override the accepted MIME types.
 	IsRawBytes bool
+
+	// IsReader is true when the body is an io.Reader / io.ReadCloser field.
+	// The runtime passes r.Body through verbatim without buffering it, so the
+	// handler can impose its own bounded read (e.g. io.LimitReader) instead of
+	// reading an unbounded body into memory. Treated as
+	// application/octet-stream in the OpenAPI spec by default; Consumes may
+	// override the accepted MIME types.
+	IsReader bool
 }
 
 // Param represents a request parameter extracted from struct tags.

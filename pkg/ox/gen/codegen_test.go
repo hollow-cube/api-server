@@ -735,6 +735,45 @@ func TestGenerateServer_RawBytesBodyField(t *testing.T) {
 	require.NotContains(t, src, "runtime.DecodeJSON")
 }
 
+func TestGenerateServer_ReaderBodyField(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:        "UploadBlob",
+				Method:      "PUT",
+				Path:        "/blobs/{id}",
+				RequestType: "UploadBlobRequest",
+				Params: []Param{
+					{Name: "id", GoName: "ID", GoType: "string", Location: "path", Required: true},
+				},
+				RequestBody: &RequestBody{
+					GoName:   "Body",
+					GoType:   "io.Reader",
+					Required: true,
+					IsReader: true,
+				},
+				Response: Response{StatusCode: 200, GoType: "Blob"},
+			},
+		},
+	}
+
+	code, err := GenerateServer(api)
+	require.NoError(t, err)
+	src := string(code)
+
+	fset := token.NewFileSet()
+	_, err = parser.ParseFile(fset, "server.gen.go", src, 0)
+	require.NoError(t, err, "generated code should be valid Go")
+
+	// The reader is passed through verbatim — no buffering, no JSON decode.
+	require.Contains(t, src, "req.Body = r.Body")
+	require.NotContains(t, src, "io.ReadAll")
+	require.NotContains(t, src, "runtime.DecodeJSON")
+}
+
 func TestGenerateServer_SSEResponse(t *testing.T) {
 	api := &API{
 		PackageName: "v4",
