@@ -5,7 +5,6 @@ package v1Public
 import (
 	"context"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/hollow-cube/api-server/api/auth"
@@ -87,37 +86,12 @@ func NewServer(p ServerParams) (*Server, error) {
 	return s, nil
 }
 
-func WithCORS(h http.Handler, isProd bool) http.Handler {
-	// maybe there is a better spot for this but its fine for now
-
-	var allowedOrigins []string
-	if isProd {
-		allowedOrigins = []string{"https://hollowcube.net"}
-	} else {
-		allowedOrigins = []string{"http://localhost:5173"}
-	}
-
+// WithAuthContext lifts the Envoy-validated x-auth-user header into the request
+// context for handlers. CORS and preflight are handled at the Envoy edge, not
+// here.
+func WithAuthContext(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-
-		if slices.Contains(allowedOrigins, origin) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Max-Age", "86400")
-			w.Header().Set("Vary", "Origin")
-		}
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		// TODO: move this elsewhere it should be its own middleware
 		r = auth.SetFromHeaders(r)
-
 		h.ServeHTTP(w, r)
 	})
-
 }

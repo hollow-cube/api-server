@@ -227,7 +227,7 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 		Mux:     v1Mux,
 		BaseURL: "/v1",
 	})
-	r.Handle("/v1/*", v1Public.WithCORS(v1Mux, v.env == "prod"))
+	r.Handle("/v1/*", v1Public.WithAuthContext(v1Mux))
 
 	r.Handle("/v2/players/*", v2Public.HandlerFromMuxWithBaseURL(v2Public.NewStrictHandler(v.public, nil), nil, "/v2/players"))
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
