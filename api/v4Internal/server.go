@@ -1,3 +1,5 @@
+//go:generate go run ../../cmd/ox/main.go generate ./.Server
+
 package v4Internal
 
 import (
@@ -5,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hollow-cube/api-server/config"
 	sessiondb "github.com/hollow-cube/api-server/internal/db"
 	"github.com/hollow-cube/api-server/internal/interaction"
 	"github.com/hollow-cube/api-server/internal/mapdb"
@@ -23,6 +26,7 @@ type ServerParams struct {
 	fx.In
 
 	Log          *zap.SugaredLogger
+	Config       *config.Config
 	PlayerStore  *playerdb.Store
 	MapStore     *mapdb.Store
 	SessionStore *sessiondb.Queries
@@ -50,6 +54,8 @@ type Server struct {
 	notifications notification.Manager
 	interactions  *interaction.Handler
 	worlds        *world.Tracker
+
+	editorUrl string
 }
 
 func NewServer(p ServerParams) (*Server, error) {
@@ -64,6 +70,7 @@ func NewServer(p ServerParams) (*Server, error) {
 		notifications: p.Notifications,
 		interactions:  p.Interactions,
 		worlds:        p.Worlds,
+		editorUrl:     p.Config.EditorURL,
 	}
 
 	return s, nil

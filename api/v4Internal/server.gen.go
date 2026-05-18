@@ -19,6 +19,7 @@ type RegisterParams struct {
 // RegisterRoutes registers all API routes on the given ServeMux.
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
+	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/grant", h.createLaunchGrant)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/search", h.searchHeadDatabase)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
@@ -28,6 +29,8 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/leaderboard", h.getMapLeaderboard)
 	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/leaderboard", h.deleteMapLeaderboard)
 	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/leaderboard", h.restoreMapLeaderboard)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files", h.listMapFiles)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files/{path...}", h.getMapFile)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/search", h.searchMaps)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/search/progress", h.searchMapProgress)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps", h.createMap)
@@ -67,6 +70,20 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 // handlers wraps the server and provides HTTP handler methods.
 type handlers struct {
 	server *Server
+}
+
+func (h *handlers) createLaunchGrant(w http.ResponseWriter, r *http.Request) {
+	var body CreateLaunchGrantRequest
+	if err := runtime.DecodeJSON(r, &body); err != nil {
+		runtime.WriteBadRequest(w, "invalid request body")
+		return
+	}
+	resp, err := h.server.CreateLaunchGrant(r.Context(), body)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 201, resp)
 }
 
 func (h *handlers) searchHeadDatabase(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +229,29 @@ func (h *handlers) restoreMapLeaderboard(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(200)
+}
+
+func (h *handlers) listMapFiles(w http.ResponseWriter, r *http.Request) {
+	var req MapRequest
+	req.MapID = r.PathValue("mapId")
+	resp, err := h.server.ListMapFiles(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getMapFile(w http.ResponseWriter, r *http.Request) {
+	var req GetMapFileRequest
+	req.MapID = r.PathValue("mapId")
+	req.Path = r.PathValue("path")
+	resp, err := h.server.GetMapFile(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
 }
 
 func (h *handlers) searchMaps(w http.ResponseWriter, r *http.Request) {

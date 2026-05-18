@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hollow-cube/api-server/internal/pkg/common"
 	"github.com/spf13/viper"
@@ -98,6 +99,35 @@ type Github struct {
 	PrivateKey string `mapstructure:"private_key"`
 }
 
+type Keyring struct {
+	ActiveKeyID int `mapstructure:"active_key_id"`
+	// "<id>:<base64-nopad>[,<id>:<base64-nopad>...]"
+	Keys string `mapstructure:"keys"`
+}
+
+// AuthClientLifetime is the per-client-kind session expiry policy.
+type AuthClientLifetime struct {
+	IdleTTL     time.Duration `mapstructure:"idle_ttl"`
+	AbsoluteTTL time.Duration `mapstructure:"absolute_ttl"`
+}
+
+type Auth struct {
+	// ExternalURL is the public origin clients reach the API through (Envoy).
+	// Used to reconstruct the DPoP htu, since Envoy's internal view differs.
+	ExternalURL    string             `mapstructure:"external_url"`
+	AccessTokenTTL time.Duration      `mapstructure:"access_token_ttl"`
+	Web            AuthClientLifetime `mapstructure:"web"`
+	Desktop        AuthClientLifetime `mapstructure:"desktop"`
+}
+
+// Lifetime returns the session policy for a client kind, defaulting to web.
+func (a Auth) Lifetime(kind string) AuthClientLifetime {
+	if kind == "desktop" {
+		return a.Desktop
+	}
+	return a.Web
+}
+
 type Config struct {
 	Env               string             `mapstructure:"env"`
 	HTTP              common.HTTPConfig  `mapstructure:"http"`
@@ -115,6 +145,9 @@ type Config struct {
 	Tebex             Tebex              `mapstructure:"tebex"`
 	S3                S3                 `mapstructure:"s3"`
 	Discord           Discord            `mapstructure:"discord"`
+	Keyring           Keyring            `mapstructure:"keyring"`
+	Auth              Auth               `mapstructure:"auth"`
+	EditorURL         string             `mapstructure:"editor_url"`
 }
 
 //go:embed default.yaml

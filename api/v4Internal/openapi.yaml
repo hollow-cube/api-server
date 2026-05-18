@@ -3,6 +3,22 @@ info:
     title: Server API
     version: "1.0"
 paths:
+    /auth/grant:
+        post:
+            operationId: createLaunchGrant
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "201":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /head-database/{category}:
         get:
             operationId: getHeadDatabaseCategory
@@ -240,6 +256,45 @@ paths:
             responses:
                 "200":
                     description: Successful response
+    /maps/{mapId}/files:
+        get:
+            operationId: listMapFiles
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/files/{path}:
+        get:
+            operationId: getMapFile
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/octet-stream:
+                            schema:
+                                type: string
+                                format: binary
     /maps/{mapId}/leaderboard:
         delete:
             operationId: deleteMapLeaderboard

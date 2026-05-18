@@ -124,6 +124,13 @@ func TestHandleError(t *testing.T) {
 			wantError:  "validation error",
 		},
 		{
+			name:       "PreconditionFailed",
+			err:        ox.PreconditionFailed{},
+			wantStatus: 412,
+			wantJSON:   true,
+			wantError:  "precondition failed",
+		},
+		{
 			name:       "wrapped NotFound",
 			err:        fmt.Errorf("wrap: %w", ox.NotFound{}),
 			wantStatus: 404,
@@ -158,6 +165,15 @@ func TestHandleError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleError_NotModified(t *testing.T) {
+	w := httptest.NewRecorder()
+	HandleError(w, ox.NotModified{})
+
+	require.Equal(t, http.StatusNotModified, w.Code)
+	require.Empty(t, w.Body.String(), "304 must not carry a body")
+	require.NotEqual(t, "application/json", w.Header().Get("Content-Type"))
 }
 
 type closingReader struct {
@@ -242,6 +258,81 @@ func TestWriteStream(t *testing.T) {
 
 		require.Equal(t, 202, w.Code)
 	})
+
+	t.Run("emits ETag header when set", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("x")),
+			ETag:        `"deadbeef"`,
+		})
+
+		require.Equal(t, `"deadbeef"`, w.Header().Get("ETag"))
+	})
+
+	t.Run("omits ETag header when empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("x")),
+		})
+
+		_, ok := w.Header()["Etag"]
+		require.False(t, ok, "ETag header should be absent when Stream.ETag is empty")
+	})
+}
+
+func TestWriteSSE(t *testing.T) {
+	type payload struct {
+		Path string `json:"path"`
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/events", nil)
+
+	seq := func(yield func(ox.Event[payload], error) bool) {
+		if !yield(ox.Event[payload]{ID: "1", Name: "change", Data: payload{Path: "a.txt"}}, nil) {
+			return
+		}
+		if !yield(ox.Event[payload]{ID: "2", Data: payload{Path: "b.txt"}}, nil) {
+			return
+		}
+	}
+
+	WriteSSE(w, r, seq)
+
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+	require.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
+
+	body := w.Body.String()
+	require.Contains(t, body, "id: 1\n")
+	require.Contains(t, body, "event: change\n")
+	require.Contains(t, body, `data: {"path":"a.txt"}`+"\n\n")
+	require.Contains(t, body, "id: 2\n")
+	require.Contains(t, body, `data: {"path":"b.txt"}`+"\n\n")
+}
+
+func TestWriteSSE_ErrorEndsStream(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/events", nil)
+
+	seq := func(yield func(ox.Event[string], error) bool) {
+		if !yield(ox.Event[string]{ID: "1", Data: "ok"}, nil) {
+			return
+		}
+		if !yield(ox.Event[string]{}, fmt.Errorf("boom")) {
+			return
+		}
+		if !yield(ox.Event[string]{ID: "2", Data: "unreached"}, nil) {
+			return
+		}
+	}
+
+	WriteSSE(w, r, seq)
+
+	body := w.Body.String()
+	require.Contains(t, body, `data: "ok"`)
+	require.NotContains(t, body, `"unreached"`)
 }
 
 func TestWriteBadRequest(t *testing.T) {

@@ -28,4 +28,6 @@ base:
 
     SESSION_KUBERNETES_NAMESPACE: "mapmaker"
 
+    SESSION_KEYRING_KEYS: "1:ZrQMC+nxDqEVo0FbHoeuGevh/4lfsZl94dHtcoaW5Y4"
+
     SESSION_MAPISOLATE_DISABLED: "true"

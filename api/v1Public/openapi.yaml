@@ -1,21 +1,216 @@
 openapi: 3.0.3
 info:
-  title: Server API
-  version: "1.0"
+    title: Server API
+    version: "1.0"
 paths:
-  /@me/status:
-    get:
-      operationId: getPlayerStatus
-      parameters:
-        - name: x-auth-user
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
+    /@me/status:
+        get:
+            operationId: getPlayerStatus
+            parameters:
+                - name: x-auth-user
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /auth/redeem:
+        post:
+            operationId: redeemLaunchGrant
+            parameters:
+                - name: DPoP
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /auth/token:
+        post:
+            operationId: refreshAccessToken
+            parameters:
+                - name: DPoP
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/editor/bootstrap:
+        get:
+            operationId: getEditorBootstrap
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/editor/events:
+        get:
+            operationId: streamEditorEvents
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: Last-Event-ID
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Server-Sent Events stream
+                    content:
+                        text/event-stream:
+                            schema:
+                                type: string
+    /maps/{mapId}/files:
+        get:
+            operationId: getMapFiles
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /maps/{mapId}/files/{path}:
+        delete:
+            operationId: deleteMapFile
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: If-Match
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+                - name: If-None-Match
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: Successful response
+        get:
+            operationId: getMapFile
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: If-None-Match
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/octet-stream:
+                            schema:
+                                type: string
+                                format: binary
+        put:
+            operationId: updateMapFile
+            parameters:
+                - name: mapId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: path
+                  required: true
+                  description: 'Wildcard path segment: captures one or more path segments (no leading slash).'
+                  schema:
+                    type: string
+                - name: Content-Type
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+                - name: If-Match
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+                - name: If-None-Match
+                  in: header
+                  required: false
+                  schema:
+                    type: string
+            requestBody:
+                required: true
+                content:
+                    application/octet-stream:
+                        schema:
+                            type: string
+                            format: binary
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object

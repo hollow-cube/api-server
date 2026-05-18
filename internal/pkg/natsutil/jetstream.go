@@ -52,11 +52,22 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 	if err != nil {
 		return Consumer{}, fmt.Errorf("create consumer %s: %w", stream, err)
 	}
+	return w.wrapConsumer(ctx, stream, chatConsumer, config.AckPolicy, handler), nil
+}
 
+func (w *JetStreamWrapper) SubscribeOrdered(ctx context.Context, stream string, config jetstream.OrderedConsumerConfig, handler func(ctx context.Context, msg jetstream.Msg) error) (Consumer, error) {
+	consumer, err := w.js.OrderedConsumer(ctx, stream, config)
+	if err != nil {
+		return Consumer{}, fmt.Errorf("create ordered consumer %s: %w", stream, err)
+	}
+	return w.wrapConsumer(ctx, stream, consumer, jetstream.AckNonePolicy, handler), nil
+}
+
+func (w *JetStreamWrapper) wrapConsumer(ctx context.Context, stream string, consumer jetstream.Consumer, ackPolicy jetstream.AckPolicy, handler func(ctx context.Context, msg jetstream.Msg) error) Consumer {
 	var consumeContext jetstream.ConsumeContext
 	return Consumer{
-		Start: func() error {
-			consumeContext, err = chatConsumer.Consume(func(msg jetstream.Msg) {
+		Start: func() (err error) {
+			consumeContext, err = consumer.Consume(func(msg jetstream.Msg) {
 				carrier := headerCarrier(msg.Headers())
 				ctx := otel.GetTextMapPropagator().Extract(ctx, &carrier)
 				ctx, span := tracer.Start(ctx, "nats.consume "+stream,
@@ -74,7 +85,7 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 					span.SetStatus(codes.Error, err.Error())
 
 					// If we have acks enabled, we should Nak the message to trigger redelivery.
-					if config.AckPolicy != jetstream.AckNonePolicy {
+					if ackPolicy != jetstream.AckNonePolicy {
 						if err = msg.Nak(); err != nil {
 							w.log.Errorf("failed to nak nats message: %v", err)
 						}
@@ -89,7 +100,7 @@ func (w *JetStreamWrapper) Subscribe(ctx context.Context, stream string, config 
 			}
 			return nil
 		},
-	}, nil
+	}
 }
 
 // PublishJSONAsync

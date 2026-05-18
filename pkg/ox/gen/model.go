@@ -32,6 +32,20 @@ type RequestBody struct {
 	// JSON-decoding. Consumes enumerates the MIME types the endpoint accepts.
 	IsStream bool
 	Consumes []string
+
+	// IsRawBytes is true when the body is a plain []byte field. The runtime
+	// reads the request body in full with io.ReadAll. Treated as
+	// application/octet-stream in the OpenAPI spec by default; Consumes may
+	// override the accepted MIME types.
+	IsRawBytes bool
+
+	// IsReader is true when the body is an io.Reader / io.ReadCloser field.
+	// The runtime passes r.Body through verbatim without buffering it, so the
+	// handler can impose its own bounded read (e.g. io.LimitReader) instead of
+	// reading an unbounded body into memory. Treated as
+	// application/octet-stream in the OpenAPI spec by default; Consumes may
+	// override the accepted MIME types.
+	IsReader bool
 }
 
 // Param represents a request parameter extracted from struct tags.
@@ -50,6 +64,11 @@ type Param struct {
 	Required  bool
 	OAPIType  string // OpenAPI type
 	OAPIFmt   string // OpenAPI format, empty if not applicable
+
+	// IsWildcard is true for path parameters declared as {*name} — these
+	// capture the remainder of the URL (one or more path segments). Only
+	// valid for path params; must be the last segment in the route.
+	IsWildcard bool
 }
 
 // Response describes the handler's return type.
@@ -66,4 +85,10 @@ type Response struct {
 	// types the endpoint may emit at runtime.
 	IsStream bool
 	Produces []string
+
+	// IsSSE is true when the handler returns iter.Seq2[ox.Event[T], error].
+	// SSEPayloadGoType holds the Go source string for T, used to instantiate
+	// the generic runtime.WriteSSE call.
+	IsSSE            bool
+	SSEPayloadGoType string
 }

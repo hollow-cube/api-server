@@ -216,7 +216,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 		size := mapSizeFromAPI(*request.Body.Size)
 		if size > model.MapSize__Max {
 			return UpdateMap400JSONResponse{BadRequestJSONResponse{
-				Error: fmt.Sprintf("invalid map size: ", *request.Body.Size),
+				Error: fmt.Sprintf("invalid map size: %s", *request.Body.Size),
 			}}, nil
 		}
 		update.Size = int64(size)
@@ -234,7 +234,7 @@ func (s *server) UpdateMap(ctx context.Context, request UpdateMapRequestObject) 
 			variant, ok := model.MapSubVariantTypeMap[model.MapSubVariant(sv)]
 			if !ok {
 				return UpdateMap400JSONResponse{BadRequestJSONResponse{
-					Error: fmt.Sprintf("invalid sub size: ", sv),
+					Error: fmt.Sprintf("invalid sub size: %s", sv),
 				}}, nil
 			}
 			if string(variant) != update.Variant {

@@ -25,4 +25,6 @@ base:
 
     SESSION_DISCORD_APPLICATION_ID: "1086860126020964423"
 
+    SESSION_EDITOR_URL: "https://hollowcube.net/editor"
+
     SESSION_KUBERNETES_NAMESPACE: "mapmaker"
