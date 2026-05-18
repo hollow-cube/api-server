@@ -25,6 +25,7 @@ base:
 
     SESSION_DISCORD_APPLICATION_ID: "1086860126020964423"
 
+    SESSION_AUTH_EXTERNAL_URL: "https://api.hollowcube.net"
     SESSION_EDITOR_URL: "https://hollowcube.net/editor"
 
     SESSION_KUBERNETES_NAMESPACE: "mapmaker"
