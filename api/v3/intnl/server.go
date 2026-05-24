@@ -264,7 +264,7 @@ func (s *serverImpl) UpdateSessionProperties(ctx context.Context, request Update
 	session, err := s.playerTracker.GetSession(ctx, request.PlayerId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch session: %w", err)
-	} else if s == nil {
+	} else if session == nil {
 		return SessionNotFoundResponse{}, nil
 	}
 
