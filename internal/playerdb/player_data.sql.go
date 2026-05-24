@@ -379,7 +379,7 @@ set username     = coalesce($2, username),
     playtime     = coalesce($5, playtime),
     beta_enabled = coalesce($6, beta_enabled),
     settings     = coalesce($7, settings),
-    skin         = $8
+    skin         = coalesce($8, skin)
 where id = $1
 `
 

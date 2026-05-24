@@ -37,7 +37,7 @@ set username     = coalesce(sqlc.narg('username'), username),
     playtime     = coalesce(sqlc.narg('playtime'), playtime),
     beta_enabled = coalesce(sqlc.narg('beta_enabled'), beta_enabled),
     settings     = coalesce(sqlc.narg('settings'), settings),
-    skin         = sqlc.narg('skin')
+    skin         = coalesce(sqlc.narg('skin'), skin)
 where id = $1;
 
 -- name: addExperience :one

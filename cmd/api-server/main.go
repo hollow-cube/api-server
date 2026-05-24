@@ -35,7 +35,6 @@ import (
 	posthogProxy "github.com/hollow-cube/api-server/api/posthog"
 	intnlV3 "github.com/hollow-cube/api-server/api/v3/intnl"
 	"github.com/hollow-cube/api-server/config"
-	"github.com/hollow-cube/api-server/internal/consumers"
 	"github.com/hollow-cube/api-server/internal/discord"
 	"github.com/hollow-cube/api-server/internal/object"
 	"github.com/hollow-cube/api-server/internal/pkg/common"
@@ -150,9 +149,6 @@ func main() {
 
 		fx.Provide(handler.NewInviteManager), // Possibly legacy
 		fx.Provide(notification.NewManager),
-
-		// Generic consumer (e.g., denormalized data from other services)
-		fx.Invoke(consumers.NewConsumerSet),
 
 		// HTTP server
 		fx.Provide(newDynamicExporter),

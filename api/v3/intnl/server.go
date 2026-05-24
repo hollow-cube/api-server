@@ -217,6 +217,15 @@ func (s *serverImpl) DeleteSession(ctx context.Context, request DeleteSessionReq
 		return nil, fmt.Errorf("unexpected response from player service: %v", r)
 	}
 
+	// Additionally set player to offline. Can be merged with [playerHandler.UpdatePlayerData] in the future
+	// when this is migrated to v4Internal API
+	if err = s.playerStore.UpdatePlayerData(ctx, playerdb.UpdatePlayerDataParams{
+		ID:     request.PlayerId,
+		Online: new(false),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to update player online state: %w", err)
+	}
+
 	return DeleteSession200Response{}, nil
 }
 
@@ -282,6 +291,14 @@ func (s *serverImpl) UpdateSessionProperties(ctx context.Context, request Update
 		err = s.playerTracker.UpdateSessionWithMetadata(ctx, session, metadata)
 		if err != nil {
 			return nil, err
+		}
+
+		// Update the player online status since Player.Online = sessionExists && notVanished
+		if err = s.playerStore.UpdatePlayerData(ctx, playerdb.UpdatePlayerDataParams{
+			ID:     request.PlayerId,
+			Online: new(!session.Hidden),
+		}); err != nil {
+			return nil, fmt.Errorf("failed to update player online state: %w", err)
 		}
 	}
 
@@ -516,7 +533,8 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUser
 		}
 		pdUpdate.Skin = pd.Skin
 	}
-	if connectedHost != nil && *connectedHost == vanishHost && pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff) {
+	isHidden := connectedHost != nil && *connectedHost == vanishHost && pplayer.Has(pd.Permissions, pplayer.FlagGenericStaff)
+	if isHidden {
 		pdUpdate.SettingsUpdates = new(v2Internal.PlayerSettings{
 			kafkaModel.SettingKey_Hidden: true,
 		})
@@ -537,6 +555,15 @@ func (s *serverImpl) updatePlayerDataFromJoin(pd *v2Internal.PlayerData, newUser
 		}
 		if _, ok := r.(playerService.UpdatePlayerData200Response); !ok {
 			zap.S().Errorw("unexpected response from player service when updating player data", "update", pdUpdate, "response", r)
+		}
+
+		// Set Online based on whether they are vanished or not.
+		// This can be merged with the playerHandler.UpdatePlayerData in the future when it's migrated to v4Internal
+		if err = s.playerStore.UpdatePlayerData(ctx, playerdb.UpdatePlayerDataParams{
+			ID:     pd.Id,
+			Online: new(!isHidden),
+		}); err != nil {
+			zap.S().Errorw("failed to update player online state", "playerId", pd.Id, "error", err)
 		}
 	}
 	if syncUpdate {
