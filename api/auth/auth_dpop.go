@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/redis/rueidis"
+	"go.uber.org/zap"
 )
 
 // DPoP (RFC 9449) per-request proof. The proof is a short-lived JWS signed by
@@ -166,12 +167,14 @@ func (s *Server) checkDpopToken(ctx context.Context, r *authv3.AttributeContext_
 	// Stateless token validation to extract the session id.
 	sessionID, err := s.keyring.Parse(accessToken)
 	if err != nil {
+		zap.S().Infow("access token parse failed", "path", r.Path, "err", err)
 		return authState{}, nil
 	}
 
 	// DB lookup is the liveness/revocation gate.
 	session, err := s.sessionStore.GetActiveSession(ctx, sessionID)
 	if errors.Is(err, db.ErrNoRows) {
+		zap.S().Infow("no active session for token", "path", r.Path, "sessionID", sessionID)
 		return authState{}, nil
 	} else if err != nil {
 		return authState{}, err
@@ -185,6 +188,12 @@ func (s *Server) checkDpopToken(ctx context.Context, r *authv3.AttributeContext_
 		ExpectKeyID: session.ClientKeyID,
 	})
 	if err != nil {
+		zap.S().Infow("proof verification failed",
+			"path", r.Path,
+			"method", r.Method,
+			"sessionID", sessionID,
+			"err", err,
+		)
 		return authState{}, nil
 	}
 
