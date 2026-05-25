@@ -97,18 +97,26 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 		return deny(), nil
 	}
 
+	zap.S().Infow("auth check ok",
+		"path", path,
+		"playerID", result.PlayerID,
+		"playerIDEmpty", result.PlayerID == "",
+	)
+	// Use OVERWRITE_IF_EXISTS_OR_ADD instead of HeadersToRemove + default
+	// (APPEND): a client-supplied x-auth-user is replaced rather than
+	// appended-to, in one operation. Avoids the Contour/Envoy ordering
+	// ambiguity where HeadersToRemove could strip the value we just added.
 	return &auth.CheckResponse{
 		Status: &status.Status{Code: /*OK*/ 0},
 		HttpResponse: &auth.CheckResponse_OkResponse{
 			OkResponse: &auth.OkHttpResponse{
-				HeadersToRemove: []string{"x-auth-user"},
 				Headers: []*v31.HeaderValueOption{
 					{
 						Header: &v31.HeaderValue{
 							Key:   "x-auth-user",
 							Value: result.PlayerID,
 						},
-						// TODO: scopes or anything else
+						AppendAction: v31.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
 					},
 				},
 			},
