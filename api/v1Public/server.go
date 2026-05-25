@@ -92,3 +92,22 @@ func WithAuthContext(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+
+// WithDevCORS allows cross-origin requests from any origin in non-prod
+// environments. Preflights are answered without invoking the wrapped handler,
+// so no auth headers are required. In prod this is a no-op.
+func (s *Server) WithDevCORS(h http.Handler) http.Handler {
+	if s.conf.Env == "prod" {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}

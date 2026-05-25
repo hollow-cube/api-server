@@ -22,10 +22,15 @@ type (
 		Label      *string `json:"label"`
 	}
 	RedeemResponse struct {
-		AccessToken     string    `json:"accessToken"`
-		AccessExpiresAt time.Time `json:"accessExpiresAt"`
-		SessionID       string    `json:"sessionId"`
-		MapID           *string   `json:"mapId,omitempty"`
+		AccessToken     string      `json:"accessToken"`
+		AccessExpiresAt time.Time   `json:"accessExpiresAt"`
+		SessionID       string      `json:"sessionId"`
+		Account         AccountInfo `json:"account"`
+		MapID           *string     `json:"mapId,omitempty"`
+	}
+	AccountInfo struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
 	}
 )
 
@@ -104,12 +109,21 @@ func (s *Server) RedeemLaunchGrant(ctx context.Context, request RedeemRequest) (
 		return nil, err
 	}
 
+	pd, err := s.playerStore.GetPlayerData(ctx, out.playerID)
+	if err != nil {
+		return nil, err
+	}
+
 	ttl := s.conf.Auth.AccessTokenTTL
 	return &RedeemResponse{
 		AccessToken:     s.keyring.Mint(out.sessionID, ttl),
 		AccessExpiresAt: time.Now().Add(ttl),
 		SessionID:       out.sessionID,
-		MapID:           out.mapID,
+		Account: AccountInfo{
+			ID:       out.playerID,
+			Username: pd.Username,
+		},
+		MapID: out.mapID,
 	}, nil
 }
 
