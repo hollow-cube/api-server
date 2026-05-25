@@ -63,7 +63,6 @@ type authState struct {
 func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *auth.CheckResponse, err error) {
 	path := request.Attributes.Request.Http.Path
 	if isPublicEndpoint(path) {
-		zap.S().Infow("auth check: public endpoint", "path", path)
 		return &auth.CheckResponse{
 			Status: &status.Status{Code: 0},
 			HttpResponse: &auth.CheckResponse_OkResponse{
@@ -78,21 +77,14 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 	req := request.Attributes.Request.Http
 
 	apiKeyStr := req.Headers["x-api-key"]
-	authorization := req.Headers["authorization"]
-	zap.S().Infow("before test",
-		"path", path,
-		"method", req.Method,
-		"hasApiKey", apiKeyStr != "",
-		"hasAuthorization", authorization != "",
-		"authorizationPrefix", authorizationPrefix(authorization),
-	)
 	if strings.HasPrefix(apiKeyStr, ApiKeyPrefix) {
 		result, err = s.checkApiKey(ctx, apiKeyStr)
-	} else if strings.HasPrefix(authorization, "DPoP ") {
-		rawToken := strings.TrimPrefix(authorization, "DPoP ")
-		result, err = s.checkDpopToken(ctx, req, rawToken)
 	} else {
-		zap.S().Infow("idk what to do", "path", path)
+		authorization := req.Headers["authorization"]
+		if strings.HasPrefix(authorization, "DPoP ") {
+			rawToken := strings.TrimPrefix(authorization, "DPoP ")
+			result, err = s.checkDpopToken(ctx, req, rawToken)
+		}
 	}
 
 	// Fail closed: an internal error must never become a transport error that
@@ -102,7 +94,6 @@ func (s *Server) Check(ctx context.Context, request *auth.CheckRequest) (res *au
 		return deny(), nil
 	}
 	if !result.Valid {
-		zap.S().Infow("invalid reply", "path", path)
 		return deny(), nil
 	}
 
@@ -140,20 +131,6 @@ func deny() *auth.CheckResponse {
 }
 
 var _ auth.AuthorizationServer = (*Server)(nil)
-
-// authorizationPrefix returns the scheme word from an Authorization header
-// value (the first whitespace-delimited token), or "" if the header is empty.
-// Logged so we can tell at a glance whether the client sent DPoP, Bearer, or
-// something else — without leaking the token material.
-func authorizationPrefix(v string) string {
-	if v == "" {
-		return ""
-	}
-	if i := strings.IndexAny(v, " \t"); i > 0 {
-		return v[:i]
-	}
-	return v
-}
 
 func isPublicEndpoint(path string) bool {
 	if idx := strings.Index(path, "?"); idx != -1 {
