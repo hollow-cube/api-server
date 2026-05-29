@@ -14,6 +14,10 @@ import (
 var otelTracer = otel.Tracer("github.com/hollow-cube/hc-services/libraries/common/pkg/posthog")
 var client posthog.Client
 
+func Init(client_ posthog.Client) {
+	client = client_
+}
+
 type Capture struct {
 	// You don't usually need to specify this field - Posthog will generate it automatically.
 	// Use it only when necessary - for example, to prevent duplicate events.

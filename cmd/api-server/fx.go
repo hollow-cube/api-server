@@ -11,6 +11,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/metric"
 	posthog2 "github.com/hollow-cube/api-server/internal/pkg/posthog"
 	"github.com/hollow-cube/api-server/internal/playerdb"
+	"github.com/hollow-cube/api-server/pkg/hog"
 	"github.com/posthog/posthog-go"
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
@@ -96,6 +97,7 @@ func newPosthogClient(conf *config.Config, log *zap.SugaredLogger, lc fx.Lifecyc
 	lc.Append(fx.StopHook(client.Close))
 	lc.Append(fx.StopHook(nonLocalClient.Close))
 	posthog2.Init(client, nonLocalClient)
+	hog.Init(client)
 	return client, nil
 }
 
