@@ -93,7 +93,7 @@ func sanitize(text string) string {
 		char := rs[i]
 
 		multiReplacement, isPartOfMulti := multiCharactersToReplace[char]
-		if isPartOfMulti && i+1 < len(transformed) {
+		if isPartOfMulti && i+1 < len(rs) {
 			nextChar := rs[i+1]
 
 			if replacement, ok := multiReplacement[nextChar]; ok {
