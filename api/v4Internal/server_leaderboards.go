@@ -116,7 +116,7 @@ func (s *Server) GetPlayerTopTimes(ctx context.Context, request PlayerPaginatedR
 	// Paginate
 	totalItems := int64(len(entries))
 	start := int(offset)
-	end := int(limit)
+	end := int(offset) + int(limit)
 
 	if start >= len(entries) {
 		return &PaginatedPlayerTopTimeList{
