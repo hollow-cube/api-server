@@ -52,7 +52,7 @@ const maintenanceMessage = `
 const wrongVersionMessage = `
 <bold><red>Your Minecraft version is not supported.</red></bold>
 
-<gray>Please try again on a supported version: <white>1.21.7 - 26.1</white></gray>
+<gray>Please try again on a supported version: <white>1.21.7 - 26.2</white></gray>
 
 <white><strikethrough>                </strikethrough> [ ʟɪɴᴋꜱ ] <strikethrough>                </strikethrough></white>
 
@@ -67,6 +67,7 @@ var allowedProtocolVersions = [...]int{
 	773, // 1.21.9, 1.21.10
 	774, // 1.21.11
 	775, // 26.1, 26.1.1
+	776, // 26.2
 }
 
 type serverImpl struct {

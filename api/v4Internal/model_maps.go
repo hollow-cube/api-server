@@ -12,6 +12,7 @@ import (
 
 type MapData struct {
 	ID              string      `json:"id"`
+	Type            MapType     `json:"type"`
 	CreatedAt       time.Time   `json:"createdAt"`
 	LastModified    time.Time   `json:"lastModified"`
 	Owner           string      `json:"owner"`
@@ -30,6 +31,15 @@ type MapData struct {
 	Likes       int           `json:"likes"`
 	Listed      bool          `json:"listed"`
 }
+
+type MapType string
+
+const (
+	TypeDefault  MapType = "default"
+	TypeLegacy   MapType = "legacy"
+	TypeOrg      MapType = "org"
+	TypeFreeform MapType = "freeform"
+)
 
 type MapDifficulty string
 
@@ -269,6 +279,7 @@ func hydrateMap(m mapdb.Map, tags []mapdb.MapTag) MapData {
 
 	return MapData{
 		ID:              m.ID,
+		Type:            MapType(m.MType),
 		Owner:           m.Owner,
 		CreatedAt:       m.CreatedAt,
 		LastModified:    m.UpdatedAt,
@@ -335,6 +346,7 @@ func hydratePublishedMap(m mapdb.PublishedMap, tags []mapdb.MapTag) MapData {
 
 	return MapData{
 		ID:              m.ID,
+		Type:            MapType(m.MType),
 		Owner:           m.Owner,
 		CreatedAt:       m.CreatedAt,
 		LastModified:    m.UpdatedAt,
