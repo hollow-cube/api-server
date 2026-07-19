@@ -185,6 +185,10 @@ func (i *InviteManager) sendAcceptedOrRejectedMessage(ctx context.Context, invit
 
 func (i *InviteManager) getDefaultKey(ctx context.Context, senderId string) (string, error) {
 	value, err := i.redis.Do(ctx, i.redis.B().Get().Key(fmt.Sprintf("sess:default_invite:%s", senderId)).Build()).ToString()
+	return optionalRedisString(value, err)
+}
+
+func optionalRedisString(value string, err error) (string, error) {
 	if errors.Is(err, rueidis.Nil) {
 		return "", nil
 	} else if err != nil {
@@ -230,8 +234,7 @@ func (i *InviteManager) remove(ctx context.Context, invite *model.MapInvite) err
 		return fmt.Errorf("failed to delete invite from redis: %w", err)
 	}
 
-	senderDefaultKey := createDefaultKey(invite.SenderId)
-	senderDefault, err := i.redis.Do(ctx, i.redis.B().Get().Key(senderDefaultKey).Build()).ToString()
+	senderDefault, err := i.getDefaultKey(ctx, invite.SenderId)
 	if err != nil {
 		return fmt.Errorf("failed to get default invite for sender: %w", err)
 	}
@@ -243,8 +246,7 @@ func (i *InviteManager) remove(ctx context.Context, invite *model.MapInvite) err
 		}
 	}
 
-	recipientDefaultKey := createDefaultKey(invite.RecipientId)
-	recipientDefault, err := i.redis.Do(ctx, i.redis.B().Get().Key(recipientDefaultKey).Build()).ToString()
+	recipientDefault, err := i.getDefaultKey(ctx, invite.RecipientId)
 	if err != nil {
 		return fmt.Errorf("failed to get default invite for recipient: %w", err)
 	}
