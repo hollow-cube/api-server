@@ -36,6 +36,16 @@ type ValidationError struct{}
 func (ValidationError) StatusCode() int { return 422 }
 func (ValidationError) Error() string   { return "validation error" }
 
+type ContentTooLarge struct{}
+
+func (ContentTooLarge) StatusCode() int { return 413 }
+func (ContentTooLarge) Error() string   { return "content too large" }
+
+type RangeNotSatisfiable struct{}
+
+func (RangeNotSatisfiable) StatusCode() int { return 416 }
+func (RangeNotSatisfiable) Error() string   { return "range not satisfiable" }
+
 // NotModified signals a conditional GET whose If-None-Match matched the
 // current representation. The runtime writes a bare 304 with no body.
 type NotModified struct{}

@@ -259,6 +259,23 @@ func TestWriteStream(t *testing.T) {
 		require.Equal(t, 202, w.Code)
 	})
 
+	t.Run("stream overrides status code and adds headers", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		WriteStream(w, 200, &ox.Stream{
+			ContentType: "application/octet-stream",
+			Body:        bytes.NewReader([]byte("partial")),
+			StatusCode:  http.StatusPartialContent,
+			Headers: map[string]string{
+				"Accept-Ranges": "bytes",
+				"Content-Range": "bytes 1-7/10",
+			},
+		})
+
+		require.Equal(t, http.StatusPartialContent, w.Code)
+		require.Equal(t, "bytes", w.Header().Get("Accept-Ranges"))
+		require.Equal(t, "bytes 1-7/10", w.Header().Get("Content-Range"))
+	})
+
 	t.Run("emits ETag header when set", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		WriteStream(w, 200, &ox.Stream{
@@ -280,6 +297,22 @@ func TestWriteStream(t *testing.T) {
 		_, ok := w.Header()["Etag"]
 		require.False(t, ok, "ETag header should be absent when Stream.ETag is empty")
 	})
+}
+
+type headerError struct {
+	ox.RangeNotSatisfiable
+}
+
+func (headerError) Headers() map[string]string {
+	return map[string]string{"Content-Range": "bytes */10"}
+}
+
+func TestHandleErrorWritesErrorHeaders(t *testing.T) {
+	w := httptest.NewRecorder()
+	HandleError(w, headerError{})
+
+	require.Equal(t, http.StatusRequestedRangeNotSatisfiable, w.Code)
+	require.Equal(t, "bytes */10", w.Header().Get("Content-Range"))
 }
 
 func TestWriteSSE(t *testing.T) {

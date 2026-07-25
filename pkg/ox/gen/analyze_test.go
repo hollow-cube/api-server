@@ -18,6 +18,7 @@ func TestParseDirectives(t *testing.T) {
 		wantDesc     string
 		wantProduces []string
 		wantConsumes []string
+		wantSuccess  []int
 		wantErr      bool
 		wantNoRoute  bool // err should be errNoRouteComment
 	}{
@@ -111,6 +112,18 @@ func TestParseDirectives(t *testing.T) {
 			wantConsumes: []string{"application/vnd.hollowcube.polar"},
 		},
 		{
+			name:        "ox:success multiple statuses",
+			doc:         "PATCH /items/{id}\nox:success 200, 201",
+			wantMethod:  "PATCH",
+			wantPath:    "/items/{id}",
+			wantSuccess: []int{200, 201},
+		},
+		{
+			name:    "ox:success rejects error status",
+			doc:     "GET /items\nox:success 404",
+			wantErr: true,
+		},
+		{
 			name:       "ox:consumes multiple types",
 			doc:        "PUT /maps/{id}/world\nox:consumes application/vnd.hollowcube.polar, application/vnd.hollowcube.anvil",
 			wantMethod: "PUT",
@@ -155,6 +168,7 @@ func TestParseDirectives(t *testing.T) {
 			require.Equal(t, tt.wantDesc, d.Description)
 			require.Equal(t, tt.wantProduces, d.Produces)
 			require.Equal(t, tt.wantConsumes, d.Consumes)
+			require.Equal(t, tt.wantSuccess, d.Success)
 		})
 	}
 }

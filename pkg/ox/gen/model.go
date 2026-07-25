@@ -73,12 +73,13 @@ type Param struct {
 
 // Response describes the handler's return type.
 type Response struct {
-	StatusCode  int
-	GoType      string // empty if no response body (e.g. error-only return)
-	IsPtr       bool
-	OAPIType    string
-	OAPIFmt     string
-	ContentType string // "text/plain" for string, "application/json" for structs
+	StatusCode         int
+	SuccessStatusCodes []int  // Optional OpenAPI success statuses when runtime status can vary.
+	GoType             string // empty if no response body (e.g. error-only return)
+	IsPtr              bool
+	OAPIType           string
+	OAPIFmt            string
+	ContentType        string // "text/plain" for string, "application/json" for structs
 
 	// IsStream is true when the handler returns *ox.Stream. In that case the
 	// response is a binary/streaming body and Produces enumerates the MIME

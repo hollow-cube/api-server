@@ -38,6 +38,9 @@ func WriteStream(w http.ResponseWriter, status int, s *ox.Stream) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	for name, value := range s.Headers {
+		w.Header().Set(name, value)
+	}
 	ct := s.ContentType
 	if ct == "" {
 		ct = "application/octet-stream"
@@ -48,6 +51,9 @@ func WriteStream(w http.ResponseWriter, status int, s *ox.Stream) {
 	}
 	if s.ETag != "" {
 		w.Header().Set("ETag", s.ETag)
+	}
+	if s.StatusCode != 0 {
+		status = s.StatusCode
 	}
 	w.WriteHeader(status)
 	if c, ok := s.Body.(io.Closer); ok {
@@ -64,6 +70,12 @@ func HandleError(w http.ResponseWriter, err error) {
 	var httpErr ox.HTTPError
 	if errors.As(err, &httpErr) {
 		code := httpErr.StatusCode()
+		var headerErr interface{ Headers() map[string]string }
+		if errors.As(err, &headerErr) {
+			for name, value := range headerErr.Headers() {
+				w.Header().Set(name, value)
+			}
+		}
 		// 304 (and other bodiless statuses) must not carry a JSON body.
 		if code == http.StatusNotModified {
 			w.WriteHeader(code)

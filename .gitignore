@@ -11,3 +11,6 @@ deploy/helm-chart/charts
 services/*/*-service
 
 node_modules
+
+/api-server
+/.claude

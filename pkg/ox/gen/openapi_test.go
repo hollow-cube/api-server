@@ -133,6 +133,33 @@ func TestGenerateOpenAPI_StreamResponse(t *testing.T) {
 	require.NotContains(t, yaml, "application/json")
 }
 
+func TestGenerateOpenAPI_MultipleSuccessStatuses(t *testing.T) {
+	api := &API{
+		PackageName: "v4",
+		StructName:  "Server",
+		ModulePath:  "github.com/example/app",
+		Endpoints: []Endpoint{
+			{
+				Name:   "CommitReplay",
+				Method: "PATCH",
+				Path:   "/replays/{id}/stream",
+				Response: Response{
+					StatusCode:         200,
+					SuccessStatusCodes: []int{200, 201},
+					IsStream:           true,
+					Produces:           []string{"application/octet-stream"},
+				},
+			},
+		},
+	}
+
+	yamlBytes, err := GenerateOpenAPI(api)
+	require.NoError(t, err)
+	yaml := string(yamlBytes)
+	require.Contains(t, yaml, `"200":`)
+	require.Contains(t, yaml, `"201":`)
+}
+
 func TestGenerateOpenAPI_StreamRequestBody(t *testing.T) {
 	api := &API{
 		PackageName: "v4",

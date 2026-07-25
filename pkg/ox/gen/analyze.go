@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"net/http"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -24,6 +26,7 @@ type directives struct {
 	Description string
 	Produces    []string
 	Consumes    []string
+	Success     []int
 }
 
 // Analyze loads the Go package at pkgPattern, finds the struct named structName,
@@ -141,6 +144,7 @@ func analyzeMethod(method *types.Func, doc string, oxPkgPath string) (*Endpoint,
 
 	resp := extractResponse(sig, method.Name(), oxPkgPath)
 	resp.Produces = d.Produces
+	resp.SuccessStatusCodes = d.Success
 
 	if err := validateResponse(resp); err != nil {
 		return nil, err
@@ -237,6 +241,13 @@ func parseDirectives(doc string) (directives, error) {
 			}
 			d.Consumes = append(d.Consumes, mts...)
 
+		case strings.HasPrefix(line, "ox:success "):
+			statuses, err := parseStatusList(line, "ox:success ")
+			if err != nil {
+				return directives{}, err
+			}
+			d.Success = append(d.Success, statuses...)
+
 		case strings.HasPrefix(line, "ox:"):
 			// Unknown ox: directives are silently dropped from the description
 			// for forward compatibility.
@@ -283,6 +294,27 @@ func parseMIMEList(line, prefix string) ([]string, error) {
 	return out, nil
 }
 
+func parseStatusList(line, prefix string) ([]int, error) {
+	rest := strings.TrimPrefix(line, prefix)
+	var statuses []int
+	seen := make(map[int]struct{})
+	for _, value := range strings.Split(rest, ",") {
+		status, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || status < 200 || status > 299 {
+			return nil, fmt.Errorf("invalid success status in %s: %q", strings.TrimSpace(prefix), strings.TrimSpace(value))
+		}
+		if _, exists := seen[status]; exists {
+			return nil, fmt.Errorf("duplicate success status in %s: %d", strings.TrimSpace(prefix), status)
+		}
+		seen[status] = struct{}{}
+		statuses = append(statuses, status)
+	}
+	if len(statuses) == 0 {
+		return nil, fmt.Errorf("%s requires at least one status", strings.TrimSpace(prefix))
+	}
+	return statuses, nil
+}
+
 func validateResponse(r Response) error {
 	if r.IsStream && len(r.Produces) == 0 {
 		return fmt.Errorf("stream response requires //ox:produces directive")
@@ -295,6 +327,11 @@ func validateResponse(r Response) error {
 	}
 	if r.IsSSE && r.StatusCode == 204 {
 		return fmt.Errorf("SSE response with 204 No Content is incoherent")
+	}
+	for _, status := range r.SuccessStatusCodes {
+		if status == http.StatusNoContent && (r.IsStream || r.IsSSE) {
+			return fmt.Errorf("stream response with 204 No Content is incoherent")
+		}
 	}
 	return nil
 }

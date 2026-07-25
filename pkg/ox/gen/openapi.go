@@ -128,36 +128,42 @@ func GenerateOpenAPI(api *API) ([]byte, error) {
 			op.RequestBody = rb
 		}
 
-		statusStr := fmt.Sprintf("%d", ep.Response.StatusCode)
-		resp := &oaResponse{
-			Description: "Successful response",
+		statuses := ep.Response.SuccessStatusCodes
+		if len(statuses) == 0 {
+			statuses = []int{ep.Response.StatusCode}
 		}
-		switch {
-		case ep.Response.IsSSE:
-			resp.Description = "Server-Sent Events stream"
-			resp.Content = map[string]*oaMediaType{
-				"text/event-stream": {
-					Schema: &oaSchema{Type: "string"},
-				},
+		for _, status := range statuses {
+			statusStr := fmt.Sprintf("%d", status)
+			resp := &oaResponse{
+				Description: "Successful response",
 			}
-		case ep.Response.IsStream:
-			resp.Content = make(map[string]*oaMediaType, len(ep.Response.Produces))
-			for _, mt := range ep.Response.Produces {
-				resp.Content[mt] = &oaMediaType{
-					Schema: &oaSchema{Type: "string", Format: "binary"},
+			switch {
+			case ep.Response.IsSSE:
+				resp.Description = "Server-Sent Events stream"
+				resp.Content = map[string]*oaMediaType{
+					"text/event-stream": {
+						Schema: &oaSchema{Type: "string"},
+					},
+				}
+			case ep.Response.IsStream:
+				resp.Content = make(map[string]*oaMediaType, len(ep.Response.Produces))
+				for _, mt := range ep.Response.Produces {
+					resp.Content[mt] = &oaMediaType{
+						Schema: &oaSchema{Type: "string", Format: "binary"},
+					}
+				}
+			case ep.Response.OAPIType != "" && status != 204:
+				resp.Content = map[string]*oaMediaType{
+					ep.Response.ContentType: {
+						Schema: &oaSchema{
+							Type:   ep.Response.OAPIType,
+							Format: ep.Response.OAPIFmt,
+						},
+					},
 				}
 			}
-		case ep.Response.OAPIType != "" && ep.Response.StatusCode != 204:
-			resp.Content = map[string]*oaMediaType{
-				ep.Response.ContentType: {
-					Schema: &oaSchema{
-						Type:   ep.Response.OAPIType,
-						Format: ep.Response.OAPIFmt,
-					},
-				},
-			}
+			op.Responses[statusStr] = resp
 		}
-		op.Responses[statusStr] = resp
 
 		pathItem[strings.ToLower(ep.Method)] = op
 	}

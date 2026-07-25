@@ -15,6 +15,13 @@ import "io"
 // ETag, if non-empty, is written verbatim to the ETag header. It must already
 // be a valid header value (a quoted string, optionally W/-prefixed).
 //
+// Headers are written before the typed fields above. ContentType,
+// ContentLength, and ETag take precedence over values with the same names.
+//
+// StatusCode, if non-zero, overrides the status inferred by the generator.
+// This is intended for endpoints whose successful status depends on the
+// request, such as a create-or-update operation or a byte-range response.
+//
 // If Body implements io.Closer, the runtime closes it after writing. Body
 // ownership transfers to the runtime when the handler returns successfully.
 type Stream struct {
@@ -22,4 +29,6 @@ type Stream struct {
 	Body          io.Reader
 	ContentLength int64
 	ETag          string
+	Headers       map[string]string
+	StatusCode    int
 }
