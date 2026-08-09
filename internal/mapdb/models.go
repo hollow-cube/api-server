@@ -305,6 +305,43 @@ type PublishedMap struct {
 	Difficulty      int32        `json:"difficulty"`
 }
 
+type Replay struct {
+	ID                      string    `json:"id"`
+	Version                 int       `json:"version"`
+	RecordingRevision       int       `json:"recordingRevision"`
+	State                   string    `json:"state"`
+	Representation          string    `json:"representation"`
+	NextSegmentIndex        int       `json:"nextSegmentIndex"`
+	CurrentPreamble         []byte    `json:"currentPreamble"`
+	CurrentPreambleDigest   []byte    `json:"currentPreambleDigest"`
+	CompactedSourceRevision *int      `json:"compactedSourceRevision"`
+	CompactedObject         *string   `json:"compactedObject"`
+	CompactedLength         *int      `json:"compactedLength"`
+	CompactedDigest         []byte    `json:"compactedDigest"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
+}
+
+type ReplayIdempotency struct {
+	ReplayID           string    `json:"replayId"`
+	IdempotencyKey     string    `json:"idempotencyKey"`
+	RequestFingerprint []byte    `json:"requestFingerprint"`
+	ResponseStatus     int16     `json:"responseStatus"`
+	ResponseEtag       string    `json:"responseEtag"`
+	ResponseMetadata   []byte    `json:"responseMetadata"`
+	CreatedAt          time.Time `json:"createdAt"`
+}
+
+type ReplaySegment struct {
+	ReplayID        string  `json:"replayId"`
+	SegmentIndex    int     `json:"segmentIndex"`
+	ObjectReference *string `json:"objectReference"`
+	Length          int     `json:"length"`
+	Digest          []byte  `json:"digest"`
+	CommitRevision  int     `json:"commitRevision"`
+	Data            []byte  `json:"data"`
+}
+
 type SaveState struct {
 	ID              string        `json:"id"`
 	MapID           string        `json:"mapId"`

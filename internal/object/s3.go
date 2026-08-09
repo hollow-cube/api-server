@@ -135,10 +135,31 @@ func (c *S3Client) DownloadStream(ctx context.Context, key string) (io.ReadClose
 	return res.Body, nil // Body is an io.ReadCloser. The caller is responsible for closing it
 }
 
+// DownloadRange downloads an inclusive byte range and returns an io.ReadCloser
+// that the caller is responsible for closing.
+func (c *S3Client) DownloadRange(ctx context.Context, key string, start, endInclusive int64) (io.ReadCloser, error) {
+	byteRange := fmt.Sprintf("bytes=%d-%d", start, endInclusive)
+	req := &s3.GetObjectInput{Bucket: &c.bucket, Key: &key, Range: &byteRange}
+	res, err := c.rawClient.GetObject(ctx, req)
+	if err != nil {
+		var noKey *types.NoSuchKey
+		if errors.As(err, &noKey) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return res.Body, nil
+}
+
 func (c *S3Client) Stat(ctx context.Context, key string) (*Info, error) {
 	req := &s3.HeadObjectInput{Bucket: &c.bucket, Key: &key}
 	res, err := c.rawClient.HeadObject(ctx, req)
 	if err != nil {
+		var notFound *types.NotFound
+		if errors.As(err, &notFound) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	return &Info{Size: *res.ContentLength}, nil

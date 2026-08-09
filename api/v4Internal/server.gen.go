@@ -62,6 +62,10 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/hypercube", h.getPlayerHypercube)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/replays/{id}", h.getReplay)
+	params.Mux.HandleFunc("GET "+params.BaseURL+"/replays/{id}/stream", h.getReplayStream)
+	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/replays/{id}/stream", h.commitReplay)
+	params.Mux.HandleFunc("PUT "+params.BaseURL+"/replays/{id}/stream", h.publishCompactedReplay)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/latest", h.getLatestSaveState)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/best", h.getBestSaveState)
 	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/states/{playerId}/{stateId}", h.upsertSaveState)
@@ -742,6 +746,73 @@ func (h *handlers) searchPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 200, resp)
+}
+
+func (h *handlers) getReplay(w http.ResponseWriter, r *http.Request) {
+	var req ReplayRequest
+	req.ReplayID = r.PathValue("id")
+	resp, err := h.server.GetReplay(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) getReplayStream(w http.ResponseWriter, r *http.Request) {
+	var req ReplayStreamRequest
+	req.ReplayID = r.PathValue("id")
+	req.Segment = r.URL.Query().Get("segment")
+	req.Range = r.Header.Get("Range")
+	resp, err := h.server.GetReplayStream(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) commitReplay(w http.ResponseWriter, r *http.Request) {
+	var req CommitReplayRequest
+	req.ReplayID = r.PathValue("id")
+	req.IfMatch = r.Header.Get("If-Match")
+	req.IfNoneMatch = r.Header.Get("If-None-Match")
+	req.IdempotencyKey = r.Header.Get("Idempotency-Key")
+	req.PreambleLength = r.Header.Get("Replay-Preamble-Length")
+	req.SegmentIndex = r.Header.Get("Replay-Segment-Index")
+	req.Final = r.Header.Get("Replay-Final")
+	req.ContentDigest = r.Header.Get("Content-Digest")
+	req.Body = &ox.Stream{
+		ContentType:   r.Header.Get("Content-Type"),
+		Body:          r.Body,
+		ContentLength: r.ContentLength,
+	}
+	resp, err := h.server.CommitReplay(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
+}
+
+func (h *handlers) publishCompactedReplay(w http.ResponseWriter, r *http.Request) {
+	var req PublishCompactedReplayRequest
+	req.ReplayID = r.PathValue("id")
+	req.IfMatch = r.Header.Get("If-Match")
+	req.IdempotencyKey = r.Header.Get("Idempotency-Key")
+	req.PreambleLength = r.Header.Get("Replay-Preamble-Length")
+	req.ContentDigest = r.Header.Get("Content-Digest")
+	req.Body = &ox.Stream{
+		ContentType:   r.Header.Get("Content-Type"),
+		Body:          r.Body,
+		ContentLength: r.ContentLength,
+	}
+	resp, err := h.server.PublishCompactedReplay(r.Context(), req)
+	if err != nil {
+		runtime.HandleError(w, err)
+		return
+	}
+	runtime.WriteStream(w, 200, resp)
 }
 
 func (h *handlers) getLatestSaveState(w http.ResponseWriter, r *http.Request) {

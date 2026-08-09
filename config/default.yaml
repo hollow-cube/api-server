@@ -48,6 +48,13 @@ s3:
   secret_key: mapmaker
   maps_bucket: mapmaker
 
+replay:
+  max_preamble_bytes: 16777216    # 16 MiB
+  max_segment_bytes: 134217728    # 128 MiB
+  max_commit_bytes: 150994944     # 144 MiB, preamble + segment
+  max_compacted_bytes: 2147483648 # 2 GiB
+  max_inline_segment_bytes: 8192  # 8 KiB, stored in postgres instead of object storage
+
 map_isolate:
   instances:
     micro: { memory: 300 }

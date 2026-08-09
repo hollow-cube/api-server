@@ -21,6 +21,8 @@ sql:
           maps: Map
           map_ratings: MapRating
           save_states: SaveState
+          replays: Replay
+          replay_segments: ReplaySegment
         overrides:
           - db_type: "timestamptz"
             go_type: "time.Time"
