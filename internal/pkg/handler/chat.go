@@ -21,13 +21,12 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
-	"mvdan.cc/xurls/v2"
 )
 
 var (
 	emojiRegex = regexp.MustCompile(`:([a-zA-Z0-9\-_]+):`)
 	mapRegex   = regexp.MustCompile(`\[map]`)
-	urlRegex   = xurls.Relaxed()
+	urlRegex   = regexp.MustCompile(`(?:https?://)?[a-zA-Z0-9@:%._+~#=-]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)`)
 
 	chatRawStream       = "CHAT_RAW"
 	chatProcessedStream = "CHAT_PROCESSED"
