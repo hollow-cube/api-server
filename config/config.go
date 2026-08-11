@@ -84,12 +84,13 @@ type S3 struct {
 }
 
 // DefaultMaxInlineSegmentBytes is the default replay segment inline threshold
-// (replay.max_inline_segment_bytes). 8 KiB is the postgres page boundary, so
-// segments at or below it generally stay in the heap row instead of going
-// out-of-line to TOAST, and in practice nearly every segment is far smaller.
-// Zero disables inlining entirely; segments above the threshold keep going to
-// object storage.
-const DefaultMaxInlineSegmentBytes = 8 * 1024
+// (replay.max_inline_segment_bytes). What keeps a segment in the heap row is
+// postgres' TOAST threshold of roughly 2 KiB, not the 8 KiB page size: a larger
+// value is pushed out-of-line into the TOAST table anyway, which costs a
+// separate write and a chunk per 1996 bytes without ever being cheaper than
+// object storage. Zero disables inlining entirely; segments above the threshold
+// keep going to object storage.
+const DefaultMaxInlineSegmentBytes = 2 * 1024
 
 type Replay struct {
 	MaxPreambleBytes      int64 `mapstructure:"max_preamble_bytes"`

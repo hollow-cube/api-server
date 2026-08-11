@@ -53,7 +53,7 @@ replay:
   max_segment_bytes: 134217728    # 128 MiB
   max_commit_bytes: 150994944     # 144 MiB, preamble + segment
   max_compacted_bytes: 2147483648 # 2 GiB
-  max_inline_segment_bytes: 8192  # 8 KiB, stored in postgres instead of object storage
+  max_inline_segment_bytes: 2048  # 2 KiB, stored in postgres instead of object storage
 
 map_isolate:
   instances:
