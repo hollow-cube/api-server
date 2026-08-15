@@ -83,6 +83,12 @@ type UpsertSaveStateRequestBody struct {
 	DataVersion     int           `json:"dataVersion"`
 	ProtocolVersion int           `json:"protocolVersion"`
 
+	// Carried across the player's save state lineage on this map (a hard reset starts a new
+	// save state and the old one is frequently never written), so the latest state is the
+	// aggregate: hard resets before it, and total active playtime that is never zeroed.
+	Resets        int `json:"resets"`
+	TotalPlaytime int `json:"totalPlaytime"`
+
 	// One of these will be present always
 
 	EditState *map[string]any `json:"editState"`
@@ -141,6 +147,8 @@ func (s *Server) UpsertSaveState(ctx context.Context, request SaveStateRequest, 
 		Completed:       ss.Completed,
 		Playtime:        body.Playtime,
 		Ticks:           body.Ticks,
+		Resets:          body.Resets,
+		TotalPlaytime:   max(body.TotalPlaytime, body.Playtime),
 		Score:           ss.Score,
 		StateV2:         ss.StateV2,
 		DataVersion:     body.DataVersion,

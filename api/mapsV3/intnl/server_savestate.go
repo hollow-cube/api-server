@@ -99,6 +99,8 @@ func (s *server) UpdateSaveState(ctx context.Context, request UpdateSaveStateReq
 		Completed:       ss.Completed,
 		Playtime:        ss.Playtime,
 		Ticks:           ss.Ticks,
+		Resets:          ss.Resets,
+		TotalPlaytime:   ss.TotalPlaytime,
 		Score:           ss.Score,
 		StateV2:         ss.StateV2,
 		DataVersion:     ss.DataVersion,

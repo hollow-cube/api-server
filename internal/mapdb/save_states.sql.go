@@ -28,7 +28,7 @@ const createSaveState = `-- name: CreateSaveState :one
 insert into save_states (id, map_id, player_id, type, created, updated, completed, playtime, data_version,
                          state_v2, protocol_version)
 values (gen_random_uuid(), $1, $2, $3, now(), now(), false, 0, 0, 'null', $4)
-returning id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
+returning id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score, resets, total_playtime
 `
 
 type CreateSaveStateParams struct {
@@ -61,6 +61,8 @@ func (q *Queries) CreateSaveState(ctx context.Context, arg CreateSaveStateParams
 		&i.ProtocolVersion,
 		&i.Ticks,
 		&i.Score,
+		&i.Resets,
+		&i.TotalPlaytime,
 	)
 	return i, err
 }
@@ -108,7 +110,7 @@ func (q *Queries) DeleteVerifyingStates(ctx context.Context, mapID string) error
 }
 
 const getAllBestCompletedSaveStatesForMap = `-- name: GetAllBestCompletedSaveStatesForMap :many
-select distinct on (player_id) ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score
+select distinct on (player_id) ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score, ss.resets, ss.total_playtime
 from save_states ss
          join maps m on m.id = ss.map_id
 where ss.deleted is null
@@ -146,6 +148,8 @@ func (q *Queries) GetAllBestCompletedSaveStatesForMap(ctx context.Context, mapID
 			&i.ProtocolVersion,
 			&i.Ticks,
 			&i.Score,
+			&i.Resets,
+			&i.TotalPlaytime,
 		); err != nil {
 			return nil, err
 		}
@@ -158,7 +162,7 @@ func (q *Queries) GetAllBestCompletedSaveStatesForMap(ctx context.Context, mapID
 }
 
 const getBestSaveState = `-- name: GetBestSaveState :one
-select ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score
+select ss.id, ss.map_id, ss.player_id, ss.type, ss.created, ss.updated, ss.deleted, ss.completed, ss.playtime, ss.state_v2, ss.data_version, ss.protocol_version, ss.ticks, ss.score, ss.resets, ss.total_playtime
 from save_states ss
   join maps m on m.id = ss.map_id
 where ss.deleted is null
@@ -193,12 +197,14 @@ func (q *Queries) GetBestSaveState(ctx context.Context, mapID string, playerID s
 		&i.ProtocolVersion,
 		&i.Ticks,
 		&i.Score,
+		&i.Resets,
+		&i.TotalPlaytime,
 	)
 	return i, err
 }
 
 const getBestSaveStateSinceBeta = `-- name: GetBestSaveStateSinceBeta :one
-select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score, resets, total_playtime
 from save_states
 where deleted is null
   and map_id = $1
@@ -228,6 +234,8 @@ func (q *Queries) GetBestSaveStateSinceBeta(ctx context.Context, mapID string, p
 		&i.ProtocolVersion,
 		&i.Ticks,
 		&i.Score,
+		&i.Resets,
+		&i.TotalPlaytime,
 	)
 	return i, err
 }
@@ -261,7 +269,7 @@ func (q *Queries) GetCompletedMaps(ctx context.Context, playerID string) ([]stri
 }
 
 const getLatestSaveState = `-- name: GetLatestSaveState :one
-select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score, resets, total_playtime
 from save_states
 where deleted is null
   and map_id = $1
@@ -289,6 +297,8 @@ func (q *Queries) GetLatestSaveState(ctx context.Context, mapID string, playerID
 		&i.ProtocolVersion,
 		&i.Ticks,
 		&i.Score,
+		&i.Resets,
+		&i.TotalPlaytime,
 	)
 	return i, err
 }
@@ -385,7 +395,7 @@ func (q *Queries) GetRecentMaps2(ctx context.Context, arg GetRecentMaps2Params) 
 }
 
 const getSaveState = `-- name: GetSaveState :one
-select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score
+select id, map_id, player_id, type, created, updated, deleted, completed, playtime, state_v2, data_version, protocol_version, ticks, score, resets, total_playtime
 from public.save_states
 where deleted is null
   and id = $1
@@ -411,6 +421,8 @@ func (q *Queries) GetSaveState(ctx context.Context, iD string, mapID string, pla
 		&i.ProtocolVersion,
 		&i.Ticks,
 		&i.Score,
+		&i.Resets,
+		&i.TotalPlaytime,
 	)
 	return i, err
 }
@@ -430,8 +442,8 @@ func (q *Queries) Unsafe_DeleteMapSaveStates(ctx context.Context, mapID string) 
 const upsertSaveState = `-- name: UpsertSaveState :exec
 insert into public.save_states
 (id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version,
- protocol_version)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ protocol_version, resets, total_playtime)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 on conflict (id, map_id, player_id) do update
   set updated          = excluded.updated,
       completed        = excluded.completed,
@@ -440,7 +452,9 @@ on conflict (id, map_id, player_id) do update
       score            = excluded.score,
       state_v2         = excluded.state_v2,
       data_version     = excluded.data_version,
-      protocol_version = excluded.protocol_version
+      protocol_version = excluded.protocol_version,
+      resets           = excluded.resets,
+      total_playtime   = excluded.total_playtime
 `
 
 type UpsertSaveStateParams struct {
@@ -457,6 +471,8 @@ type UpsertSaveStateParams struct {
 	StateV2         []byte        `json:"stateV2"`
 	DataVersion     int           `json:"dataVersion"`
 	ProtocolVersion *int          `json:"protocolVersion"`
+	Resets          int           `json:"resets"`
+	TotalPlaytime   int           `json:"totalPlaytime"`
 }
 
 func (q *Queries) UpsertSaveState(ctx context.Context, arg UpsertSaveStateParams) error {
@@ -474,6 +490,8 @@ func (q *Queries) UpsertSaveState(ctx context.Context, arg UpsertSaveStateParams
 		arg.StateV2,
 		arg.DataVersion,
 		arg.ProtocolVersion,
+		arg.Resets,
+		arg.TotalPlaytime,
 	)
 	return err
 }

@@ -357,6 +357,8 @@ type SaveState struct {
 	ProtocolVersion *int          `json:"protocolVersion"`
 	Ticks           int           `json:"ticks"`
 	Score           *float64      `json:"score"`
+	Resets          int           `json:"resets"`
+	TotalPlaytime   int           `json:"totalPlaytime"`
 }
 
 type TfLocalSession struct {

@@ -74,8 +74,8 @@ returning *;
 -- name: UpsertSaveState :exec
 insert into public.save_states
 (id, map_id, player_id, type, created, updated, completed, playtime, ticks, score, state_v2, data_version,
- protocol_version)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ protocol_version, resets, total_playtime)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 on conflict (id, map_id, player_id) do update
   set updated          = excluded.updated,
       completed        = excluded.completed,
@@ -84,7 +84,9 @@ on conflict (id, map_id, player_id) do update
       score            = excluded.score,
       state_v2         = excluded.state_v2,
       data_version     = excluded.data_version,
-      protocol_version = excluded.protocol_version;
+      protocol_version = excluded.protocol_version,
+      resets           = excluded.resets,
+      total_playtime   = excluded.total_playtime;
 
 -- name: DeleteSaveState :execrows
 delete

@@ -21,6 +21,8 @@ type SaveState struct {
 	ProtocolVersion int           `json:"protocolVersion"`
 	Playtime        int           `json:"playtime"`
 	Ticks           int           `json:"ticks"`
+	Resets          int           `json:"resets"`
+	TotalPlaytime   int           `json:"totalPlaytime"`
 
 	EditState *map[string]any `json:"editState,omitempty"`
 	PlayState *map[string]any `json:"playState,omitempty"`
@@ -78,6 +80,9 @@ func hydrateSaveState(ss mapdb.SaveState) SaveState {
 		ProtocolVersion: pvn,
 		Playtime:        ss.Playtime,
 		Ticks:           ss.Ticks,
+		Resets:          ss.Resets,
+		// Rows written before total_playtime existed have it at zero; playtime is the floor.
+		TotalPlaytime: max(ss.TotalPlaytime, ss.Playtime),
 
 		PlayState: playingState,
 		EditState: editingState,
