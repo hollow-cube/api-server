@@ -17,7 +17,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "hc_map_isolate_creation_duration_seconds",
 			Help:    "Duration of map isolate pod creation in seconds",
-			Buckets: []float64{0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10},
+			Buckets: []float64{0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5, 2, 3, 5, 10},
 		},
 	)
 )
