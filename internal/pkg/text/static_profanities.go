@@ -231,6 +231,7 @@ var profanities = map[string][]string{
 	"niggu":  {},
 	"niqqu":  {},
 	"niggr":  {},
+	"niger":  {}, // yes, this will false flag, but according to Seth it's worth it
 	"nigger": {},
 	"niglet": {},
 	"nignog": {},
