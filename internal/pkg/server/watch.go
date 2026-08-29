@@ -17,8 +17,6 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 )
 
-// TODO: FIND A NEW HOME FOR THE PLAYER COUNT REPORTER
-
 const (
 	roleLabel              = "mapmaker.hollowcube.net/role"
 	anyServerLabelSelector = roleLabel + ` in (hub,map,map-isolate)`

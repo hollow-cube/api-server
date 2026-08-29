@@ -136,9 +136,6 @@ func main() {
 		fx.Invoke(handler.NewChatHandler),
 
 		fx.Provide(player.NewTracker),
-		fx.Invoke(func(t *player.Tracker, lc fx.Lifecycle) {
-			lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
-		}),
 		fx.Provide(server.NewTracker),
 		fx.Invoke(func(t *server.Tracker, lc fx.Lifecycle) {
 			if t.K8sNamespace != "disabled" {

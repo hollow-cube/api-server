@@ -14,8 +14,6 @@ import (
 	"github.com/hollow-cube/api-server/pkg/kafkaModel"
 	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/redis/rueidis"
-	"github.com/redis/rueidis/rueidislock"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -24,36 +22,17 @@ import (
 type Tracker struct {
 	queries   *db.Queries
 	jetStream *natsutil.JetStreamWrapper
-
-	countReportCtx    context.Context
-	countReportCancel context.CancelFunc
-	countReportLocker rueidislock.Locker
 }
 
 type TrackerParams struct {
 	fx.In
 
-	Redis     rueidis.Client
 	Queries   *db.Queries
 	JetStream *natsutil.JetStreamWrapper
 }
 
 func NewTracker(p TrackerParams) (*Tracker, error) {
-	reportCtx, reportCancel := context.WithCancel(context.Background())
-	locker, err := rueidislock.NewLocker(rueidislock.LockerOption{
-		ClientBuilder: func(_ rueidis.ClientOption) (rueidis.Client, error) {
-			return p.Redis, nil
-		},
-		KeyMajority:    1,
-		NoLoopTracking: true,
-		KeyPrefix:      "sess:",
-	})
-	if err != nil {
-		reportCancel()
-		return nil, fmt.Errorf("failed to create locker: %w", err)
-	}
-
-	err = p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
+	err := p.JetStream.UpsertStream(context.Background(), jetstream.StreamConfig{
 		Name:       "SESSIONS",
 		Subjects:   []string{"session.>"},
 		Retention:  jetstream.LimitsPolicy,
@@ -62,7 +41,6 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		Duplicates: 60 * time.Second,
 	})
 	if err != nil {
-		reportCancel()
 		return nil, err
 	}
 
@@ -75,28 +53,13 @@ func NewTracker(p TrackerParams) (*Tracker, error) {
 		Duplicates: 60 * time.Second,
 	})
 	if err != nil {
-		reportCancel()
 		return nil, err
 	}
 
 	return &Tracker{
-		queries:           p.Queries,
-		jetStream:         p.JetStream,
-		countReportCtx:    reportCtx,
-		countReportCancel: reportCancel,
-		countReportLocker: locker,
+		queries:   p.Queries,
+		jetStream: p.JetStream,
 	}, nil
-}
-
-func (t *Tracker) Start(_ context.Context) error {
-	go t.playerCountReportLoop()
-	return nil
-}
-
-func (t *Tracker) Stop(_ context.Context) error {
-	t.countReportCancel()
-	t.countReportLocker.Close()
-	return nil
 }
 
 func (t *Tracker) GetSession(ctx context.Context, playerId string) (*db.PlayerSession, error) {
