@@ -148,10 +148,13 @@ func (t *Tracker) CreateSession(
 	return s, nil
 }
 
-func (t *Tracker) DeleteSession(ctx context.Context, playerId string) (sessionLength int, err error) {
-	s, err := t.queries.DeletePlayerSession(ctx, playerId)
+// DeleteSession removes a player's session. A non-nil proxyId fences the delete on the proxy that
+// still holds the session: a proxy the player has already left off must not delete the session they
+// made on the one they moved to, since every backend kicks the player on a session delete.
+func (t *Tracker) DeleteSession(ctx context.Context, playerId string, proxyId *string) (sessionLength int, err error) {
+	s, err := t.queries.DeletePlayerSession(ctx, playerId, proxyId)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil // Player session did not exist, do nothing for now.
+		return 0, nil // Player session did not exist, or is held by another proxy.
 	} else if err != nil {
 		return 0, fmt.Errorf("failed to delete session: %w", err)
 	}

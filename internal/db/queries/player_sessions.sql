@@ -40,7 +40,10 @@ where server_id = $1::text
   and player_id = any (@players::uuid[]);
 
 -- name: DeletePlayerSession :one
+-- proxy_id is a fence: when set, the delete only lands if the session is still held by that proxy,
+-- so a proxy the player has already left cannot delete the session they made somewhere else.
 delete
 from player_sessions
 where player_id = $1
+  and (sqlc.narg('proxy_id')::text is null or proxy_id = sqlc.narg('proxy_id')::text)
 returning *;

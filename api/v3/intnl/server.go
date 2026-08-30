@@ -199,11 +199,12 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 }
 
 func (s *serverImpl) DeleteSession(ctx context.Context, request DeleteSessionRequestObject) (DeleteSessionResponseObject, error) {
-	duration, err := s.playerTracker.DeleteSession(ctx, request.PlayerId)
+	duration, err := s.playerTracker.DeleteSession(ctx, request.PlayerId, request.Params.Proxy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete session: %w", err)
 	}
 	if duration <= 0 {
+		// Nothing to delete, or the session has moved to another proxy since the caller last saw it.
 		return DeleteSession404Response{}, nil
 	}
 

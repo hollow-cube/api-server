@@ -14,11 +14,14 @@ const deletePlayerSession = `-- name: DeletePlayerSession :one
 delete
 from player_sessions
 where player_id = $1
+  and ($2::text is null or proxy_id = $2::text)
 returning player_id, created_at, proxy_id, server_id, hidden, username, skin_texture, skin_signature, p_type, p_state, p_instance_id, p_map_id, p_start_time, last_seen, protocol_version
 `
 
-func (q *Queries) DeletePlayerSession(ctx context.Context, playerID string) (*PlayerSession, error) {
-	row := q.db.QueryRow(ctx, deletePlayerSession, playerID)
+// proxy_id is a fence: when set, the delete only lands if the session is still held by that proxy,
+// so a proxy the player has already left cannot delete the session they made somewhere else.
+func (q *Queries) DeletePlayerSession(ctx context.Context, playerID string, proxyID *string) (*PlayerSession, error) {
+	row := q.db.QueryRow(ctx, deletePlayerSession, playerID, proxyID)
 	var i PlayerSession
 	err := row.Scan(
 		&i.PlayerID,

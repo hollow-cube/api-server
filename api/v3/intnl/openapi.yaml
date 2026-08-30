@@ -66,17 +66,26 @@ paths:
     delete:
       operationId: deleteSession
       summary: Delete a session for the given player id
+      description: >-
+        Pass `proxy` to delete only if the session is still held by that proxy. A player who
+        reconnected elsewhere in the meantime already has a session on another proxy, and the
+        losing proxy must not delete it out from under them - backends kick on a session delete.
       tags: [ Session ]
       parameters:
         - name: playerId
           in: path
           schema: { type: string }
           required: true
+        - name: proxy
+          in: query
+          description: Only delete the session if it is still held by this proxy.
+          schema: { type: string }
+          required: false
       responses:
         '200':
           description: Session deleted, will be returned even if session does not exist.
         '404':
-          description: Session not found (could be deleted already)
+          description: Session not found (could be deleted already, or held by another proxy)
 
   /server/sync:
     post:

@@ -169,7 +169,7 @@ func (t *Tracker) fullPodSync(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to fetch players: %w", err)
 	}
 	for _, playerId := range players {
-		_, err = t.players.DeleteSession(ctx, playerId)
+		_, err = t.players.DeleteSession(ctx, playerId, nil)
 		if err != nil {
 			t.log.Errorw("failed to delete expired player session", "error", err)
 		}

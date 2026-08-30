@@ -162,6 +162,12 @@ type JoinMapJSONBody struct {
 	State  string `json:"state"`
 }
 
+// DeleteSessionParams defines parameters for DeleteSession.
+type DeleteSessionParams struct {
+	// Proxy Only delete the session if it is still held by this proxy.
+	Proxy *string `form:"proxy,omitempty" json:"proxy,omitempty"`
+}
+
 // UpdateSessionPropertiesJSONBody defines parameters for UpdateSessionProperties.
 type UpdateSessionPropertiesJSONBody struct {
 	Hidden   *bool                   `json:"hidden,omitempty"`
@@ -245,7 +251,7 @@ type ServerInterface interface {
 	GetServerStats(w http.ResponseWriter, r *http.Request, serverId string)
 	// Delete a session for the given player id
 	// (DELETE /session/{playerId})
-	DeleteSession(w http.ResponseWriter, r *http.Request, playerId string)
+	DeleteSession(w http.ResponseWriter, r *http.Request, playerId string, params DeleteSessionParams)
 	// Update a session's properties
 	// (PATCH /session/{playerId})
 	UpdateSessionProperties(w http.ResponseWriter, r *http.Request, playerId PlayerId)
@@ -417,8 +423,19 @@ func (siw *ServerInterfaceWrapper) DeleteSession(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteSessionParams
+
+	// ------------- Optional query parameter "proxy" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "proxy", r.URL.Query(), &params.Proxy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "proxy", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteSession(w, r, playerId)
+		siw.Handler.DeleteSession(w, r, playerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -927,6 +944,7 @@ func (response GetServerStats404Response) VisitGetServerStatsResponse(w http.Res
 
 type DeleteSessionRequestObject struct {
 	PlayerId string `json:"playerId"`
+	Params   DeleteSessionParams
 }
 
 type DeleteSessionResponseObject interface {
@@ -1393,10 +1411,11 @@ func (sh *strictHandler) GetServerStats(w http.ResponseWriter, r *http.Request, 
 }
 
 // DeleteSession operation middleware
-func (sh *strictHandler) DeleteSession(w http.ResponseWriter, r *http.Request, playerId string) {
+func (sh *strictHandler) DeleteSession(w http.ResponseWriter, r *http.Request, playerId string, params DeleteSessionParams) {
 	var request DeleteSessionRequestObject
 
 	request.PlayerId = playerId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteSession(ctx, request.(DeleteSessionRequestObject))
