@@ -2,14 +2,11 @@ package v4Internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/hollow-cube/api-server/internal/playerdb"
 	"github.com/hollow-cube/api-server/pkg/hog"
-	"github.com/hollow-cube/api-server/pkg/ox"
 )
 
 type CreatePlayerDataRequest struct {
@@ -48,253 +45,16 @@ func (s *Server) CreatePlayerData(ctx context.Context, body CreatePlayerDataRequ
 	return s.hydratePlayerData(ctx, pd)
 }
 
-type PlayerRequest struct {
-	PlayerID string `path:"playerId"`
-}
-
 // GET /players/{playerId}
-func (s *Server) GetPlayerData(ctx context.Context, request PlayerRequest) (*PlayerData, error) {
-	pd, err := s.playerStore.SafeLookupPlayerIdByIdOrUsername(ctx, request.PlayerID)
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return nil, ox.NotFound{}
-	} else if err != nil {
-		return nil, err
-	}
-
-	return s.hydratePlayerData(ctx, pd)
-}
-
-type (
-	UpdatePlayerDataRequest struct {
-		PlayerId string `path:"playerId"`
-		UpdatePlayerDataRequestBody
-	}
-	UpdatePlayerDataRequestBody struct {
-		BetaEnabled *bool `json:"betaEnabled"`
-
-		// IpHistory New IP addresses to add to the history, will be merged.
-		IpHistory       *[]string       `json:"ipHistory"`
-		LastOnline      *time.Time      `json:"lastOnline"`
-		PlaytimeInc     *int            `json:"playtimeInc"`
-		SettingsUpdates *PlayerSettings `json:"settingsUpdates"`
-		Skin            *PlayerSkin     `json:"skin"`
-		Username        *string         `json:"username"`
-	}
-)
 
 // PATCH /players/{playerId}
-func (s *Server) UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequest) error {
-	p, err := s.playerStore.GetPlayerData(ctx, request.PlayerId)
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return ox.NotFound{}
-	} else if err != nil {
-		return fmt.Errorf("failed to get player data: %w", err)
-	}
-
-	var changed bool
-	dbUpdates := playerdb.UpdatePlayerDataParams{ID: p.ID, Skin: p.Skin}
-	if request.Username != nil && *request.Username != p.Username {
-		dbUpdates.Username = request.Username
-		changed = true
-	}
-	if request.LastOnline != nil {
-		dbUpdates.LastOnline = request.LastOnline
-		changed = true
-	}
-	if request.PlaytimeInc != nil {
-		dbUpdates.Playtime = new(p.Playtime + *request.PlaytimeInc)
-		changed = true
-	}
-	if request.BetaEnabled != nil {
-		dbUpdates.BetaEnabled = request.BetaEnabled
-		changed = true
-	}
-	if request.SettingsUpdates != nil {
-		for key, value := range *request.SettingsUpdates {
-			p.Settings[key] = value
-			dbUpdates.Settings = p.Settings
-			changed = true
-		}
-	}
-	if request.Skin != nil {
-		dbUpdates.Skin = &playerdb.PlayerSkin{
-			Texture:   request.Skin.Texture,
-			Signature: request.Skin.Signature,
-		}
-		changed = true
-	}
-
-	err = playerdb.TxNoReturn(ctx, s.playerStore, func(ctx context.Context, tx *playerdb.Store) error {
-		if request.IpHistory != nil && len(*request.IpHistory) > 0 {
-			for _, ip := range *request.IpHistory {
-				if ip == "" {
-					continue
-				}
-
-				if err = tx.AddPlayerIP(ctx, p.ID, ip); err != nil {
-					return fmt.Errorf("failed to record player ip: %w", err)
-				}
-			}
-			changed = true
-		}
-
-		if !changed {
-			return nil
-		}
-
-		err = tx.UpdatePlayerData(ctx, dbUpdates)
-		if err != nil {
-			return fmt.Errorf("failed to update player data: %w", err)
-		}
-
-		return nil
-	})
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return ox.NotFound{}
-	} else if err != nil {
-		return fmt.Errorf("failed to apply transaction: %w", err)
-	}
-
-	return nil
-}
-
 // GET /players/{playerId}/display-name
-func (s *Server) GetPlayerDisplayName(ctx context.Context, request PlayerRequest) (DisplayName, error) {
-	if orgName, ok := orgMapNames[request.PlayerID]; ok {
-		return orgName, nil
-	}
-
-	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerID)
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return nil, ox.NotFound{}
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to get player data: %w", err)
-	}
-
-	return s.computeDisplayName(pd), nil
-}
-
-type GetPlayerHypercubeResponse struct {
-	Exp   int       `json:"exp"`
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
-}
 
 // GET /players/{playerId}/hypercube
-func (s *Server) GetPlayerHypercube(ctx context.Context, request PlayerRequest) (*GetPlayerHypercubeResponse, error) {
-	pd, err := s.playerStore.GetPlayerData(ctx, request.PlayerID)
-	if errors.Is(err, playerdb.ErrNoRows) {
-		return nil, ox.NotFound{}
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to get hypercube stats: %w", err)
-	}
-
-	if pd.HypercubeStart == nil || pd.HypercubeEnd == nil || (*pd.HypercubeEnd).Before(time.Now()) {
-		return nil, ox.NotFound{}
-	}
-
-	return &GetPlayerHypercubeResponse{
-		Exp:   0,
-		Start: *pd.HypercubeStart,
-		End:   *pd.HypercubeEnd,
-	}, nil
-}
-
-type GetPlayerAltsResponse struct {
-	Results []PlayerDataStub `json:"results"`
-}
 
 // GET /players/{playerId}/alts
-func (s *Server) GetPlayerAlts(ctx context.Context, request PlayerRequest) (*GetPlayerAltsResponse, error) {
-	playerIPs, err := s.playerStore.GetPlayerIPHistory(ctx, request.PlayerID)
-	if err != nil {
-		return nil, err
-	}
-
-	sharedPlayers, err := s.playerStore.GetPlayersByIPs(ctx, playerIPs)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]PlayerDataStub, 0, 10)
-	for _, row := range sharedPlayers {
-		if row.ID == request.PlayerID {
-			continue
-		}
-
-		// always return empty map not null if no settings have been changed
-		// TODO: should just make the column notnull and then this isnt necessary
-		var settings map[string]any
-		if row.Settings != nil {
-			settings = row.Settings
-		} else {
-			settings = make(map[string]any)
-		}
-
-		results = append(results, PlayerDataStub{
-			ID:          row.ID,
-			DisplayName: s.computeDisplayName(row),
-			Settings:    settings,
-		})
-	}
-
-	return &GetPlayerAltsResponse{Results: results}, nil
-}
-
-type (
-	SearchPlayersRequest struct {
-		Query   string   `json:"query"`
-		Exclude []string `json:"exclude"` // Exclude the players in this list
-
-		Limit int `json:"limit"`
-	}
-	SearchPlayersResponse struct {
-		Results []PlayerDataStub `json:"results"`
-	}
-	PlayerDataStub struct {
-		ID          string         `json:"id"`
-		DisplayName DisplayName    `json:"displayName"`
-		Settings    PlayerSettings `json:"settings"`
-	}
-)
 
 // POST /players/search
-func (s *Server) SearchPlayers(ctx context.Context, body SearchPlayersRequest) (*SearchPlayersResponse, error) {
-	if body.Query == "" {
-		return &SearchPlayersResponse{Results: []PlayerDataStub{}}, nil
-	}
-
-	limit := int32(body.Limit)
-	if limit == 0 {
-		limit = 25
-	}
-	limit = min(max(limit, 1), 100)
-
-	pds, err := s.playerStore.SearchPlayersFuzzy(ctx, body.Exclude, body.Query, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search players: %w", err)
-	}
-
-	results := make([]PlayerDataStub, len(pds))
-	for i, entry := range pds {
-		// always return empty map not null if no settings have been changed
-		// TODO: should just make the column notnull and then this isnt necessary
-		var settings map[string]any
-		if entry.Settings != nil {
-			settings = entry.Settings
-		} else {
-			settings = make(map[string]any)
-		}
-
-		results[i] = PlayerDataStub{
-			ID:          entry.ID,
-			DisplayName: s.computeDisplayName(entry),
-			Settings:    settings,
-		}
-	}
-	return &SearchPlayersResponse{Results: results}, nil
-}
-
 func (s *Server) hydratePlayerData(ctx context.Context, pd playerdb.PlayerData) (*PlayerData, error) {
 	// Can test empty code to see if TOTP is disabled
 	//_, err := s.testTotpCode(ctx, pd.ID, "", false)

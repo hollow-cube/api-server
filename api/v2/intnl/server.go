@@ -255,51 +255,7 @@ func (s *Server) GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmet
 }
 
 // deprecated: v4
-func (s *Server) GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error) {
-	if orgName, ok := orgMapNames[request.PlayerId]; ok {
-		return GetPlayerDisplayNameV2200JSONResponse(orgName), nil
-	}
-
-	pd, err := s.store.GetPlayerData(ctx, request.PlayerId)
-	if err != nil {
-		if errors.Is(err, playerdb.ErrNoRows) {
-			return GetPlayerDisplayNameV2404Response{}, nil
-		}
-
-		return nil, fmt.Errorf("failed to get player data: %w", err)
-	}
-
-	displayName := computeDisplayNameV2(pd)
-	return GetPlayerDisplayNameV2200JSONResponse(displayName), nil
-}
-
 // deprecated: v4
-func (s *Server) GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error) {
-	playerIPs, err := s.store.GetPlayerIPHistory(ctx, request.PlayerId)
-	if err != nil {
-		return nil, err
-	}
-
-	sharedPlayers, err := s.store.GetPlayersByIPs(ctx, playerIPs)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]PlayerAltsItem, 0, 10)
-	for _, row := range sharedPlayers {
-		if row.ID == request.PlayerId {
-			continue
-		}
-
-		results = append(results, PlayerAltsItem{
-			Id:       row.ID,
-			Username: row.Username,
-		})
-	}
-
-	return GetPlayerAlts200JSONResponse{Results: results}, nil
-}
-
 // v4
 func (s *Server) CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error) {
 	res, err := playerdb.Tx(ctx, s.store, func(ctx context.Context, txStore *playerdb.Store) (*CyclePlayerApiKey200JSONResponse, error) {
@@ -345,31 +301,6 @@ func (s *Server) GetPlayerId(ctx context.Context, request GetPlayerIdRequestObje
 }
 
 // v4
-func (s *Server) PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error) {
-	if request.Body.Query == "" {
-		return PerformTabComplete200JSONResponse{Result: []TabCompleteEntry{}}, nil
-	}
-
-	limit := int32(25) // default limit
-	if request.Body.Limit != nil {
-		limit = int32(*request.Body.Limit)
-	}
-
-	entries, err := s.store.LegacySearchPlayersFuzzy(ctx, request.Body.Query, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search players: %w", err)
-	}
-
-	result := make([]TabCompleteEntry, len(entries))
-	for i, entry := range entries {
-		result[i] = TabCompleteEntry{
-			Id:       entry.ID,
-			Username: entry.Username,
-		}
-	}
-	return &PerformTabComplete200JSONResponse{Result: result}, nil
-}
-
 func (s *Server) sendPlayerDataUpdateMessage(ctx context.Context, msg *model.PlayerDataUpdateMessage) error {
 	if err := s.jetStream.PublishJSONAsync(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish player data update message: %w", err)

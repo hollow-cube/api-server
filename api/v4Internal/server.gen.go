@@ -34,16 +34,7 @@ func RegisterRoutes(s *Server, params RegisterParams) {
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/search", h.searchMaps)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/search/progress", h.searchMapProgress)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-history", h.getPlayerMapHistory)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/notifications", h.getNotifications)
-	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/notifications/{notificationId}", h.updateNotification)
-	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/notifications/{notificationId}", h.deleteNotification)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}", h.getPlayerData)
-	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/players/{playerId}", h.updatePlayerData)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/display-name", h.getPlayerDisplayName)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/hypercube", h.getPlayerHypercube)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/alts", h.getPlayerAlts)
-	params.Mux.HandleFunc("POST "+params.BaseURL+"/players/search", h.searchPlayers)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/replays/{id}", h.getReplay)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/replays/{id}/stream", h.getReplayStream)
 	params.Mux.HandleFunc("PATCH "+params.BaseURL+"/replays/{id}/stream", h.commitReplay)
@@ -339,62 +330,6 @@ func (h *handlers) getPlayerMapHistory(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteJSON(w, 200, resp)
 }
 
-func (h *handlers) getNotifications(w http.ResponseWriter, r *http.Request) {
-	var req GetNotificationsRequest
-	req.PlayerID = r.URL.Query().Get("playerId")
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: page")
-		return
-	} else {
-		req.Page = v
-	}
-	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
-		return
-	} else {
-		req.PageSize = v
-	}
-	if v, err := strconv.ParseBool(r.URL.Query().Get("unreadOnly")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: unreadOnly")
-		return
-	} else {
-		req.UnreadOnly = v
-	}
-	resp, err := h.server.GetNotifications(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) updateNotification(w http.ResponseWriter, r *http.Request) {
-	var req NotificationRequest
-	req.NotificationID = r.PathValue("notificationId")
-	var body UpdateNotificationRequest
-	if err := runtime.DecodeJSON(r, &body); err != nil {
-		runtime.WriteBadRequest(w, "invalid request body")
-		return
-	}
-	err := h.server.UpdateNotification(r.Context(), req, body)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(200)
-}
-
-func (h *handlers) deleteNotification(w http.ResponseWriter, r *http.Request) {
-	var req NotificationRequest
-	req.NotificationID = r.PathValue("notificationId")
-	err := h.server.DeleteNotification(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(204)
-}
-
 func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 	var body CreatePlayerDataRequest
 	if err := runtime.DecodeJSON(r, &body); err != nil {
@@ -407,79 +342,6 @@ func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 201, resp)
-}
-
-func (h *handlers) getPlayerData(w http.ResponseWriter, r *http.Request) {
-	var req PlayerRequest
-	req.PlayerID = r.PathValue("playerId")
-	resp, err := h.server.GetPlayerData(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) updatePlayerData(w http.ResponseWriter, r *http.Request) {
-	var req UpdatePlayerDataRequest
-	req.PlayerId = r.PathValue("playerId")
-	if err := runtime.DecodeJSON(r, &req.UpdatePlayerDataRequestBody); err != nil {
-		runtime.WriteBadRequest(w, "invalid request body")
-		return
-	}
-	err := h.server.UpdatePlayerData(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(200)
-}
-
-func (h *handlers) getPlayerDisplayName(w http.ResponseWriter, r *http.Request) {
-	var req PlayerRequest
-	req.PlayerID = r.PathValue("playerId")
-	resp, err := h.server.GetPlayerDisplayName(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getPlayerHypercube(w http.ResponseWriter, r *http.Request) {
-	var req PlayerRequest
-	req.PlayerID = r.PathValue("playerId")
-	resp, err := h.server.GetPlayerHypercube(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getPlayerAlts(w http.ResponseWriter, r *http.Request) {
-	var req PlayerRequest
-	req.PlayerID = r.PathValue("playerId")
-	resp, err := h.server.GetPlayerAlts(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) searchPlayers(w http.ResponseWriter, r *http.Request) {
-	var body SearchPlayersRequest
-	if err := runtime.DecodeJSON(r, &body); err != nil {
-		runtime.WriteBadRequest(w, "invalid request body")
-		return
-	}
-	resp, err := h.server.SearchPlayers(r.Context(), body)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
 }
 
 func (h *handlers) getReplay(w http.ResponseWriter, r *http.Request) {

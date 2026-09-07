@@ -16,12 +16,6 @@ import (
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
-// Defines values for FriendRequestDirection.
-const (
-	Incoming FriendRequestDirection = "incoming"
-	Outgoing FriendRequestDirection = "outgoing"
-)
-
 // Defines values for PunishmentType.
 const (
 	PunishmentTypeBan  PunishmentType = "ban"
@@ -43,13 +37,6 @@ const (
 	Mute GetPunishmentLaddersParamsPunishmentType = "mute"
 )
 
-// BlockedPlayer defines model for BlockedPlayer.
-type BlockedPlayer struct {
-	BlockedAt time.Time `json:"blockedAt"`
-	PlayerId  string    `json:"playerId"`
-	Username  string    `json:"username"`
-}
-
 // DisplayNamePart defines model for DisplayNamePart.
 type DisplayNamePart struct {
 	Color string `json:"color"`
@@ -60,32 +47,11 @@ type DisplayNamePart struct {
 // DisplayNameV2 defines model for DisplayNameV2.
 type DisplayNameV2 = []DisplayNamePart
 
-// FriendRequest defines model for FriendRequest.
-type FriendRequest struct {
-	PlayerId string    `json:"playerId"`
-	SentAt   time.Time `json:"sentAt"`
-	Username string    `json:"username"`
-}
-
-// FriendRequestDirection defines model for FriendRequestDirection.
-type FriendRequestDirection string
-
 // HypercubeStatus If since and until are missing, the player does not have hypercube.
 type HypercubeStatus struct {
 	Exp   int        `json:"exp"`
 	Since *time.Time `json:"since,omitempty"`
 	Until *time.Time `json:"until,omitempty"`
-}
-
-// PlayerAlts defines model for PlayerAlts.
-type PlayerAlts struct {
-	Results []PlayerAltsItem `json:"results"`
-}
-
-// PlayerAltsItem defines model for PlayerAltsItem.
-type PlayerAltsItem struct {
-	Id       string `json:"id"`
-	Username string `json:"username"`
 }
 
 // PlayerData defines model for PlayerData.
@@ -137,15 +103,6 @@ type PlayerDataUpdateRequest struct {
 	SettingsUpdates *PlayerSettings `json:"settingsUpdates,omitempty"`
 	Skin            *PlayerSkin     `json:"skin,omitempty"`
 	Username        *string         `json:"username,omitempty"`
-}
-
-// PlayerFriend defines model for PlayerFriend.
-type PlayerFriend struct {
-	FriendsSince time.Time `json:"friendsSince"`
-	LastOnline   time.Time `json:"lastOnline"`
-	Online       bool      `json:"online"`
-	PlayerId     string    `json:"playerId"`
-	Username     string    `json:"username"`
 }
 
 // PlayerInventory defines model for PlayerInventory.
@@ -213,12 +170,6 @@ type PunishmentLadderReason struct {
 // PunishmentType defines model for PunishmentType.
 type PunishmentType string
 
-// TabCompleteEntry defines model for TabCompleteEntry.
-type TabCompleteEntry struct {
-	Id       string `json:"id"`
-	Username string `json:"username"`
-}
-
 // BadRequest defines model for BadRequest.
 type BadRequest struct {
 	Message string `json:"message"`
@@ -259,47 +210,12 @@ type GivePlayerItemsJSONBody struct {
 	TxMeta map[string]interface{} `json:"txMeta"`
 }
 
-// GetBlockedPlayersParams defines parameters for GetBlockedPlayers.
-type GetBlockedPlayersParams struct {
-	Page     int32 `form:"page" json:"page"`
-	PageSize int32 `form:"pageSize" json:"pageSize"`
-}
-
-// GetBlocksBetweenPlayersParams defines parameters for GetBlocksBetweenPlayers.
-type GetBlocksBetweenPlayersParams struct {
-	// Bidirectional Whether to check both directions of the block
-	Bidirectional bool `form:"bidirectional" json:"bidirectional"`
-}
-
 // BuyCosmeticJSONBody defines parameters for BuyCosmetic.
 type BuyCosmeticJSONBody struct {
 	Coins      *int                    `json:"coins,omitempty"`
 	CosmeticId string                  `json:"cosmeticId"`
 	Cubits     *int                    `json:"cubits,omitempty"`
 	Items      *map[string]interface{} `json:"items,omitempty"`
-}
-
-// GetFriendRequestsParams defines parameters for GetFriendRequests.
-type GetFriendRequestsParams struct {
-	// Direction The direction of requests to get
-	Direction FriendRequestDirection `form:"direction" json:"direction"`
-	Page      int32                  `form:"page" json:"page"`
-	PageSize  int32                  `form:"pageSize" json:"pageSize"`
-}
-
-// DeleteFriendRequestParams defines parameters for DeleteFriendRequest.
-type DeleteFriendRequestParams struct {
-	// Bidirectional Whether to delete either direction of the request
-	Bidirectional bool `form:"bidirectional" json:"bidirectional"`
-}
-
-// GetPlayerFriendsParams defines parameters for GetPlayerFriends.
-type GetPlayerFriendsParams struct {
-	Page     int32 `form:"page" json:"page"`
-	PageSize int32 `form:"pageSize" json:"pageSize"`
-
-	// OnlineState If present, filters friends by online state (online or offline). If null, doesn't filter.
-	OnlineState *bool `form:"onlineState,omitempty" json:"onlineState,omitempty"`
 }
 
 // GetPlayerNotificationsParams defines parameters for GetPlayerNotifications.
@@ -412,12 +328,6 @@ type GetActivePunishmentParams struct {
 	PunishmentType string `form:"punishmentType" json:"punishmentType"`
 }
 
-// PerformTabCompleteJSONBody defines parameters for PerformTabComplete.
-type PerformTabCompleteJSONBody struct {
-	Limit *int   `json:"limit,omitempty"`
-	Query string `json:"query"`
-}
-
 // TebexCheckoutJSONBody defines parameters for TebexCheckout.
 type TebexCheckoutJSONBody struct {
 	CreatorCode string `json:"creatorCode"`
@@ -464,9 +374,6 @@ type CreatePunishmentJSONRequestBody CreatePunishmentJSONBody
 // RevokePunishmentJSONRequestBody defines body for RevokePunishment for application/json ContentType.
 type RevokePunishmentJSONRequestBody RevokePunishmentJSONBody
 
-// PerformTabCompleteJSONRequestBody defines body for PerformTabComplete for application/json ContentType.
-type PerformTabCompleteJSONRequestBody PerformTabCompleteJSONBody
-
 // TebexCheckoutJSONRequestBody defines body for TebexCheckout for application/json ContentType.
 type TebexCheckoutJSONRequestBody TebexCheckoutJSONBody
 
@@ -499,9 +406,6 @@ type ServerInterface interface {
 	// Update player data
 	// (PATCH /players/{playerId})
 	UpdatePlayerData(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get the (ip-based) alt accounts for a player
-	// (GET /players/{playerId}/alts)
-	GetPlayerAlts(w http.ResponseWriter, r *http.Request, playerId string)
 	// Cycle the API key for a player. Deletes all active keys and creates a new one
 	// (POST /players/{playerId}/api)
 	CyclePlayerApiKey(w http.ResponseWriter, r *http.Request, playerId string)
@@ -511,42 +415,12 @@ type ServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get players blocked by this player - automatically filters out staff members
-	// (GET /players/{playerId}/blocks)
-	GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string, params GetBlockedPlayersParams)
-	// Check if a player is blocked by another player
-	// (GET /players/{playerId}/blocks/player/{targetId})
-	GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params GetBlocksBetweenPlayersParams)
-	// Unblock a player
-	// (DELETE /players/{playerId}/blocks/{targetId})
-	UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
-	// Block a player
-	// (POST /players/{playerId}/blocks/{targetId})
-	BlockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Fetch all unlocked cosmetics for the given player
 	// (GET /players/{playerId}/cosmetics)
 	GetPlayerCosmetics(w http.ResponseWriter, r *http.Request, playerId string)
 	// Buy a cosmetic for the provided price
 	// (POST /players/{playerId}/cosmetics)
 	BuyCosmetic(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get the display name for a player
-	// (GET /players/{playerId}/displayname)
-	GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.Request, playerId string)
-	// Get a player's friend requests
-	// (GET /players/{playerId}/friendRequests)
-	GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams)
-	// Delete a friend request (cancel outgoing or decline incoming)
-	// (DELETE /players/{playerId}/friendRequests/{targetId})
-	DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params DeleteFriendRequestParams)
-	// Send a friend request to another player
-	// (POST /players/{playerId}/friendRequests/{targetId})
-	SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
-	// Get a player's friends
-	// (GET /players/{playerId}/friends)
-	GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerFriendsParams)
-	// Remove a friend
-	// (DELETE /players/{playerId}/friends/{targetId})
-	RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string)
 	// Get the hypercube status for a player. Should only be used to display in-depth info.
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(w http.ResponseWriter, r *http.Request, playerId string)
@@ -598,9 +472,6 @@ type ServerInterface interface {
 	// Get the recap data for a player
 	// (GET /recap/{playerId}/{year})
 	GetPlayerRecap(w http.ResponseWriter, r *http.Request, playerId string, year int)
-	// Generic player "completion" API. Used for completing player names or IDs.
-	// (POST /tab_complete)
-	PerformTabComplete(w http.ResponseWriter, r *http.Request)
 	// Create a Tebex checkout link for the given player & package
 	// (POST /tebex/checkout)
 	TebexCheckout(w http.ResponseWriter, r *http.Request)
@@ -814,31 +685,6 @@ func (siw *ServerInterfaceWrapper) UpdatePlayerData(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
-// GetPlayerAlts operation middleware
-func (siw *ServerInterfaceWrapper) GetPlayerAlts(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPlayerAlts(w, r, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // CyclePlayerApiKey operation middleware
 func (siw *ServerInterfaceWrapper) CyclePlayerApiKey(w http.ResponseWriter, r *http.Request) {
 
@@ -914,184 +760,6 @@ func (siw *ServerInterfaceWrapper) GivePlayerItems(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// GetBlockedPlayers operation middleware
-func (siw *ServerInterfaceWrapper) GetBlockedPlayers(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetBlockedPlayersParams
-
-	// ------------- Required query parameter "page" -------------
-
-	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		return
-	}
-
-	// ------------- Required query parameter "pageSize" -------------
-
-	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetBlockedPlayers(w, r, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetBlocksBetweenPlayers operation middleware
-func (siw *ServerInterfaceWrapper) GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetBlocksBetweenPlayersParams
-
-	// ------------- Required query parameter "bidirectional" -------------
-
-	if paramValue := r.URL.Query().Get("bidirectional"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "bidirectional"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "bidirectional", r.URL.Query(), &params.Bidirectional)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bidirectional", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetBlocksBetweenPlayers(w, r, playerId, targetId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UnblockPlayer operation middleware
-func (siw *ServerInterfaceWrapper) UnblockPlayer(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UnblockPlayer(w, r, playerId, targetId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// BlockPlayer operation middleware
-func (siw *ServerInterfaceWrapper) BlockPlayer(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.BlockPlayer(w, r, playerId, targetId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetPlayerCosmetics operation middleware
 func (siw *ServerInterfaceWrapper) GetPlayerCosmetics(w http.ResponseWriter, r *http.Request) {
 
@@ -1133,290 +801,6 @@ func (siw *ServerInterfaceWrapper) BuyCosmetic(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.BuyCosmetic(w, r, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetPlayerDisplayNameV2 operation middleware
-func (siw *ServerInterfaceWrapper) GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPlayerDisplayNameV2(w, r, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetFriendRequests operation middleware
-func (siw *ServerInterfaceWrapper) GetFriendRequests(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetFriendRequestsParams
-
-	// ------------- Required query parameter "direction" -------------
-
-	if paramValue := r.URL.Query().Get("direction"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "direction"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "direction", r.URL.Query(), &params.Direction)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "direction", Err: err})
-		return
-	}
-
-	// ------------- Required query parameter "page" -------------
-
-	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		return
-	}
-
-	// ------------- Required query parameter "pageSize" -------------
-
-	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFriendRequests(w, r, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteFriendRequest operation middleware
-func (siw *ServerInterfaceWrapper) DeleteFriendRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeleteFriendRequestParams
-
-	// ------------- Required query parameter "bidirectional" -------------
-
-	if paramValue := r.URL.Query().Get("bidirectional"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "bidirectional"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "bidirectional", r.URL.Query(), &params.Bidirectional)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bidirectional", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteFriendRequest(w, r, playerId, targetId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SendFriendRequest operation middleware
-func (siw *ServerInterfaceWrapper) SendFriendRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SendFriendRequest(w, r, playerId, targetId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetPlayerFriends operation middleware
-func (siw *ServerInterfaceWrapper) GetPlayerFriends(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetPlayerFriendsParams
-
-	// ------------- Required query parameter "page" -------------
-
-	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "page", r.URL.Query(), &params.Page)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		return
-	}
-
-	// ------------- Required query parameter "pageSize" -------------
-
-	if paramValue := r.URL.Query().Get("pageSize"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "pageSize", r.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "onlineState" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "onlineState", r.URL.Query(), &params.OnlineState)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "onlineState", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPlayerFriends(w, r, playerId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RemoveFriend operation middleware
-func (siw *ServerInterfaceWrapper) RemoveFriend(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "playerId" -------------
-	var playerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "targetId" -------------
-	var targetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "targetId", r.PathValue("targetId"), &targetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RemoveFriend(w, r, playerId, targetId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1974,20 +1358,6 @@ func (siw *ServerInterfaceWrapper) GetPlayerRecap(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
-// PerformTabComplete operation middleware
-func (siw *ServerInterfaceWrapper) PerformTabComplete(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PerformTabComplete(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // TebexCheckout operation middleware
 func (siw *ServerInterfaceWrapper) TebexCheckout(w http.ResponseWriter, r *http.Request) {
 
@@ -2131,22 +1501,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/players/{idOrUsername}/id", wrapper.GetPlayerId)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}", wrapper.GetPlayerData)
 	m.HandleFunc("PATCH "+options.BaseURL+"/players/{playerId}", wrapper.UpdatePlayerData)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/alts", wrapper.GetPlayerAlts)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/api", wrapper.CyclePlayerApiKey)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GetPlayerBackpack)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/backpack", wrapper.GivePlayerItems)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/blocks", wrapper.GetBlockedPlayers)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/blocks/player/{targetId}", wrapper.GetBlocksBetweenPlayers)
-	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/blocks/{targetId}", wrapper.UnblockPlayer)
-	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/blocks/{targetId}", wrapper.BlockPlayer)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.GetPlayerCosmetics)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/cosmetics", wrapper.BuyCosmetic)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/displayname", wrapper.GetPlayerDisplayNameV2)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friendRequests", wrapper.GetFriendRequests)
-	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friendRequests/{targetId}", wrapper.DeleteFriendRequest)
-	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/friendRequests/{targetId}", wrapper.SendFriendRequest)
-	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/friends", wrapper.GetPlayerFriends)
-	m.HandleFunc("DELETE "+options.BaseURL+"/players/{playerId}/friends/{targetId}", wrapper.RemoveFriend)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/hypercube", wrapper.GetPlayerHypercube)
 	m.HandleFunc("GET "+options.BaseURL+"/players/{playerId}/notifications", wrapper.GetPlayerNotifications)
 	m.HandleFunc("POST "+options.BaseURL+"/players/{playerId}/notifications", wrapper.CreatePlayerNotification)
@@ -2164,7 +1523,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/punishments/revoke", wrapper.RevokePunishment)
 	m.HandleFunc("GET "+options.BaseURL+"/punishments/{playerId}/active", wrapper.GetActivePunishment)
 	m.HandleFunc("GET "+options.BaseURL+"/recap/{playerId}/{year}", wrapper.GetPlayerRecap)
-	m.HandleFunc("POST "+options.BaseURL+"/tab_complete", wrapper.PerformTabComplete)
 	m.HandleFunc("POST "+options.BaseURL+"/tebex/checkout", wrapper.TebexCheckout)
 
 	return m
@@ -2439,30 +1797,6 @@ func (response UpdatePlayerData404Response) VisitUpdatePlayerDataResponse(w http
 	return nil
 }
 
-type GetPlayerAltsRequestObject struct {
-	PlayerId string `json:"playerId"`
-}
-
-type GetPlayerAltsResponseObject interface {
-	VisitGetPlayerAltsResponse(w http.ResponseWriter) error
-}
-
-type GetPlayerAlts200JSONResponse PlayerAlts
-
-func (response GetPlayerAlts200JSONResponse) VisitGetPlayerAltsResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetPlayerAlts404Response = PlayerNotFoundResponse
-
-func (response GetPlayerAlts404Response) VisitGetPlayerAltsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
 type CyclePlayerApiKeyRequestObject struct {
 	PlayerId string `json:"playerId"`
 }
@@ -2542,112 +1876,6 @@ func (response GivePlayerItems404Response) VisitGivePlayerItemsResponse(w http.R
 	return nil
 }
 
-type GetBlockedPlayersRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   GetBlockedPlayersParams
-}
-
-type GetBlockedPlayersResponseObject interface {
-	VisitGetBlockedPlayersResponse(w http.ResponseWriter) error
-}
-
-type GetBlockedPlayers200JSONResponse struct {
-	Items      []BlockedPlayer `json:"items"`
-	Page       int32           `json:"page"`
-	TotalItems int64           `json:"totalItems"`
-}
-
-func (response GetBlockedPlayers200JSONResponse) VisitGetBlockedPlayersResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetBlocksBetweenPlayersRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-	Params   GetBlocksBetweenPlayersParams
-}
-
-type GetBlocksBetweenPlayersResponseObject interface {
-	VisitGetBlocksBetweenPlayersResponse(w http.ResponseWriter) error
-}
-
-type GetBlocksBetweenPlayers200JSONResponse []BlockedPlayer
-
-func (response GetBlocksBetweenPlayers200JSONResponse) VisitGetBlocksBetweenPlayersResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type UnblockPlayerRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-}
-
-type UnblockPlayerResponseObject interface {
-	VisitUnblockPlayerResponse(w http.ResponseWriter) error
-}
-
-type UnblockPlayer204Response struct {
-}
-
-func (response UnblockPlayer204Response) VisitUnblockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type UnblockPlayer404Response struct {
-}
-
-func (response UnblockPlayer404Response) VisitUnblockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type BlockPlayerRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-}
-
-type BlockPlayerResponseObject interface {
-	VisitBlockPlayerResponse(w http.ResponseWriter) error
-}
-
-type BlockPlayer201Response struct {
-}
-
-func (response BlockPlayer201Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(201)
-	return nil
-}
-
-type BlockPlayer400Response struct {
-}
-
-func (response BlockPlayer400Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(400)
-	return nil
-}
-
-type BlockPlayer404Response = PlayerNotFoundResponse
-
-func (response BlockPlayer404Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type BlockPlayer409Response struct {
-}
-
-func (response BlockPlayer409Response) VisitBlockPlayerResponse(w http.ResponseWriter) error {
-	w.WriteHeader(409)
-	return nil
-}
-
 type GetPlayerCosmeticsRequestObject struct {
 	PlayerId string `json:"playerId"`
 }
@@ -2702,181 +1930,6 @@ type BuyCosmetic409Response struct {
 
 func (response BuyCosmetic409Response) VisitBuyCosmeticResponse(w http.ResponseWriter) error {
 	w.WriteHeader(409)
-	return nil
-}
-
-type GetPlayerDisplayNameV2RequestObject struct {
-	PlayerId string `json:"playerId"`
-}
-
-type GetPlayerDisplayNameV2ResponseObject interface {
-	VisitGetPlayerDisplayNameV2Response(w http.ResponseWriter) error
-}
-
-type GetPlayerDisplayNameV2200JSONResponse DisplayNameV2
-
-func (response GetPlayerDisplayNameV2200JSONResponse) VisitGetPlayerDisplayNameV2Response(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetPlayerDisplayNameV2404Response = PlayerNotFoundResponse
-
-func (response GetPlayerDisplayNameV2404Response) VisitGetPlayerDisplayNameV2Response(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type GetFriendRequestsRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   GetFriendRequestsParams
-}
-
-type GetFriendRequestsResponseObject interface {
-	VisitGetFriendRequestsResponse(w http.ResponseWriter) error
-}
-
-type GetFriendRequests200JSONResponse struct {
-	Items      []FriendRequest `json:"items"`
-	Page       int32           `json:"page"`
-	TotalItems int64           `json:"totalItems"`
-}
-
-func (response GetFriendRequests200JSONResponse) VisitGetFriendRequestsResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type DeleteFriendRequestRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-	Params   DeleteFriendRequestParams
-}
-
-type DeleteFriendRequestResponseObject interface {
-	VisitDeleteFriendRequestResponse(w http.ResponseWriter) error
-}
-
-type DeleteFriendRequest200JSONResponse FriendRequest
-
-func (response DeleteFriendRequest200JSONResponse) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type DeleteFriendRequest404Response struct {
-}
-
-func (response DeleteFriendRequest404Response) VisitDeleteFriendRequestResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type SendFriendRequestRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-}
-
-type SendFriendRequestResponseObject interface {
-	VisitSendFriendRequestResponse(w http.ResponseWriter) error
-}
-
-type SendFriendRequest201JSONResponse struct {
-	// IsRequest Indicates whether it created a request (true), or accepted a friendship (false).
-	IsRequest bool `json:"isRequest"`
-}
-
-func (response SendFriendRequest201JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type SendFriendRequest401JSONResponse struct {
-	Code                 string `json:"code"`
-	FriendCount          int32  `json:"friendCount"`
-	Limit                int32  `json:"limit"`
-	Message              string `json:"message"`
-	OutgoingRequestCount int32  `json:"outgoingRequestCount"`
-}
-
-func (response SendFriendRequest401JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type SendFriendRequest404Response = PlayerNotFoundResponse
-
-func (response SendFriendRequest404Response) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
-	return nil
-}
-
-type SendFriendRequest409JSONResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-func (response SendFriendRequest409JSONResponse) VisitSendFriendRequestResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetPlayerFriendsRequestObject struct {
-	PlayerId string `json:"playerId"`
-	Params   GetPlayerFriendsParams
-}
-
-type GetPlayerFriendsResponseObject interface {
-	VisitGetPlayerFriendsResponse(w http.ResponseWriter) error
-}
-
-type GetPlayerFriends200JSONResponse struct {
-	Items      []PlayerFriend `json:"items"`
-	Page       int32          `json:"page"`
-	TotalItems int64          `json:"totalItems"`
-}
-
-func (response GetPlayerFriends200JSONResponse) VisitGetPlayerFriendsResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type RemoveFriendRequestObject struct {
-	PlayerId string `json:"playerId"`
-	TargetId string `json:"targetId"`
-}
-
-type RemoveFriendResponseObject interface {
-	VisitRemoveFriendResponse(w http.ResponseWriter) error
-}
-
-type RemoveFriend204Response struct {
-}
-
-func (response RemoveFriend204Response) VisitRemoveFriendResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type RemoveFriend404Response struct {
-}
-
-func (response RemoveFriend404Response) VisitRemoveFriendResponse(w http.ResponseWriter) error {
-	w.WriteHeader(404)
 	return nil
 }
 
@@ -3352,25 +2405,6 @@ func (response GetPlayerRecap404Response) VisitGetPlayerRecapResponse(w http.Res
 	return nil
 }
 
-type PerformTabCompleteRequestObject struct {
-	Body *PerformTabCompleteJSONRequestBody
-}
-
-type PerformTabCompleteResponseObject interface {
-	VisitPerformTabCompleteResponse(w http.ResponseWriter) error
-}
-
-type PerformTabComplete200JSONResponse struct {
-	Result []TabCompleteEntry `json:"result"`
-}
-
-func (response PerformTabComplete200JSONResponse) VisitPerformTabCompleteResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
 type TebexCheckoutRequestObject struct {
 	Body *TebexCheckoutJSONRequestBody
 }
@@ -3419,9 +2453,6 @@ type StrictServerInterface interface {
 	// Update player data
 	// (PATCH /players/{playerId})
 	UpdatePlayerData(ctx context.Context, request UpdatePlayerDataRequestObject) (UpdatePlayerDataResponseObject, error)
-	// Get the (ip-based) alt accounts for a player
-	// (GET /players/{playerId}/alts)
-	GetPlayerAlts(ctx context.Context, request GetPlayerAltsRequestObject) (GetPlayerAltsResponseObject, error)
 	// Cycle the API key for a player. Deletes all active keys and creates a new one
 	// (POST /players/{playerId}/api)
 	CyclePlayerApiKey(ctx context.Context, request CyclePlayerApiKeyRequestObject) (CyclePlayerApiKeyResponseObject, error)
@@ -3431,42 +2462,12 @@ type StrictServerInterface interface {
 	// Give a player items/currencies
 	// (POST /players/{playerId}/backpack)
 	GivePlayerItems(ctx context.Context, request GivePlayerItemsRequestObject) (GivePlayerItemsResponseObject, error)
-	// Get players blocked by this player - automatically filters out staff members
-	// (GET /players/{playerId}/blocks)
-	GetBlockedPlayers(ctx context.Context, request GetBlockedPlayersRequestObject) (GetBlockedPlayersResponseObject, error)
-	// Check if a player is blocked by another player
-	// (GET /players/{playerId}/blocks/player/{targetId})
-	GetBlocksBetweenPlayers(ctx context.Context, request GetBlocksBetweenPlayersRequestObject) (GetBlocksBetweenPlayersResponseObject, error)
-	// Unblock a player
-	// (DELETE /players/{playerId}/blocks/{targetId})
-	UnblockPlayer(ctx context.Context, request UnblockPlayerRequestObject) (UnblockPlayerResponseObject, error)
-	// Block a player
-	// (POST /players/{playerId}/blocks/{targetId})
-	BlockPlayer(ctx context.Context, request BlockPlayerRequestObject) (BlockPlayerResponseObject, error)
 	// Fetch all unlocked cosmetics for the given player
 	// (GET /players/{playerId}/cosmetics)
 	GetPlayerCosmetics(ctx context.Context, request GetPlayerCosmeticsRequestObject) (GetPlayerCosmeticsResponseObject, error)
 	// Buy a cosmetic for the provided price
 	// (POST /players/{playerId}/cosmetics)
 	BuyCosmetic(ctx context.Context, request BuyCosmeticRequestObject) (BuyCosmeticResponseObject, error)
-	// Get the display name for a player
-	// (GET /players/{playerId}/displayname)
-	GetPlayerDisplayNameV2(ctx context.Context, request GetPlayerDisplayNameV2RequestObject) (GetPlayerDisplayNameV2ResponseObject, error)
-	// Get a player's friend requests
-	// (GET /players/{playerId}/friendRequests)
-	GetFriendRequests(ctx context.Context, request GetFriendRequestsRequestObject) (GetFriendRequestsResponseObject, error)
-	// Delete a friend request (cancel outgoing or decline incoming)
-	// (DELETE /players/{playerId}/friendRequests/{targetId})
-	DeleteFriendRequest(ctx context.Context, request DeleteFriendRequestRequestObject) (DeleteFriendRequestResponseObject, error)
-	// Send a friend request to another player
-	// (POST /players/{playerId}/friendRequests/{targetId})
-	SendFriendRequest(ctx context.Context, request SendFriendRequestRequestObject) (SendFriendRequestResponseObject, error)
-	// Get a player's friends
-	// (GET /players/{playerId}/friends)
-	GetPlayerFriends(ctx context.Context, request GetPlayerFriendsRequestObject) (GetPlayerFriendsResponseObject, error)
-	// Remove a friend
-	// (DELETE /players/{playerId}/friends/{targetId})
-	RemoveFriend(ctx context.Context, request RemoveFriendRequestObject) (RemoveFriendResponseObject, error)
 	// Get the hypercube status for a player. Should only be used to display in-depth info.
 	// (GET /players/{playerId}/hypercube)
 	GetPlayerHypercube(ctx context.Context, request GetPlayerHypercubeRequestObject) (GetPlayerHypercubeResponseObject, error)
@@ -3518,9 +2519,6 @@ type StrictServerInterface interface {
 	// Get the recap data for a player
 	// (GET /recap/{playerId}/{year})
 	GetPlayerRecap(ctx context.Context, request GetPlayerRecapRequestObject) (GetPlayerRecapResponseObject, error)
-	// Generic player "completion" API. Used for completing player names or IDs.
-	// (POST /tab_complete)
-	PerformTabComplete(ctx context.Context, request PerformTabCompleteRequestObject) (PerformTabCompleteResponseObject, error)
 	// Create a Tebex checkout link for the given player & package
 	// (POST /tebex/checkout)
 	TebexCheckout(ctx context.Context, request TebexCheckoutRequestObject) (TebexCheckoutResponseObject, error)
@@ -3818,32 +2816,6 @@ func (sh *strictHandler) UpdatePlayerData(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// GetPlayerAlts operation middleware
-func (sh *strictHandler) GetPlayerAlts(w http.ResponseWriter, r *http.Request, playerId string) {
-	var request GetPlayerAltsRequestObject
-
-	request.PlayerId = playerId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPlayerAlts(ctx, request.(GetPlayerAltsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPlayerAlts")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPlayerAltsResponseObject); ok {
-		if err := validResponse.VisitGetPlayerAltsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // CyclePlayerApiKey operation middleware
 func (sh *strictHandler) CyclePlayerApiKey(w http.ResponseWriter, r *http.Request, playerId string) {
 	var request CyclePlayerApiKeyRequestObject
@@ -3929,115 +2901,6 @@ func (sh *strictHandler) GivePlayerItems(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-// GetBlockedPlayers operation middleware
-func (sh *strictHandler) GetBlockedPlayers(w http.ResponseWriter, r *http.Request, playerId string, params GetBlockedPlayersParams) {
-	var request GetBlockedPlayersRequestObject
-
-	request.PlayerId = playerId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetBlockedPlayers(ctx, request.(GetBlockedPlayersRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetBlockedPlayers")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetBlockedPlayersResponseObject); ok {
-		if err := validResponse.VisitGetBlockedPlayersResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetBlocksBetweenPlayers operation middleware
-func (sh *strictHandler) GetBlocksBetweenPlayers(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params GetBlocksBetweenPlayersParams) {
-	var request GetBlocksBetweenPlayersRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetBlocksBetweenPlayers(ctx, request.(GetBlocksBetweenPlayersRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetBlocksBetweenPlayers")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetBlocksBetweenPlayersResponseObject); ok {
-		if err := validResponse.VisitGetBlocksBetweenPlayersResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UnblockPlayer operation middleware
-func (sh *strictHandler) UnblockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
-	var request UnblockPlayerRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UnblockPlayer(ctx, request.(UnblockPlayerRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UnblockPlayer")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UnblockPlayerResponseObject); ok {
-		if err := validResponse.VisitUnblockPlayerResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// BlockPlayer operation middleware
-func (sh *strictHandler) BlockPlayer(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
-	var request BlockPlayerRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.BlockPlayer(ctx, request.(BlockPlayerRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "BlockPlayer")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(BlockPlayerResponseObject); ok {
-		if err := validResponse.VisitBlockPlayerResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetPlayerCosmetics operation middleware
 func (sh *strictHandler) GetPlayerCosmetics(w http.ResponseWriter, r *http.Request, playerId string) {
 	var request GetPlayerCosmeticsRequestObject
@@ -4090,168 +2953,6 @@ func (sh *strictHandler) BuyCosmetic(w http.ResponseWriter, r *http.Request, pla
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(BuyCosmeticResponseObject); ok {
 		if err := validResponse.VisitBuyCosmeticResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetPlayerDisplayNameV2 operation middleware
-func (sh *strictHandler) GetPlayerDisplayNameV2(w http.ResponseWriter, r *http.Request, playerId string) {
-	var request GetPlayerDisplayNameV2RequestObject
-
-	request.PlayerId = playerId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPlayerDisplayNameV2(ctx, request.(GetPlayerDisplayNameV2RequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPlayerDisplayNameV2")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPlayerDisplayNameV2ResponseObject); ok {
-		if err := validResponse.VisitGetPlayerDisplayNameV2Response(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetFriendRequests operation middleware
-func (sh *strictHandler) GetFriendRequests(w http.ResponseWriter, r *http.Request, playerId string, params GetFriendRequestsParams) {
-	var request GetFriendRequestsRequestObject
-
-	request.PlayerId = playerId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetFriendRequests(ctx, request.(GetFriendRequestsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetFriendRequests")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetFriendRequestsResponseObject); ok {
-		if err := validResponse.VisitGetFriendRequestsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteFriendRequest operation middleware
-func (sh *strictHandler) DeleteFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string, params DeleteFriendRequestParams) {
-	var request DeleteFriendRequestRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteFriendRequest(ctx, request.(DeleteFriendRequestRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteFriendRequest")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteFriendRequestResponseObject); ok {
-		if err := validResponse.VisitDeleteFriendRequestResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// SendFriendRequest operation middleware
-func (sh *strictHandler) SendFriendRequest(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
-	var request SendFriendRequestRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.SendFriendRequest(ctx, request.(SendFriendRequestRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SendFriendRequest")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(SendFriendRequestResponseObject); ok {
-		if err := validResponse.VisitSendFriendRequestResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetPlayerFriends operation middleware
-func (sh *strictHandler) GetPlayerFriends(w http.ResponseWriter, r *http.Request, playerId string, params GetPlayerFriendsParams) {
-	var request GetPlayerFriendsRequestObject
-
-	request.PlayerId = playerId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPlayerFriends(ctx, request.(GetPlayerFriendsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPlayerFriends")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPlayerFriendsResponseObject); ok {
-		if err := validResponse.VisitGetPlayerFriendsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// RemoveFriend operation middleware
-func (sh *strictHandler) RemoveFriend(w http.ResponseWriter, r *http.Request, playerId string, targetId string) {
-	var request RemoveFriendRequestObject
-
-	request.PlayerId = playerId
-	request.TargetId = targetId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.RemoveFriend(ctx, request.(RemoveFriendRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "RemoveFriend")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(RemoveFriendResponseObject); ok {
-		if err := validResponse.VisitRemoveFriendResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4739,37 +3440,6 @@ func (sh *strictHandler) GetPlayerRecap(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlayerRecapResponseObject); ok {
 		if err := validResponse.VisitGetPlayerRecapResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// PerformTabComplete operation middleware
-func (sh *strictHandler) PerformTabComplete(w http.ResponseWriter, r *http.Request) {
-	var request PerformTabCompleteRequestObject
-
-	var body PerformTabCompleteJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.PerformTabComplete(ctx, request.(PerformTabCompleteRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "PerformTabComplete")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(PerformTabCompleteResponseObject); ok {
-		if err := validResponse.VisitPerformTabCompleteResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
