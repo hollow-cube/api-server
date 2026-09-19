@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
@@ -68,6 +69,14 @@ var allowedProtocolVersions = [...]int{
 	774, // 1.21.11
 	775, // 26.1, 26.1.1
 	776, // 26.2
+}
+
+// Let in only through the staging proxy and in local development, so a client version can be tried
+// out before production accepts it. Proxies identify themselves by pod name.
+const stagingProxyPrefix = "mapmaker-proxy-staging-"
+
+var stagingProtocolVersions = [...]int{
+	777, // 26.3
 }
 
 type serverImpl struct {
@@ -145,7 +154,7 @@ func (s *serverImpl) CreateSession(ctx context.Context, request CreateSessionReq
 		}}, nil
 	}
 
-	if request.Body.ProtocolVersion != nil && !slices.Contains(allowedProtocolVersions[:], *request.Body.ProtocolVersion) {
+	if request.Body.ProtocolVersion != nil && !s.protocolVersionAllowed(request.Body.Proxy, *request.Body.ProtocolVersion) {
 		return &CreateSession403JSONResponse{SessionDeniedResponseJSONResponse{
 			Type:    "wrong_version",
 			Message: wrongVersionMessage,
@@ -621,4 +630,12 @@ func sessionToApi(session *db.PlayerSession) PlayerSession {
 		},
 		Presence: presence,
 	}
+}
+
+func (s *serverImpl) protocolVersionAllowed(proxy string, protocolVersion int) bool {
+	if slices.Contains(allowedProtocolVersions[:], protocolVersion) {
+		return true
+	}
+	staging := s.config.Env == "tilt" || strings.HasPrefix(proxy, stagingProxyPrefix)
+	return staging && slices.Contains(stagingProtocolVersions[:], protocolVersion)
 }
