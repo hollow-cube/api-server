@@ -277,6 +277,7 @@ func (t *Tracker) AllocServerForMap(ctx context.Context, mapId, isolateOverride 
 	if server.StatusV2 != string(Active) {
 		return nil, fmt.Errorf("server failed to become ready")
 	}
+	t.learnProtocolVersion(ctx, server, server.ClusterIp)
 
 	mapIsolateCreationDuration.Observe(time.Since(creationStart).Seconds())
 	return server, nil

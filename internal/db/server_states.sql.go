@@ -54,7 +54,7 @@ func (q *Queries) DeleteServerState(ctx context.Context, id string) error {
 }
 
 const getFirstServerStateByMap = `-- name: GetFirstServerStateByMap :one
-select server_states.id, server_states.role, server_states.start_time, server_states.status, server_states.cluster_ip, server_states.status_v2, server_states.status_since
+select server_states.id, server_states.role, server_states.start_time, server_states.status, server_states.cluster_ip, server_states.status_v2, server_states.status_since, server_states.protocol_version
 from server_states
          inner join public.map_states ms on server_states.id = ms.server
 where map_id = $1
@@ -72,12 +72,13 @@ func (q *Queries) GetFirstServerStateByMap(ctx context.Context, mapID string) (*
 		&i.ClusterIp,
 		&i.StatusV2,
 		&i.StatusSince,
+		&i.ProtocolVersion,
 	)
 	return &i, err
 }
 
 const getServerState = `-- name: GetServerState :one
-select id, role, start_time, status, cluster_ip, status_v2, status_since
+select id, role, start_time, status, cluster_ip, status_v2, status_since, protocol_version
 from server_states
 where id = $1
 `
@@ -93,6 +94,7 @@ func (q *Queries) GetServerState(ctx context.Context, id string) (*ServerState, 
 		&i.ClusterIp,
 		&i.StatusV2,
 		&i.StatusSince,
+		&i.ProtocolVersion,
 	)
 	return &i, err
 }
@@ -100,7 +102,7 @@ func (q *Queries) GetServerState(ctx context.Context, id string) (*ServerState, 
 const insertServerState = `-- name: InsertServerState :one
 insert into server_states(id, role, status, cluster_ip)
 values ($1, $2, $3, $4)
-returning id, role, start_time, status, cluster_ip, status_v2, status_since
+returning id, role, start_time, status, cluster_ip, status_v2, status_since, protocol_version
 `
 
 type InsertServerStateParams struct {
@@ -126,6 +128,7 @@ func (q *Queries) InsertServerState(ctx context.Context, arg InsertServerStatePa
 		&i.ClusterIp,
 		&i.StatusV2,
 		&i.StatusSince,
+		&i.ProtocolVersion,
 	)
 	return &i, err
 }
@@ -181,6 +184,17 @@ func (q *Queries) ListServersWithRoleExcept(ctx context.Context, role string, ex
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateServerProtocolVersion = `-- name: UpdateServerProtocolVersion :exec
+update server_states
+set protocol_version = $2
+where id = $1
+`
+
+func (q *Queries) UpdateServerProtocolVersion(ctx context.Context, iD string, protocolVersion int32) error {
+	_, err := q.db.Exec(ctx, updateServerProtocolVersion, iD, protocolVersion)
+	return err
 }
 
 const updateServerState = `-- name: UpdateServerState :exec

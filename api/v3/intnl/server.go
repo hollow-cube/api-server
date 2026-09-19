@@ -342,6 +342,7 @@ func (s *serverImpl) JoinHub(ctx context.Context, request JoinHubRequestObject) 
 	return JoinHub200JSONResponse{MapJoinSuccessJSONResponse{
 		Server:          state.ID,
 		ServerClusterIP: state.ClusterIp,
+		ProtocolVersion: int(state.ProtocolVersion),
 	}}, nil
 }
 
@@ -376,6 +377,7 @@ func (s *serverImpl) JoinMap(ctx context.Context, request JoinMapRequestObject) 
 	return JoinMap200JSONResponse{MapJoinSuccessJSONResponse{
 		Server:          state.ID,
 		ServerClusterIP: state.ClusterIp,
+		ProtocolVersion: int(state.ProtocolVersion),
 	}}, nil
 }
 

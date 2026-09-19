@@ -34,6 +34,11 @@ set status       = $2,
     status_since = $5
 where id = $1;
 
+-- name: UpdateServerProtocolVersion :exec
+update server_states
+set protocol_version = $2
+where id = $1;
+
 -- name: UpdateServerStatus :exec
 update server_states
 set status_v2    = $2,

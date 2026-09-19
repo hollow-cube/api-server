@@ -85,6 +85,7 @@ type BadRequest struct {
 
 // MapJoinSuccess defines model for MapJoinSuccess.
 type MapJoinSuccess struct {
+	ProtocolVersion int    `json:"protocolVersion"`
 	Server          string `json:"server"`
 	ServerClusterIP string `json:"serverClusterIP"`
 }
@@ -662,6 +663,7 @@ type BadRequestJSONResponse struct {
 }
 
 type MapJoinSuccessJSONResponse struct {
+	ProtocolVersion int    `json:"protocolVersion"`
 	Server          string `json:"server"`
 	ServerClusterIP string `json:"serverClusterIP"`
 }

@@ -87,11 +87,12 @@ type PlayerSession struct {
 }
 
 type ServerState struct {
-	ID          string
-	Role        string
-	StartTime   time.Time
-	Status      int32
-	ClusterIp   string
-	StatusV2    string
-	StatusSince time.Time
+	ID              string
+	Role            string
+	StartTime       time.Time
+	Status          int32
+	ClusterIp       string
+	StatusV2        string
+	StatusSince     time.Time
+	ProtocolVersion int32
 }

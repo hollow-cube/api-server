@@ -456,10 +456,12 @@ components:
         application/json:
           schema:
             type: object
-            required: [ server, serverClusterIP ]
+            required: [ server, serverClusterIP, protocolVersion ]
             properties:
               server: { type: string }
               serverClusterIP: { type: string }
+              # 0 until the tracker has pinged the server.
+              protocolVersion: { type: integer }
     NoServerAvailable:
       description: No server is available to satisfy request
   parameters:

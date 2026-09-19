@@ -249,6 +249,11 @@ func (t *Tracker) handlePodUpdated(ctx context.Context, pod *coreV1.Pod) error {
 		return t.handlePodAdded(ctx, pod)
 	}
 
+	// Before the status below can make it active, so a server is offered with what it speaks.
+	if state.ProtocolVersion == 0 && newStatus == Ready && pod.Status.PodIP != "" {
+		t.learnProtocolVersion(ctx, state, pod.Status.PodIP)
+	}
+
 	var changed bool
 	if state.ClusterIp != pod.Status.PodIP {
 		t.log.Infow("server cluster ip changed", "from", state.ClusterIp, "to", pod.Status.PodIP)
@@ -315,6 +320,20 @@ func (t *Tracker) handlePodUpdated(ctx context.Context, pod *coreV1.Pod) error {
 	}
 
 	return nil
+}
+
+// learnProtocolVersion leaves the version at 0 when the ping fails, so the next sync tries again.
+func (t *Tracker) learnProtocolVersion(ctx context.Context, state *db.ServerState, ip string) {
+	protocolVersion, err := pingProtocolVersion(ctx, ip)
+	if err != nil {
+		t.log.Warnw("failed to ping server for its protocol version", "id", state.ID, "ip", ip, "error", err)
+		return
+	}
+	if err = t.queries.UpdateServerProtocolVersion(ctx, state.ID, protocolVersion); err != nil {
+		t.log.Errorw("failed to store server protocol version", "id", state.ID, "error", err)
+		return
+	}
+	state.ProtocolVersion = protocolVersion
 }
 
 type serverPlayers struct {
