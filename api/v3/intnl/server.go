@@ -69,15 +69,14 @@ var allowedProtocolVersions = [...]int{
 	774, // 1.21.11
 	775, // 26.1, 26.1.1
 	776, // 26.2
+	777, // 26.3
 }
 
 // Let in only through the staging proxy and in local development, so a client version can be tried
 // out before production accepts it. Proxies identify themselves by pod name.
 const stagingProxyPrefix = "mapmaker-proxy-staging-"
 
-var stagingProtocolVersions = [...]int{
-	777, // 26.3
-}
+var stagingProtocolVersions = [...]int{}
 
 type serverImpl struct {
 	invites   *handler.InviteManager
