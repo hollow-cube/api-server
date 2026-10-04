@@ -83,23 +83,6 @@ type S3 struct {
 	MapsBucket string `mapstructure:"maps_bucket"`
 }
 
-// DefaultMaxInlineSegmentBytes is the default replay segment inline threshold
-// (replay.max_inline_segment_bytes). What keeps a segment in the heap row is
-// postgres' TOAST threshold of roughly 2 KiB, not the 8 KiB page size: a larger
-// value is pushed out-of-line into the TOAST table anyway, which costs a
-// separate write and a chunk per 1996 bytes without ever being cheaper than
-// object storage. Zero disables inlining entirely; segments above the threshold
-// keep going to object storage.
-const DefaultMaxInlineSegmentBytes = 2 * 1024
-
-type Replay struct {
-	MaxPreambleBytes      int64 `mapstructure:"max_preamble_bytes"`
-	MaxSegmentBytes       int64 `mapstructure:"max_segment_bytes"`
-	MaxCommitBytes        int64 `mapstructure:"max_commit_bytes"`
-	MaxCompactedBytes     int64 `mapstructure:"max_compacted_bytes"`
-	MaxInlineSegmentBytes int64 `mapstructure:"max_inline_segment_bytes"`
-}
-
 type MapIsolate struct {
 	Disabled  bool `mapstructure:"disabled"`
 	Instances map[string]struct {
@@ -161,7 +144,6 @@ type Config struct {
 	PunishmentLadders []PunishmentLadder `mapstructure:"punishment_ladders"`
 	Tebex             Tebex              `mapstructure:"tebex"`
 	S3                S3                 `mapstructure:"s3"`
-	Replay            Replay             `mapstructure:"replay"`
 	Discord           Discord            `mapstructure:"discord"`
 	Keyring           Keyring            `mapstructure:"keyring"`
 	Auth              Auth               `mapstructure:"auth"`

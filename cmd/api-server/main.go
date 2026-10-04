@@ -115,11 +115,6 @@ func main() {
 				fx.ResultTags(`name:"object-mapmaker"`),
 			),
 			fx.Annotate(
-				object.NewS3ClientFactory("mapmaker-replays"),
-				fx.As(new(object.Client)),
-				fx.ResultTags(`name:"object-mapmaker-replays"`),
-			),
-			fx.Annotate(
 				object.NewS3ClientFactory("legacy-maps-v3"),
 				fx.As(new(object.Client)),
 				fx.ResultTags(`name:"object-mapmaker-legacy-maps"`),

@@ -33,8 +33,7 @@ type ServerParams struct {
 	JetStream    *natsutil.JetStreamWrapper
 	Redis        rueidis.Client
 
-	MapsBucket   object.Client `name:"object-mapmaker"`
-	ReplayBucket object.Client `name:"object-mapmaker-replays"`
+	MapsBucket object.Client `name:"object-mapmaker"`
 
 	Notifications notification.Manager
 	Interactions  *interaction.Handler
@@ -50,9 +49,7 @@ type Server struct {
 	jetStream    *natsutil.JetStreamWrapper
 	redis        rueidis.Client
 
-	mapsBucket   object.Client
-	replayBucket object.Client
-	replayLimits config.Replay
+	mapsBucket object.Client
 
 	notifications notification.Manager
 	interactions  *interaction.Handler
@@ -70,8 +67,6 @@ func NewServer(p ServerParams) (*Server, error) {
 		jetStream:     p.JetStream,
 		redis:         p.Redis,
 		mapsBucket:    p.MapsBucket,
-		replayBucket:  p.ReplayBucket,
-		replayLimits:  p.Config.Replay,
 		notifications: p.Notifications,
 		interactions:  p.Interactions,
 		worlds:        p.Worlds,
