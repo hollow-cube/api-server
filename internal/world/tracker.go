@@ -11,6 +11,7 @@ import (
 	"github.com/hollow-cube/api-server/internal/pkg/model"
 	"github.com/hollow-cube/api-server/internal/pkg/natsutil"
 	"github.com/hollow-cube/api-server/internal/pkg/server"
+	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -78,7 +79,21 @@ func NewTracker(lc fx.Lifecycle, p TrackerParams) (*Tracker, error) {
 	return t, nil
 }
 
-func (t *Tracker) FindServerForMap(ctx context.Context, _ string) (*db.ServerState, error) {
+// FindServerForMap returns the server a join for the given map should go to.
+//
+// An editing join follows the map's editing world even when its server is no longer ready
+// (ie terminating), because a second editor world elsewhere would overwrite the first one's saves.
+func (t *Tracker) FindServerForMap(ctx context.Context, mapID string, editing bool) (*db.ServerState, error) {
+	if editing {
+		existing, err := t.sessionStore.GetServerStateByEditingWorld(ctx, mapID)
+		if err == nil {
+			t.log.Infow("found editing world for map", "mapId", mapID, "server", existing.ID, "status", existing.StatusV2)
+			return existing, nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("failed to find editing world for map: %w", err)
+		}
+	}
+
 	// TODO: Selecting a map server needs to be a lot more complicated.
 	mapServers, err := t.serverTracker.GetActiveServersWithRole(ctx, "map", "")
 	if err != nil {
@@ -152,7 +167,17 @@ func (t *Tracker) handleMapWorldUpdate(ctx context.Context, msg jetstream.Msg) e
 }
 
 func (t *Tracker) handleMapWorldCreated(ctx context.Context, msg UpdateMessage) error {
-	err := t.sessionStore.InsertMapWorld(ctx, msg.WorldID, msg.MapID, msg.ServerID)
+	var worldType *string
+	if msg.Type != "" {
+		worldType = &msg.Type
+	}
+	// A world the java api-server already registered keeps its row (and its type), this is a no-op for it.
+	err := t.sessionStore.InsertMapWorld(ctx, db.InsertMapWorldParams{
+		ID:       msg.WorldID,
+		MapID:    msg.MapID,
+		ServerID: msg.ServerID,
+		Type:     worldType,
+	})
 	if err != nil {
 		// We dont really have a fail recourse here, just log for now.
 		t.log.Errorw("failed to insert map world", "error", err)

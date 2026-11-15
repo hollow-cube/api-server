@@ -399,7 +399,9 @@ func (s *serverImpl) findServerForMap(ctx context.Context, request JoinMapReques
 		return s.serverTracker.AllocServerForMap(ctx, request.Body.Map, isolateOverride)
 	}
 
-	return s.worldTracker.FindServerForMap(ctx, request.Body.Map)
+	// Same states the map server opens an editor world for (Presence.MAP_BUILDING_STATES in mapmaker).
+	editing := request.Body.State == "editing" || request.Body.State == "testing"
+	return s.worldTracker.FindServerForMap(ctx, request.Body.Map, editing)
 }
 
 func (s *serverImpl) GetServerStats(ctx context.Context, request GetServerStatsRequestObject) (GetServerStatsResponseObject, error) {

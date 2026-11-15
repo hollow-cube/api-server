@@ -21,6 +21,15 @@ from server_states
 where map_id = $1
   and status_v2 = 'active';
 
+-- name: GetServerStateByEditingWorld :one
+-- Not filtered on status: a terminating server is not ready but still holds its worlds.
+select server_states.*
+from server_states
+         inner join map_worlds mw on server_states.id = mw.server_id
+where mw.map_id = $1
+  and mw.type = 'editing'
+  and server_states.cluster_ip != '';
+
 -- name: InsertServerState :one
 insert into server_states(id, role, status, cluster_ip)
 values ($1, $2, $3, $4)

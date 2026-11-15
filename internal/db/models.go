@@ -66,6 +66,7 @@ type MapWorld struct {
 	MapID     string
 	ServerID  string
 	CreatedAt time.Time
+	Type      *string
 }
 
 type PlayerSession struct {

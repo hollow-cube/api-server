@@ -21,7 +21,7 @@ func (q *Queries) DeleteMapWorld(ctx context.Context, id string) error {
 }
 
 const getWorldsForMap = `-- name: GetWorldsForMap :many
-select id, map_id, server_id, created_at
+select id, map_id, server_id, created_at, type
 from map_worlds
 where map_id = $1
 `
@@ -40,6 +40,7 @@ func (q *Queries) GetWorldsForMap(ctx context.Context, mapID string) ([]*MapWorl
 			&i.MapID,
 			&i.ServerID,
 			&i.CreatedAt,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -52,12 +53,24 @@ func (q *Queries) GetWorldsForMap(ctx context.Context, mapID string) ([]*MapWorl
 }
 
 const insertMapWorld = `-- name: InsertMapWorld :exec
-insert into map_worlds (id, map_id, server_id)
-values ($1, $2, $3)
-returning id, map_id, server_id, created_at
+insert into map_worlds (id, map_id, server_id, type)
+values ($1, $2, $3, $4)
+on conflict (id) do nothing
 `
 
-func (q *Queries) InsertMapWorld(ctx context.Context, iD string, mapID string, serverID string) error {
-	_, err := q.db.Exec(ctx, insertMapWorld, iD, mapID, serverID)
+type InsertMapWorldParams struct {
+	ID       string
+	MapID    string
+	ServerID string
+	Type     *string
+}
+
+func (q *Queries) InsertMapWorld(ctx context.Context, arg InsertMapWorldParams) error {
+	_, err := q.db.Exec(ctx, insertMapWorld,
+		arg.ID,
+		arg.MapID,
+		arg.ServerID,
+		arg.Type,
+	)
 	return err
 }

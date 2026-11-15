@@ -99,6 +99,32 @@ func (q *Queries) GetServerState(ctx context.Context, id string) (*ServerState, 
 	return &i, err
 }
 
+const getServerStateByEditingWorld = `-- name: GetServerStateByEditingWorld :one
+select server_states.id, server_states.role, server_states.start_time, server_states.status, server_states.cluster_ip, server_states.status_v2, server_states.status_since, server_states.protocol_version
+from server_states
+         inner join map_worlds mw on server_states.id = mw.server_id
+where mw.map_id = $1
+  and mw.type = 'editing'
+  and server_states.cluster_ip != ''
+`
+
+// Not filtered on status: a terminating server is not ready but still holds its worlds.
+func (q *Queries) GetServerStateByEditingWorld(ctx context.Context, mapID string) (*ServerState, error) {
+	row := q.db.QueryRow(ctx, getServerStateByEditingWorld, mapID)
+	var i ServerState
+	err := row.Scan(
+		&i.ID,
+		&i.Role,
+		&i.StartTime,
+		&i.Status,
+		&i.ClusterIp,
+		&i.StatusV2,
+		&i.StatusSince,
+		&i.ProtocolVersion,
+	)
+	return &i, err
+}
+
 const insertServerState = `-- name: InsertServerState :one
 insert into server_states(id, role, status, cluster_ip)
 values ($1, $2, $3, $4)
