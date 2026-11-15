@@ -36,8 +36,8 @@ has already been deployed. We do not use down migrations currently.
 
 DB changes must always be at least one version backwards compatible to support rolling updates.
 
-> **Note on Tilt:** The service auto-restarts when you run `migrate` commands, which applies the migration
-> automatically. Disable the Tilt resource while writing a migration, then re-enable it once done.
+> **Note:** The service does not apply these itself. The migration files here are the schema sqlc generates against;
+> the java api-server (mapmaker) applies the schema, so a migration added here has to be mirrored there.
 
 ## Communication
 

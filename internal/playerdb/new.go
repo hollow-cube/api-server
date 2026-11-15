@@ -4,26 +4,15 @@ package playerdb
 
 import (
 	"context"
-	"database/sql"
-	"embed"
-	"errors"
 	"fmt"
-	"os"
 
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/hollow-cube/api-server/internal/pkg/metric"
 	postgresUtil "github.com/hollow-cube/api-server/internal/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 )
 
 var ErrNoRows = pgx.ErrNoRows
-
-//go:embed migrations/*.sql
-var migrationFS embed.FS
 
 // Store is a wrapper around the generated Queries type that includes metrics writing.
 // Some query methods are private with public overrides for this (e.g., addPlayerExperience and AddPlayerExperience)
@@ -58,59 +47,6 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	}
 	if err = pool.Ping(ctx); err != nil {
 		return nil, nil, fmt.Errorf("failed to ping postgres: %w", err)
-	}
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", databaseUri)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "player-service_migrations",
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrations")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
-	}
-
-	targetVersion, err := migrateSource.First()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get latest migration version: %w", err)
-	}
-	for {
-		next, err := migrateSource.Next(targetVersion)
-		if errors.Is(err, os.ErrNotExist) {
-			break
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		targetVersion = next
-	}
-
-	version, dirty, err := m.Version()
-	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
-		return nil, nil, fmt.Errorf("failed to get current migration version: %w", err)
-	}
-	if dirty || version < targetVersion {
-		// Apply all migrations up our current version
-		err = m.Up()
-		if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-			return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
-		}
-	}
-	if version > targetVersion {
-		zap.S().Infow("database has later version than I know about!", "target_version", targetVersion, "current_version", version)
 	}
 
 	return &Store{Queries: New(pool), metrics: metrics}, pool, nil

@@ -4,23 +4,14 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"embed"
-	"errors"
 	"fmt"
 
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	postgresUtil "github.com/hollow-cube/api-server/internal/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrNoRows = pgx.ErrNoRows
-
-//go:embed migrations/*.sql
-var migrationFS embed.FS
 
 func NewQuerySet(ctx context.Context, databaseUri string) (*Queries, *pgxpool.Pool, error) {
 	// Config options
@@ -38,35 +29,6 @@ func NewQuerySet(ctx context.Context, databaseUri string) (*Queries, *pgxpool.Po
 	}
 	if err = pool.Ping(ctx); err != nil {
 		return nil, nil, fmt.Errorf("failed to ping postgres: %w", err)
-	}
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", databaseUri)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "session-service_migrations",
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrations")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
-	}
-
-	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
 	return New(pool), pool, nil

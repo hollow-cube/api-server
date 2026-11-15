@@ -4,14 +4,8 @@ package mapdb
 
 import (
 	"context"
-	"database/sql"
-	"embed"
-	"errors"
 	"fmt"
 
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/hollow-cube/api-server/internal/pkg/metric"
 	postgresUtil "github.com/hollow-cube/api-server/internal/pkg/postgres"
 	"github.com/jackc/pgx/v5"
@@ -19,9 +13,6 @@ import (
 )
 
 var ErrNoRows = pgx.ErrNoRows
-
-//go:embed migrations/*.sql
-var migrationFS embed.FS
 
 // Store is a wrapper around the generated Queries type that includes metrics writing.
 // Some query methods are private with public overrides for this (e.g., addPlayerExperience and AddPlayerExperience)
@@ -43,33 +34,6 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 	config, err := pgxpool.ParseConfig(databaseUri)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse postgres config: %w", err)
-	}
-
-	// Create a dedicated connection for migrations because migrate wont take a pgx conn (needs database/sql conn)
-	migrateConn, err := sql.Open("pgx", databaseUri)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
-	}
-	defer migrateConn.Close()
-
-	if err := migrateConn.PingContext(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to ping postgres for migrations: %w", err)
-	}
-
-	// Create migrator using above db conn and the embed fs of the migrate directory.
-	migrateDriver, err := migratepgx.WithInstance(migrateConn, &migratepgx.Config{
-		MigrationsTable: "map-service_migrations",
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate driver: %w", err)
-	}
-	migrateSource, err := iofs.New(migrationFS, "migrations")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("migration-fs", migrateSource, "migration-db", migrateDriver)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
 	config.ConnConfig.Tracer = postgresUtil.NewSqlCTracer()
@@ -95,10 +59,8 @@ func NewQuerySet(ctx context.Context, metrics metric.Writer, databaseUri string)
 		return nil, nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
 
-	// Apply all migrations up to the latest
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return nil, nil, fmt.Errorf("failed to apply migrations: %w", err)
+	if err = pool.Ping(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to ping postgres: %w", err)
 	}
 
 	return &Store{Queries: New(pool), metrics: metrics}, pool, nil
