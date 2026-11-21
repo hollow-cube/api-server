@@ -4,7 +4,6 @@ package v4Internal
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/hollow-cube/api-server/pkg/ox/runtime"
 )
@@ -19,24 +18,11 @@ type RegisterParams struct {
 func RegisterRoutes(s *Server, params RegisterParams) {
 	h := &handlers{server: s}
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/auth/grant", h.createLaunchGrant)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/search", h.searchHeadDatabase)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/head-database/{category}", h.getHeadDatabaseCategory)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/interactions/commands", h.getCommands)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/interactions", h.executeInteraction)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/top-times", h.getPlayerTopTimes)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/hub/leaderboard/{leaderboardId}", h.getGlobalLeaderboard)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/leaderboard", h.getMapLeaderboard)
-	params.Mux.HandleFunc("DELETE "+params.BaseURL+"/maps/{mapId}/leaderboard", h.deleteMapLeaderboard)
-	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/leaderboard", h.restoreMapLeaderboard)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files", h.listMapFiles)
 	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/files/{path...}", h.getMapFile)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/search", h.searchMaps)
-	params.Mux.HandleFunc("POST "+params.BaseURL+"/maps/search/progress", h.searchMapProgress)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/players/{playerId}/map-history", h.getPlayerMapHistory)
 	params.Mux.HandleFunc("POST "+params.BaseURL+"/players", h.createPlayerData)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/latest", h.getLatestSaveState)
-	params.Mux.HandleFunc("GET "+params.BaseURL+"/maps/{mapId}/states/{playerId}/best", h.getBestSaveState)
-	params.Mux.HandleFunc("PUT "+params.BaseURL+"/maps/{mapId}/states/{playerId}/{stateId}", h.upsertSaveState)
 }
 
 // handlers wraps the server and provides HTTP handler methods.
@@ -56,52 +42,6 @@ func (h *handlers) createLaunchGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 201, resp)
-}
-
-func (h *handlers) searchHeadDatabase(w http.ResponseWriter, r *http.Request) {
-	var req SearchHeadDatabaseRequest
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: page")
-		return
-	} else {
-		req.Page = v
-	}
-	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
-		return
-	} else {
-		req.PageSize = v
-	}
-	req.Query = r.URL.Query().Get("query")
-	resp, err := h.server.SearchHeadDatabase(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getHeadDatabaseCategory(w http.ResponseWriter, r *http.Request) {
-	var req GetHeadDatabaseCategoryRequest
-	req.Category = r.PathValue("category")
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: page")
-		return
-	} else {
-		req.Page = v
-	}
-	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
-		return
-	} else {
-		req.PageSize = v
-	}
-	resp, err := h.server.GetHeadDatabaseCategory(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
 }
 
 func (h *handlers) getCommands(w http.ResponseWriter, r *http.Request) {
@@ -127,82 +67,6 @@ func (h *handlers) executeInteraction(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteJSON(w, 200, resp)
 }
 
-func (h *handlers) getPlayerTopTimes(w http.ResponseWriter, r *http.Request) {
-	var req PlayerPaginatedRequest
-	req.PlayerID = r.PathValue("playerId")
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: page")
-		return
-	} else {
-		req.Page = v
-	}
-	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
-		return
-	} else {
-		req.PageSize = v
-	}
-	resp, err := h.server.GetPlayerTopTimes(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getGlobalLeaderboard(w http.ResponseWriter, r *http.Request) {
-	var req GetGlobalLeaderboardRequest
-	req.LeaderboardID = r.PathValue("leaderboardId")
-	req.PlayerID = r.URL.Query().Get("playerId")
-	resp, err := h.server.GetGlobalLeaderboard(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getMapLeaderboard(w http.ResponseWriter, r *http.Request) {
-	var req GetMapLeaderboardRequest
-	req.MapID = r.PathValue("mapId")
-	req.PlayerID = r.URL.Query().Get("playerId")
-	resp, err := h.server.GetMapLeaderboard(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) deleteMapLeaderboard(w http.ResponseWriter, r *http.Request) {
-	var req DeleteMapLeaderboardRequest
-	req.MapID = r.PathValue("mapId")
-	req.PlayerID = r.URL.Query().Get("playerId")
-	if v, err := strconv.ParseBool(r.URL.Query().Get("notify")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: notify")
-		return
-	} else {
-		req.Notify = v
-	}
-	err := h.server.DeleteMapLeaderboard(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(204)
-}
-
-func (h *handlers) restoreMapLeaderboard(w http.ResponseWriter, r *http.Request) {
-	var req MapRequest
-	req.MapID = r.PathValue("mapId")
-	err := h.server.RestoreMapLeaderboard(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(200)
-}
-
 func (h *handlers) listMapFiles(w http.ResponseWriter, r *http.Request) {
 	var req MapRequest
 	req.MapID = r.PathValue("mapId")
@@ -226,105 +90,6 @@ func (h *handlers) getMapFile(w http.ResponseWriter, r *http.Request) {
 	runtime.WriteStream(w, 200, resp)
 }
 
-func (h *handlers) searchMaps(w http.ResponseWriter, r *http.Request) {
-	var req SearchMapsRequest
-	if qs := r.URL.Query().Get("building"); qs != "" {
-		v, err := strconv.ParseBool(qs)
-		if err != nil {
-			runtime.WriteBadRequest(w, "invalid query parameter: building")
-			return
-		}
-		req.Building = &v
-	}
-	if qs := r.URL.Query().Get("contest"); qs != "" {
-		v := qs
-		req.Contest = &v
-	}
-	if qs := r.URL.Query().Get("difficulty"); qs != "" {
-		v := qs
-		req.Difficulty = &v
-	}
-	if qs := r.URL.Query().Get("owner"); qs != "" {
-		v := qs
-		req.Owner = &v
-	}
-	if qs := r.URL.Query().Get("parkour"); qs != "" {
-		v, err := strconv.ParseBool(qs)
-		if err != nil {
-			runtime.WriteBadRequest(w, "invalid query parameter: parkour")
-			return
-		}
-		req.Parkour = &v
-	}
-	if qs := r.URL.Query().Get("quality"); qs != "" {
-		v := qs
-		req.Quality = &v
-	}
-	if qs := r.URL.Query().Get("query"); qs != "" {
-		v := qs
-		req.Query = &v
-	}
-	if qs := r.URL.Query().Get("sort"); qs != "" {
-		v := MapSortType(qs)
-		req.Sort = &v
-	}
-	if qs := r.URL.Query().Get("sortOrder"); qs != "" {
-		v := MapSortOrder(qs)
-		req.SortOrder = &v
-	}
-	if qs := r.URL.Query().Get("page"); qs != "" {
-		v := qs
-		req.Page = &v
-	}
-	if qs := r.URL.Query().Get("pageSize"); qs != "" {
-		v := qs
-		req.PageSize = &v
-	}
-	resp, err := h.server.SearchMaps(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) searchMapProgress(w http.ResponseWriter, r *http.Request) {
-	var body SearchMapProgressRequestBody
-	if err := runtime.DecodeJSON(r, &body); err != nil {
-		runtime.WriteBadRequest(w, "invalid request body")
-		return
-	}
-	resp, err := h.server.SearchMapProgress(r.Context(), body)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getPlayerMapHistory(w http.ResponseWriter, r *http.Request) {
-	var req PlayerPaginatedRequest
-	req.PlayerID = r.PathValue("playerId")
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: page")
-		return
-	} else {
-		req.Page = v
-	}
-	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err != nil {
-		runtime.WriteBadRequest(w, "invalid query parameter: pageSize")
-		return
-	} else {
-		req.PageSize = v
-	}
-	resp, err := h.server.GetPlayerMapHistory(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
 func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 	var body CreatePlayerDataRequest
 	if err := runtime.DecodeJSON(r, &body); err != nil {
@@ -337,47 +102,4 @@ func (h *handlers) createPlayerData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime.WriteJSON(w, 201, resp)
-}
-
-func (h *handlers) getLatestSaveState(w http.ResponseWriter, r *http.Request) {
-	var req GetLatestSaveStateRequest
-	req.MapID = r.PathValue("mapId")
-	req.PlayerID = r.PathValue("playerId")
-	req.Type = SaveStateType(r.URL.Query().Get("type"))
-	resp, err := h.server.GetLatestSaveState(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) getBestSaveState(w http.ResponseWriter, r *http.Request) {
-	var req GetBestSaveStateRequest
-	req.MapID = r.PathValue("mapId")
-	req.PlayerID = r.PathValue("playerId")
-	resp, err := h.server.GetBestSaveState(r.Context(), req)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	runtime.WriteJSON(w, 200, resp)
-}
-
-func (h *handlers) upsertSaveState(w http.ResponseWriter, r *http.Request) {
-	var req SaveStateRequest
-	req.MapID = r.PathValue("mapId")
-	req.PlayerID = r.PathValue("playerId")
-	req.StateID = r.PathValue("stateId")
-	var body UpsertSaveStateRequestBody
-	if err := runtime.DecodeJSON(r, &body); err != nil {
-		runtime.WriteBadRequest(w, "invalid request body")
-		return
-	}
-	err := h.server.UpsertSaveState(r.Context(), req, body)
-	if err != nil {
-		runtime.HandleError(w, err)
-		return
-	}
-	w.WriteHeader(200)
 }

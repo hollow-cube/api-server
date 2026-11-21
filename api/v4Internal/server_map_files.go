@@ -23,6 +23,10 @@ type (
 	}
 )
 
+type MapRequest struct {
+	MapID string `path:"mapId"`
+}
+
 // GET /maps/{mapId}/files
 func (s *Server) ListMapFiles(ctx context.Context, request MapRequest) (*FileList, error) {
 	files, err := s.mapStore.GetMapFiles(ctx, request.MapID)

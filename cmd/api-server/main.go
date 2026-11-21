@@ -14,7 +14,6 @@ import (
 	"github.com/hollow-cube/api-server/api/v1Public"
 	"github.com/hollow-cube/api-server/internal/world"
 
-	mapIntnlV3 "github.com/hollow-cube/api-server/api/mapsV3/intnl"
 	mapTerraformV3 "github.com/hollow-cube/api-server/api/mapsV3/terraform"
 	v2Internal "github.com/hollow-cube/api-server/api/v2/intnl"
 	v2Payments "github.com/hollow-cube/api-server/api/v2/payments"
@@ -153,7 +152,6 @@ func main() {
 			v2Internal.NewServer,
 			v2Payments.NewServer,
 
-			mapIntnlV3.NewServer,
 			mapTerraformV3.NewServer,
 
 			intnlV3.NewServer,
@@ -190,7 +188,6 @@ type routeHandlerImpl struct {
 	internal v2Internal.StrictServerInterface
 	payments v2Payments.ServerInterface
 
-	mapIntnl     mapIntnlV3.StrictServerInterface
 	mapTerraform mapTerraformV3.StrictServerInterface
 
 	intnl intnlV3.StrictServerInterface
@@ -219,11 +216,6 @@ func (v *routeHandlerImpl) Apply(r chi.Router) {
 	r.Handle("/v2/internal/*", v2Internal.HandlerFromMuxWithBaseURL(v2Internal.NewStrictHandler(v.internal, nil), nil, "/v2/internal"))
 	r.Handle("/v2/payments/*", v2Payments.HandlerFromMuxWithBaseURL(v.payments, nil, "/v2/payments"))
 
-	mapV3Int := mapIntnlV3.HandlerFromMuxWithBaseURL(mapIntnlV3.NewStrictHandler(v.mapIntnl,
-		[]mapIntnlV3.StrictMiddlewareFunc{mapIntnlV3.AuthMiddleware}), nil, "/v3/internal")
-	r.Handle("/v3/internal/maps", mapV3Int)
-	r.Handle("/v3/internal/maps/*", mapV3Int)
-	r.Handle("/v3/internal/map-players/*", mapV3Int)
 	r.Handle("/v3/internal/terraform/*", mapTerraformV3.HandlerFromMuxWithBaseURL(mapTerraformV3.NewStrictHandler(v.mapTerraform,
 		[]mapTerraformV3.StrictMiddlewareFunc{}), nil, "/v3/internal/terraform"))
 
@@ -245,7 +237,6 @@ func makeV2RouteHandler(p struct {
 	Public       v2Public.StrictServerInterface
 	Internal     v2Internal.StrictServerInterface
 	Payments     v2Payments.ServerInterface
-	MapIntnl     mapIntnlV3.StrictServerInterface
 	MapTerraform mapTerraformV3.StrictServerInterface
 	Intnl        intnlV3.StrictServerInterface
 	Posthog      *posthogProxy.Proxy
@@ -257,7 +248,6 @@ func makeV2RouteHandler(p struct {
 		public:       p.Public,
 		internal:     p.Internal,
 		payments:     p.Payments,
-		mapIntnl:     p.MapIntnl,
 		mapTerraform: p.MapTerraform,
 		intnl:        p.Intnl,
 		posthog:      p.Posthog,

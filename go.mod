@@ -12,7 +12,6 @@ require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4
 	github.com/go-chi/chi/v5 v5.2.1
-	github.com/gohugoio/hashstructure v0.6.0
 	github.com/google/go-github/v56 v56.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hollow-cube/tebex-go v0.0.0-20250317152051-2147ad5b9b90
