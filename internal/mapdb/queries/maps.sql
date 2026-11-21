@@ -10,6 +10,12 @@ from maps
 where deleted_at is null
   and id = $1;
 
+-- name: GetMapIsolateConfig :one
+select size, opt_extra
+from maps
+where deleted_at is null
+  and id = $1;
+
 -- name: GetAllMaps :many
 select *
 from maps

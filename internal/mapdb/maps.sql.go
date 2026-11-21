@@ -301,6 +301,25 @@ func (q *Queries) GetMapById(ctx context.Context, id string) (Map, error) {
 	return i, err
 }
 
+const getMapIsolateConfig = `-- name: GetMapIsolateConfig :one
+select size, opt_extra
+from maps
+where deleted_at is null
+  and id = $1
+`
+
+type GetMapIsolateConfigRow struct {
+	Size     int64  `json:"size"`
+	OptExtra []byte `json:"optExtra"`
+}
+
+func (q *Queries) GetMapIsolateConfig(ctx context.Context, id string) (GetMapIsolateConfigRow, error) {
+	row := q.db.QueryRow(ctx, getMapIsolateConfig, id)
+	var i GetMapIsolateConfigRow
+	err := row.Scan(&i.Size, &i.OptExtra)
+	return i, err
+}
+
 const getMapWithTagsById = `-- name: GetMapWithTagsById :one
 select maps.id, maps.owner, maps.m_type, maps.created_at, maps.updated_at, maps.verification, maps.authz_key, maps.file_id, maps.legacy_map_id, maps.published_id, maps.published_at, maps.quality_override, maps.opt_name, maps.opt_icon, maps.size, maps.opt_variant, maps.opt_subvariant, maps.opt_spawn_point, maps.opt_only_sprint, maps.opt_no_sprint, maps.opt_no_jump, maps.opt_no_sneak, maps.opt_boat, maps.opt_extra, maps.opt_tags, maps.ext, maps.deleted_at, maps.deleted_by, maps.deleted_reason, maps.protocol_version, maps.contest, maps.listed, maps.total_likes, maps.leaderboard, array(select tag from map_tags where map_id = maps.id order by index)::map_tag[] as tags
 from maps

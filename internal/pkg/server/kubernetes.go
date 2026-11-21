@@ -75,7 +75,7 @@ func (t *Tracker) allocMapServerPod(ctx context.Context, mapId, isolateOverride 
 		zap.S().Infow("using workflow run image", "imageTag", imageTag)
 	}
 
-	m, err := t.mapStore.GetMapById(ctx, mapId)
+	m, err := t.mapStore.GetMapIsolateConfig(ctx, mapId)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
